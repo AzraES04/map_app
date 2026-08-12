@@ -93,7 +93,13 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 
     // Seed: hiç kullanıcı yoksa demo kullanıcı oluştur (admin / staj123)
-    if (!db.Users.Any())
+    //
+    // DİKKAT (Ödev 3 / Görev 1): Artık User üzerinde global query filter var.
+    // Düz "db.Users.Any()" yazarsak EF buna otomatik "WHERE is_deleted = false" ekler.
+    // Yani admin'i soft delete ile sildiysen, uygulama her açılışta "hiç kullanıcı yok"
+    // sanıp yeni bir admin yaratır ve silme işlemin boşa gider.
+    // Filtreyi bilinçli olarak devre dışı bırakıp TÜM satırlara bakıyoruz:
+    if (!db.Users.IgnoreQueryFilters().Any())
     {
         var hasher = new PasswordHasher<User>();
         var admin = new User { Username = "admin" };

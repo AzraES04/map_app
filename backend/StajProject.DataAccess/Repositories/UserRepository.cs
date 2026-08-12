@@ -28,4 +28,40 @@ public class UserRepository : IUserRepository
     }
 
     public Task<bool> AnyAsync() => _context.Users.AnyAsync();
+
+    // ---------- Ödev 3 / Görev 1: durum yönetimi ----------
+
+    public async Task<bool> SoftDeleteAsync(int id)
+    {
+        // DİKKAT: FindAsync yerine FirstOrDefaultAsync kullanıyoruz.
+        // FindAsync global query filter'ı UYGULAMAZ (primary key ile doğrudan gider),
+        // FirstOrDefaultAsync uygular. Yani zaten silinmiş bir kaydı ikinci kez silmeye
+        // çalışırsak burada null döner ve false alırız — istediğimiz davranış bu.
+        // Ayrıca AsNoTracking YOK: değişikliği kaydedeceğimiz için EF'in nesneyi takip etmesi gerek.
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+        if (user is null)
+        {
+            return false;
+        }
+
+        user.IsDeleted = true;
+        user.IsActive = false; // silinen hesap aynı zamanda giriş yapamamalı
+
+        // ModifiedDate'i burada ELLE yazmıyoruz — AppDbContext.ApplyAuditRules() otomatik dolduruyor.
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> SetActiveAsync(int id, bool isActive)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+        if (user is null)
+        {
+            return false;
+        }
+
+        user.IsActive = isActive;
+        await _context.SaveChangesAsync();
+        return true;
+    }
 }

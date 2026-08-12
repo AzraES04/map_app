@@ -12,6 +12,38 @@ public class AppDbContext : DbContext
     public DbSet<Location> Locations => Set<Location>();
     public DbSet<User> Users => Set<User>();
 
+    // ---------- Ödev 3 / Görev 1: ModifiedDate otomatik güncelleme ----------
+    // Her SaveChanges çağrısından ÖNCE devreye girer. Böylece "modified_date yazmayı unuttum"
+    // diye bir durum kalmaz; kural tek yerde, merkezî olarak uygulanır.
+
+    public override int SaveChanges()
+    {
+        ApplyAuditRules();
+        return base.SaveChanges();
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        ApplyAuditRules();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// ChangeTracker: EF'in "bu istekte hangi nesne ne durumda?" defteri.
+    /// Added / Modified / Deleted / Unchanged durumlarını burada okuyabiliyoruz.
+    /// </summary>
+    private void ApplyAuditRules()
+    {
+        foreach (var entry in ChangeTracker.Entries<User>())
+        {
+            // Sadece GÜNCELLENEN kayıtlar; yeni eklenen kaydın modified_date'i null kalmalı.
+            if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.ModifiedDate = DateTime.UtcNow;
+            }
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

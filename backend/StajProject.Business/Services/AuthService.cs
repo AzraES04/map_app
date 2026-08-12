@@ -34,7 +34,16 @@ public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
             return null;
         }
     
-    // 3) Şifreyi doğrula (hash karşılaştırması)
+        // 2.5) Hesap durumu uygun mu? (Ödev 3 / Görev 1)
+        // Not: Bilerek "hesabınız pasif" gibi ayrı bir mesaj DÖNMÜYORUZ. Öyle yapsaydık
+        // saldırgana "bu kullanıcı adı sistemde var" bilgisini doğrulamış olurduk
+        // (user enumeration). Dışarıya tek tip "kullanıcı adı veya şifre hatalı" gider.
+        if (user.IsDeleted || !user.IsActive)
+        {
+            return null;
+        }
+
+        // 3) Şifreyi doğrula (hash karşılaştırması)
         var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
 
         // 4) Şifre yanlışsa giriş başarısız
