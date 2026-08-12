@@ -3,7 +3,7 @@ namespace StajProject.Entities;
 /// <summary>
 /// Giriş yapabilen kullanıcı. Şifre asla düz metin saklanmaz, hash'i saklanır.
 /// </summary>
-public class User
+public class User : IAuditableEntity
 {
     public int Id { get; set; }
 

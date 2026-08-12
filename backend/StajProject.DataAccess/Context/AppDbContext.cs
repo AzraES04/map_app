@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using StajProject.Entities;
 
 namespace StajProject.DataAccess.Context;
@@ -11,6 +12,11 @@ public class AppDbContext : DbContext
 
     public DbSet<Location> Locations => Set<Location>();
     public DbSet<User> Users => Set<User>();
+
+    // Ödev 3 / Görev 2: her çizim tipi kendi tablosuna
+    public DbSet<PointEntity> Points => Set<PointEntity>();
+    public DbSet<LineEntity> Lines => Set<LineEntity>();
+    public DbSet<PolygonEntity> Polygons => Set<PolygonEntity>();
 
     // ---------- Ödev 3 / Görev 1: ModifiedDate otomatik güncelleme ----------
     // Her kayıt işleminden ÖNCE devreye girer. Böylece "modified_date yazmayı unuttum"
@@ -42,7 +48,8 @@ public class AppDbContext : DbContext
     /// </summary>
     private void ApplyAuditRules()
     {
-        foreach (var entry in ChangeTracker.Entries<User>())
+        // IAuditableEntity uygulayan HER entity: User, PointEntity, LineEntity, PolygonEntity...
+        foreach (var entry in ChangeTracker.Entries<IAuditableEntity>())
         {
             // Sadece GÜNCELLENEN kayıtlar; yeni eklenen kaydın modified_date'i null kalmalı.
             if (entry.State == EntityState.Modified)
@@ -108,5 +115,64 @@ public class AppDbContext : DbContext
             // bilinçli olarak .IgnoreQueryFilters() dememiz gerekir.
             entity.HasQueryFilter(u => !u.IsDeleted);
         });
+
+        // ---------- Ödev 3 / Görev 2-3: geometri tabloları ----------
+        //
+        // Üç tablo da aynı ortak kolonlara sahip; tek fark geometri tipinde.
+        // Ortak kısmı aşağıdaki yerel fonksiyonda topluyoruz (kod tekrarı yok),
+        // geometri kolonunu ise her tabloda ayrı yazıyoruz çünkü PostGIS tipi farklı.
+
+        modelBuilder.Entity<PointEntity>(entity =>
+        {
+            ConfigureGeometryTable(entity, "tbl_point");
+            entity.Property(e => e.Geom)
+                  .HasColumnName("geom")
+                  .HasColumnType("geometry(Point, 4326)")
+                  .IsRequired();
+            entity.HasIndex(e => e.Geom).HasMethod("gist");
+        });
+
+        modelBuilder.Entity<LineEntity>(entity =>
+        {
+            ConfigureGeometryTable(entity, "tbl_line");
+            entity.Property(e => e.Geom)
+                  .HasColumnName("geom")
+                  .HasColumnType("geometry(LineString, 4326)")
+                  .IsRequired();
+            entity.HasIndex(e => e.Geom).HasMethod("gist");
+        });
+
+        modelBuilder.Entity<PolygonEntity>(entity =>
+        {
+            ConfigureGeometryTable(entity, "tbl_polygon");
+            entity.Property(e => e.Geom)
+                  .HasColumnName("geom")
+                  .HasColumnType("geometry(Polygon, 4326)")
+                  .IsRequired();
+            entity.HasIndex(e => e.Geom).HasMethod("gist");
+        });
+    }
+
+    /// <summary>
+    /// Üç geometri tablosunun ORTAK yapılandırması.
+    /// Generic olduğu için PointEntity/LineEntity/PolygonEntity üçünde de çalışır.
+    /// </summary>
+    private static void ConfigureGeometryTable<TEntity>(EntityTypeBuilder<TEntity> entity, string tableName)
+        where TEntity : GeometryEntityBase
+    {
+        entity.ToTable(tableName);
+        entity.HasKey(e => e.Id);
+
+        entity.Property(e => e.Id).HasColumnName("id");
+        entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+        entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(1000);
+        entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+
+        // Durum takibi kolonları — users tablosundakiyle birebir aynı desen
+        entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+        entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+        entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+        entity.HasQueryFilter(e => !e.IsDeleted);
     }
 }

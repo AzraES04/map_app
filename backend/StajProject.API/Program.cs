@@ -26,6 +26,17 @@ builder.Services.AddScoped<ILocationService, LocationService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+// Geometri katmanı: aynı generic sınıflar, üç farklı tip argümanıyla kaydediliyor.
+// Controller "IGeometryService<PointEntity> istiyorum" dediğinde DI konteyneri
+// buradaki eşleşmeye bakıp GeometryService<PointEntity, Point> nesnesini üretir.
+builder.Services.AddScoped<IGeometryRepository<PointEntity>, GeometryRepository<PointEntity>>();
+builder.Services.AddScoped<IGeometryRepository<LineEntity>, GeometryRepository<LineEntity>>();
+builder.Services.AddScoped<IGeometryRepository<PolygonEntity>, GeometryRepository<PolygonEntity>>();
+
+builder.Services.AddScoped<IGeometryService<PointEntity>, GeometryService<PointEntity, NetTopologySuite.Geometries.Point>>();
+builder.Services.AddScoped<IGeometryService<LineEntity>, GeometryService<LineEntity, NetTopologySuite.Geometries.LineString>>();
+builder.Services.AddScoped<IGeometryService<PolygonEntity>, GeometryService<PolygonEntity, NetTopologySuite.Geometries.Polygon>>();
+
 // ---- JWT Kimlik Doğrulama ----
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtSettings>()!;
