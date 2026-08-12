@@ -206,6 +206,10 @@ export default function MapPage() {
     const draw = new Draw({
       source: drawSourceRef.current,
       type: activeTool,              // 'Point' | 'LineString' | 'Polygon'
+      // Çizim SIRASINDAKİ görünüm (henüz tamamlanmamış "sketch").
+      // Bu satır olmasaydı OpenLayers kendi varsayılan parlak mavi stilini
+      // kullanırdı ve yarım çizim, tamamlanmış taslaktan farklı görünürdü.
+      style: taslakStili,
     })
 
     // Yeni çizime başlanınca önceki taslağı temizle (aynı anda tek taslak).
@@ -231,6 +235,7 @@ export default function MapPage() {
     // ⚠️ Bu temizlik olmadan: araç değiştirdiğinde eski interaction haritada
     // kalır, tek tıklamayla iki geometri birden çizilir. En sık yapılan hata.
     return () => {
+      draw.abortDrawing()          // yarım kalmış sketch varsa temizle
       map.removeInteraction(draw)
       drawRef.current = null
     }
