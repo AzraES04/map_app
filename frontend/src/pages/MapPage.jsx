@@ -13,6 +13,7 @@ import { defaults as varsayilanKontroller } from 'ol/control/defaults'
 import ScaleLine from 'ol/control/ScaleLine'
 import MousePosition from 'ol/control/MousePosition'
 import { easeOut } from 'ol/easing'
+import { createEmpty, extend as extentGenislet, isEmpty as extentBosMu } from 'ol/extent'
 import 'ol/ol.css'
 
 import { clearSession, getUsername, getExpiresAt, scheduleAutoLogout } from '../auth'
@@ -146,6 +147,41 @@ export default function MapPage() {
     setToast({ tur, mesaj })
     setTimeout(() => setToast(null), 3500)
   }, [])
+
+  // ------------------------------------------------------------------------
+  //  Harita yardımcıları
+  //  DİKKAT: Bunlar aşağıdaki useEffect'lerin bağımlılık listesinde geçtiği için
+  //  onlardan ÖNCE tanımlanmak zorunda. const bildirimleri "temporal dead zone"
+  //  içindedir: tanımlanmadan önce erişilirse ReferenceError fırlatır.
+  // ------------------------------------------------------------------------
+
+  /**
+   * Haritayı verilen geometriye yaklaştır.
+   * Hem sağ paneldeki listeden hem de haritadaki şekle tıklamadan çağrılıyor —
+   * tek fonksiyon olduğu için iki yol da birebir aynı davranıyor.
+   */
+  const odaklanFeature = useCallback((feature) => {
+    if (!feature || !mapRef.current) return
+    mapRef.current.getView().fit(feature.getGeometry().getExtent(), {
+      padding: [90, 90, 90, 90],
+      maxZoom: 15,        // tek nokta için sonsuza kadar yakınlaşmasın
+      duration: 500,      // yumuşak geçiş
+      easing: easeOut,
+    })
+  }, [])
+
+  /** Bir feature'ı vurgu katmanına koy (klon — orijinali iki katmana birden koyamayız). */
+  const vurgulaFeature = useCallback((feature) => {
+    const kaynak = highlightSourceRef.current
+    if (!kaynak) return
+    kaynak.clear()
+    if (feature) kaynak.addFeature(feature.clone())
+  }, [])
+
+  const featureBul = useCallback(
+    (type, dto) => sourcesRef.current[type]?.getFeatureById(`${type}-${dto.id}`),
+    [],
+  )
 
   // ------------------------------------------------------------------------
   //  Veritabanından kayıtları çek ve haritaya bas
@@ -360,6 +396,72 @@ export default function MapPage() {
   }, [activeTool])
 
   // ------------------------------------------------------------------------
+  //  Harita üzerinde etkileşim (çizim aracı KAPALIYKEN)
+  //
+  //  - Şeklin üzerine gelince: imleç el işaretine döner, şekil vurgulanır
+  //  - Şekle tıklayınca: haritayı o şekle yaklaştırır (listeden seçmeye gerek yok)
+  //  - Boş alana tıklayınca: haritayı oraya yumuşakça kaydırır
+  //
+  //  activeTool bağımlılıkta: çizim modundayken bu davranışlar devre dışı kalmalı,
+  //  yoksa çizim yapmak isterken harita kayardı.
+  // ------------------------------------------------------------------------
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return undefined
+
+    const kayitKatmanlari = Object.values(layersRef.current)
+
+    /** Verilen pikselin altında kayıtlı bir geometri var mı? */
+    const pikseldekiFeature = (pixel) =>
+      map.forEachFeatureAtPixel(pixel, (feature) => feature, {
+        // Sadece kayıtlı geometriler; taslak ve vurgu katmanları hesaba katılmasın.
+        layerFilter: (layer) => kayitKatmanlari.includes(layer),
+        // İnce çizgiyi/küçük noktayı tam piksel isabetiyle yakalamak zor;
+        // 8 piksellik tolerans tıklamayı çok daha kolay hale getiriyor.
+        hitTolerance: 8,
+      })
+
+    // Son vurgulanan feature'ı hatırlıyoruz: her fare hareketinde katmanı
+    // gereksiz yere temizleyip yeniden doldurmayalım (her seferinde yeniden çizim demek).
+    let sonVurguId = null
+
+    const fareHareketi = (evt) => {
+      if (evt.dragging || activeTool) return
+      const feature = pikseldekiFeature(evt.pixel)
+      const yeniId = feature ? feature.getId() : null
+      if (yeniId === sonVurguId) return
+
+      sonVurguId = yeniId
+      map.getViewport().style.cursor = feature ? 'pointer' : ''
+      vurgulaFeature(feature)
+    }
+
+    // 'click' değil 'singleclick': OpenLayers çift tıklamayı ayırt edebilmek için
+    // ~250 ms bekler. 'click' kullansaydık çift tıklayarak zoom yaparken
+    // aşağıdaki kod da iki kez tetiklenir, harita zıplardı.
+    const tekTiklama = (evt) => {
+      if (activeTool) return          // çizim modunda tıklama çizime aittir
+      const feature = pikseldekiFeature(evt.pixel)
+
+      if (feature) {
+        odaklanFeature(feature)       // şekle tıklandı → ona yaklaş
+      } else {
+        // Boş alana tıklandı → oraya git (zoom seviyesi korunur)
+        map.getView().animate({ center: evt.coordinate, duration: 450, easing: easeOut })
+      }
+    }
+
+    map.on('pointermove', fareHareketi)
+    map.on('singleclick', tekTiklama)
+
+    return () => {
+      map.un('pointermove', fareHareketi)
+      map.un('singleclick', tekTiklama)
+      map.getViewport().style.cursor = ''
+    }
+  }, [activeTool, odaklanFeature, vurgulaFeature])
+
+  // ------------------------------------------------------------------------
   //  Klavye kısayolları
   // ------------------------------------------------------------------------
   useEffect(() => {
@@ -449,26 +551,44 @@ export default function MapPage() {
   }
 
   /** Listeden bir kayda tıklayınca haritayı oraya götür. */
-  const odaklan = (type, dto) => {
-    const feature = sourcesRef.current[type]?.getFeatureById(`${type}-${dto.id}`)
-    if (!feature || !mapRef.current) return
+  const odaklan = (type, dto) => odaklanFeature(featureBul(type, dto))
 
-    mapRef.current.getView().fit(feature.getGeometry().getExtent(), {
-      padding: [80, 80, 80, 80],
-      maxZoom: 16,        // tek nokta için sonsuza kadar yakınlaşmasın
-      duration: 400,      // yumuşak geçiş
+  /** Fareyle üzerine gelinen kaydı haritada vurgula. */
+  const vurgula = (type, dto) => vurgulaFeature(featureBul(type, dto))
+
+  const temizleVurgu = () => highlightSourceRef.current?.clear()
+
+  /** Haritayı açılıştaki Türkiye görünümüne döndür. */
+  const turkiyeyeDon = () => {
+    mapRef.current?.getView().animate({
+      center: fromLonLat(TURKEY_CENTER),
+      zoom: TURKEY_ZOOM,
+      duration: 700,
+      easing: easeOut,
     })
   }
 
-  /** Fareyle üzerine gelinen kaydı haritada vurgula. */
-  const vurgula = (type, dto) => {
-    const feature = sourcesRef.current[type]?.getFeatureById(`${type}-${dto.id}`)
-    if (!feature) return
-    highlightSourceRef.current.clear()
-    highlightSourceRef.current.addFeature(feature.clone())
-  }
+  /** Tüm kayıtları ekrana sığdır (hepsinin birleşik sınırlayıcı kutusuna fit). */
+  const tumunuGoster = () => {
+    const map = mapRef.current
+    if (!map) return
 
-  const temizleVurgu = () => highlightSourceRef.current?.clear()
+    // createEmpty() sonsuzlarla dolu bir "boş extent" verir; her katmanınkiyle genişletiyoruz.
+    const kapsam = createEmpty()
+    DRAW_TYPE_KEYS.forEach((key) => {
+      const kaynak = sourcesRef.current[key]
+      if (kaynak && kaynak.getFeatures().length) extentGenislet(kapsam, kaynak.getExtent())
+    })
+
+    if (extentBosMu(kapsam)) return turkiyeyeDon()   // hiç kayıt yoksa Türkiye'ye dön
+
+    map.getView().fit(kapsam, {
+      padding: [90, 90, 90, 90],
+      maxZoom: 14,
+      duration: 600,
+      easing: easeOut,
+    })
+  }
 
   const handleLogout = () => {
     clearSession()
@@ -493,7 +613,32 @@ export default function MapPage() {
       </header>
 
       <div className="map-content">
-        <div ref={mapElement} className={`map-container${activeTool ? ' cizim-modu' : ''}`} />
+        {/* Harita ve üzerine binen düğmeler ayrı bir sarmalayıcıda:
+            harita div'inin çocuklarını OpenLayers yönetiyor, React'in oraya
+            eleman eklemesi çakışma yaratırdı. */}
+        <div className="map-alan">
+          <div ref={mapElement} className={`map-container${activeTool ? ' cizim-modu' : ''}`} />
+
+          <div className="harita-araclari">
+            <button type="button" className="harita-btn" onClick={turkiyeyeDon}
+                    title="Türkiye görünümüne dön">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M10 2.5 2.5 9h2v8h4v-5h3v5h4V9h2L10 2.5Z" />
+              </svg>
+              <span>Türkiye</span>
+            </button>
+
+            <button type="button" className="harita-btn" onClick={tumunuGoster}
+                    title="Tüm kayıtları ekrana sığdır">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4" fill="none"
+                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span>Tümü</span>
+            </button>
+          </div>
+        </div>
+
 
         <aside className="side-panel">
           {/* ---------- ① ÇİZİM ARAÇLARI ---------- */}

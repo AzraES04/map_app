@@ -179,7 +179,44 @@ body {
 
 .map-content { flex: 1; display: flex; min-height: 0; }
 
+/* Haritanın sarmalayıcısı — üzerine binen düğmeler buna göre konumlanır */
+.map-alan { flex: 1; min-width: 0; position: relative; display: flex; }
+
 .map-container { flex: 1; min-width: 0; }
+
+/* ---------- Harita üzerindeki gezinme düğmeleri ---------- */
+
+.harita-araclari {
+  position: absolute;
+  top: 72px;            /* OpenLayers'ın +/- zoom düğmelerinin hemen altı */
+  left: 8px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.harita-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px 6px 8px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--gecis), transform var(--gecis), box-shadow var(--gecis);
+}
+
+.harita-btn:hover { background: #fff; box-shadow: var(--shadow-md); }
+.harita-btn:active { transform: scale(0.96); }
+
+.harita-btn svg { width: 16px; height: 16px; fill: var(--primary); flex-shrink: 0; }
+.harita-btn svg path[stroke] { stroke: var(--primary); }
 
 /* Çizim aracı aktifken imleç artı işaretine döner */
 .map-container.cizim-modu .ol-viewport { cursor: crosshair; }
@@ -557,7 +594,11 @@ kbd {
     border-left: none;
     border-top: 1px solid var(--border);
   }
+  .map-alan { min-height: 45vh; }
   .map-container { min-height: 45vh; }
+  /* Dar ekranda düğmeler sadece ikon */
+  .harita-btn span { display: none; }
+  .harita-btn { padding: 7px; }
   .topbar-title { font-size: 0.95rem; }
   .badge.user { display: none; }
   .wkt-onizleme { display: none; }
