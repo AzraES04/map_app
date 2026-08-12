@@ -210,7 +210,12 @@ export default function MapPage() {
     // yenilemesinde tekrar oynarsa sinir bozucu olur; (2) işletim sisteminde
     // "hareketi azalt" ayarı kapalıysa (erişilebilirlik).
     const hareketAzalt = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const girisOynat = !hareketAzalt && !sessionStorage.getItem(GIRIS_ANAHTARI)
+    const girisOynat =
+      !hareketAzalt &&
+      !sessionStorage.getItem(GIRIS_ANAHTARI) &&
+      // Sayfa arka plan sekmesinde açıldıysa tarayıcı animasyon karesi üretmez;
+      // animasyon görülmeden "oynatıldı" sayılmasın diye hiç başlatmıyoruz.
+      document.visibilityState === 'visible'
 
     const view = new View({
       // Animasyon oynayacaksa dünyaya bakan geniş açıdan başla, yoksa direkt Türkiye.
@@ -253,13 +258,19 @@ export default function MapPage() {
     // --- Dünyadan Türkiye'ye uçuş ---
     let atlaDinleyici = null
     if (girisOynat) {
-      sessionStorage.setItem(GIRIS_ANAHTARI, '1')
-      view.animate({
-        center: fromLonLat(TURKEY_CENTER),
-        zoom: TURKEY_ZOOM,
-        duration: GIRIS_SURESI,
-        easing: easeOut,     // hızlı başlar, sona doğru yavaşlar: "yerine oturma" hissi
-      })
+      view.animate(
+        {
+          center: fromLonLat(TURKEY_CENTER),
+          zoom: TURKEY_ZOOM,
+          duration: GIRIS_SURESI,
+          easing: easeOut,   // hızlı başlar, sona doğru yavaşlar: "yerine oturma" hissi
+        },
+        // Bayrağı animasyon GERÇEKTEN tamamlandığında yakıyoruz. Baştan yaksaydık,
+        // animasyonun oynamadığı bir durumda kullanıcı onu bir daha hiç göremezdi.
+        (tamamlandi) => {
+          if (tamamlandi) sessionStorage.setItem(GIRIS_ANAHTARI, '1')
+        },
+      )
 
       // Kullanıcı beklemek istemiyorsa ilk dokunuşta animasyonu kes.
       // Animasyon boyunca haritanın kilitli hissettirmemesi için şart.
