@@ -7,8 +7,12 @@ import OSM from 'ol/source/OSM'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
 import Draw from 'ol/interaction/Draw'
-import { Style, Circle, Fill, Stroke } from 'ol/style'
+import { Style, Circle, Fill, Stroke, Text } from 'ol/style'
 import { fromLonLat } from 'ol/proj'
+import { defaults as varsayilanKontroller } from 'ol/control/defaults'
+import ScaleLine from 'ol/control/ScaleLine'
+import MousePosition from 'ol/control/MousePosition'
+import { easeOut } from 'ol/easing'
 import 'ol/ol.css'
 
 import { clearSession, getUsername, getExpiresAt, scheduleAutoLogout } from '../auth'
@@ -20,22 +24,67 @@ import { listele, kaydet, sil } from '../api'
 const TURKEY_CENTER = [35.24, 39.0]
 const TURKEY_ZOOM = 6.4
 
+// Açılış animasyonunun başlangıç noktası: dünyaya bakan geniş açı.
+const DUNYA_CENTER = [18, 26]
+const DUNYA_ZOOM = 2.1
+const GIRIS_SURESI = 2200                       // ms
+const GIRIS_ANAHTARI = 'staj_giris_animasyonu'  // sessionStorage bayrağı
+
+// Etiketleri decluttter ederken üç katmanı da AYNI gruba koyuyoruz; böylece
+// nokta etiketi ile poligon etiketi de birbiriyle çakışmıyor.
+const DECLUTTER_GRUBU = 'geometri-etiketleri'
+
 // --------------------------------------------------------------------------
 //  Katman stilleri
 // --------------------------------------------------------------------------
 
-/** Kaydedilmiş geometrilerin görünümü — her tip kendi rengiyle. */
+/**
+ * Kaydedilmiş geometrilerin görünümü — her tip kendi rengiyle, adı etiketli.
+ *
+ * Sabit bir Style yerine STİL FONKSİYONU döndürüyoruz: OpenLayers bunu her
+ * feature için ayrı çağırır, böylece etiket metnini feature'dan okuyabiliyoruz.
+ */
 function kayitStili(type) {
   const renk = DRAW_TYPES[type].color
-  return new Style({
+  const cizgiMi = type === 'LineString'
+
+  const gorunum = {
     image: new Circle({
       radius: 7,
       fill: new Fill({ color: renk }),
       stroke: new Stroke({ color: '#ffffff', width: 2 }),
+      // 'obstacle': işaretçinin KENDİSİ declutter yüzünden gizlenmez, ama
+      // etiketler onun üstüne binmemek için etrafından dolaşır.
+      // Bu olmasaydı üst üste gelen iki nokta birbirini yok ederdi.
+      declutterMode: 'obstacle',
     }),
     stroke: new Stroke({ color: renk, width: 3 }),
     fill: new Fill({ color: `${renk}33` }),   // sondaki 33 = %20 saydamlık (hex alfa)
+  }
+
+  const sadeStil = new Style(gorunum)
+
+  const etiketliStil = new Style({
+    ...gorunum,
+    text: new Text({
+      font: '600 12px system-ui, -apple-system, "Segoe UI", sans-serif',
+      fill: new Fill({ color: '#1a2733' }),
+      // Beyaz "halo" — etiketin OSM'in yeşil/gri alanları üzerinde de okunmasını sağlar.
+      stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: 3.5 }),
+      // Çizgide etiket çizginin eğrisini takip eder; nokta/poligonda düz yazılır.
+      placement: cizgiMi ? 'line' : 'point',
+      textBaseline: cizgiMi ? 'bottom' : 'middle',
+      offsetY: type === 'Point' ? -17 : 0,      // nokta işaretçisinin üstünde dursun
+      overflow: false,                          // sığmıyorsa yazma (declutter mantığı)
+    }),
   })
+
+  return (feature) => {
+    const ad = feature.get('ad')
+    if (!ad) return sadeStil
+    etiketliStil.getText().setText(ad)
+    return etiketliStil
+  }
 }
 
 /** Henüz kaydedilmemiş çizim: kesikli turuncu — "bu geçici" mesajını verir. */
@@ -75,6 +124,7 @@ export default function MapPage() {
   const drawSourceRef = useRef(null)   // geçici çizim katmanı
   const drawRef = useRef(null)         // aktif Draw interaction
   const highlightSourceRef = useRef(null)
+  const aracGrubuRef = useRef(null)    // kaydettikten sonra odağı geri vermek için
 
   // --- Ekran durumu ---------------------------------------------------------
   const [activeTool, setActiveTool] = useState(null)      // null | 'Point' | 'LineString' | 'Polygon'
@@ -116,6 +166,7 @@ export default function MapPage() {
           // WKT (4326) → feature (3857). Dönüşüm geo.js'in içinde.
           const feature = wktToFeature(dto.wkt)
           feature.setId(`${key}-${dto.id}`)   // sonradan bulabilmek için kimlik
+          feature.set('ad', dto.name)         // stil fonksiyonu etiketi buradan okuyor
           source.addFeature(feature)
         })
       })
@@ -136,7 +187,14 @@ export default function MapPage() {
 
     DRAW_TYPE_KEYS.forEach((key) => {
       sources[key] = new VectorSource()
-      layers[key] = new VectorLayer({ source: sources[key], style: kayitStili(key) })
+      layers[key] = new VectorLayer({
+        source: sources[key],
+        style: kayitStili(key),
+        // Etiket çakışma yönetimi. Üç katman da aynı grup adını kullandığı için
+        // OpenLayers her karede tüm etiketlerin kutularını karşılaştırıp
+        // çakışanları gizliyor — "çakışma yoksa ismi yaz" davranışı tam olarak bu.
+        declutter: DECLUTTER_GRUBU,
+      })
     })
     sourcesRef.current = sources
     layersRef.current = layers
@@ -146,6 +204,19 @@ export default function MapPage() {
 
     const highlightSource = new VectorSource()
     highlightSourceRef.current = highlightSource
+
+    // --- Açılış animasyonu oynatılsın mı? ---
+    // İki koşul: (1) kullanıcı bu oturumda daha önce görmediyse — her sayfa
+    // yenilemesinde tekrar oynarsa sinir bozucu olur; (2) işletim sisteminde
+    // "hareketi azalt" ayarı kapalıysa (erişilebilirlik).
+    const hareketAzalt = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const girisOynat = !hareketAzalt && !sessionStorage.getItem(GIRIS_ANAHTARI)
+
+    const view = new View({
+      // Animasyon oynayacaksa dünyaya bakan geniş açıdan başla, yoksa direkt Türkiye.
+      center: fromLonLat(girisOynat ? DUNYA_CENTER : TURKEY_CENTER),   // 4326 → 3857
+      zoom: girisOynat ? DUNYA_ZOOM : TURKEY_ZOOM,
+    })
 
     const map = new Map({
       target: mapElement.current,
@@ -159,12 +230,43 @@ export default function MapPage() {
         new VectorLayer({ source: drawSource, style: taslakStili }),
         new VectorLayer({ source: highlightSource, style: vurguStili }),
       ],
-      view: new View({
-        center: fromLonLat(TURKEY_CENTER),   // 4326 → 3857 dönüşümü
-        zoom: TURKEY_ZOOM,
-      }),
+      view,
+      controls: varsayilanKontroller().extend([
+        // Ölçek çubuğu — haritanın gerçek mesafeyle ilişkisini gösterir.
+        new ScaleLine({ units: 'metric' }),
+        // İmlecin altındaki koordinatı CANLI gösterir.
+        // projection: 'EPSG:4326' → harita 3857'de çalışsa bile burada
+        // dönüştürülmüş hâlini, yani veritabanına yazılacak değeri görüyoruz.
+        new MousePosition({
+          projection: 'EPSG:4326',
+          className: 'koordinat-gostergesi',
+          placeholder: 'İmleci haritaya getirin',
+          coordinateFormat: (koordinat) =>
+            koordinat
+              ? `B ${koordinat[0].toFixed(5)}°  ·  E ${koordinat[1].toFixed(5)}°`
+              : '',
+        }),
+      ]),
     })
     mapRef.current = map
+
+    // --- Dünyadan Türkiye'ye uçuş ---
+    let atlaDinleyici = null
+    if (girisOynat) {
+      sessionStorage.setItem(GIRIS_ANAHTARI, '1')
+      view.animate({
+        center: fromLonLat(TURKEY_CENTER),
+        zoom: TURKEY_ZOOM,
+        duration: GIRIS_SURESI,
+        easing: easeOut,     // hızlı başlar, sona doğru yavaşlar: "yerine oturma" hissi
+      })
+
+      // Kullanıcı beklemek istemiyorsa ilk dokunuşta animasyonu kes.
+      // Animasyon boyunca haritanın kilitli hissettirmemesi için şart.
+      atlaDinleyici = () => view.cancelAnimations()
+      map.getViewport().addEventListener('pointerdown', atlaDinleyici, { once: true })
+      map.getViewport().addEventListener('wheel', atlaDinleyici, { once: true, passive: true })
+    }
 
     yukle()
 
@@ -172,6 +274,11 @@ export default function MapPage() {
     // React StrictMode geliştirmede effect'i iki kez çalıştırır; bu satır
     // olmasaydı sayfada iki harita üst üste binerdi.
     return () => {
+      if (atlaDinleyici) {
+        map.getViewport().removeEventListener('pointerdown', atlaDinleyici)
+        map.getViewport().removeEventListener('wheel', atlaDinleyici)
+      }
+      view.cancelAnimations()   // bileşen kalkarken devam eden animasyon kalmasın
       map.setTarget(null)
       mapRef.current = null
     }
@@ -307,6 +414,10 @@ export default function MapPage() {
       setActiveTab(pending.type)          // kaydedilen tipin sekmesine geç
       await yukle()
       bildir('ok', `${DRAW_TYPES[pending.type].label} kaydedildi.`)
+
+      // Odağı aktif araç düğmesine geri ver: form kapanınca odak boşlukta kalmasın,
+      // klavye kullanıcısı arka arkaya çizim yapabilsin.
+      aracGrubuRef.current?.querySelector('.tool-btn.active')?.focus()
     } catch (err) {
       if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
     } finally {
@@ -378,7 +489,7 @@ export default function MapPage() {
           <section className="panel-section">
             <h2>Çizim Araçları</h2>
 
-            <div className="tool-group">
+            <div className="tool-group" ref={aracGrubuRef}>
               {DRAW_TYPE_KEYS.map((key) => (
                 <button
                   key={key}
@@ -519,7 +630,13 @@ export default function MapPage() {
         </aside>
       </div>
 
-      {toast && <div className={`toast toast-${toast.tur}`}>{toast.mesaj}</div>}
+      {/* role="status" + aria-live="polite": ekran okuyucu, kullanıcının işini
+          bölmeden bildirimi seslendirir. Görsel toast'ın işitsel karşılığı. */}
+      {toast && (
+        <div className={`toast toast-${toast.tur}`} role="status" aria-live="polite">
+          {toast.mesaj}
+        </div>
+      )}
     </div>
   )
 }

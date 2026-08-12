@@ -184,6 +184,55 @@ body {
 /* Çizim aracı aktifken imleç artı işaretine döner */
 .map-container.cizim-modu .ol-viewport { cursor: crosshair; }
 
+/* ---------- Harita kontrolleri ---------- */
+
+/* İmlecin altındaki canlı koordinat (EPSG:4326) — sol altta.
+   OpenLayers bu elemanı harita kapsayıcısının içine ekler. */
+.koordinat-gostergesi {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 11px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.74rem;
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;         /* haritaya tıklamayı engellemesin */
+  white-space: nowrap;
+}
+
+/* Koordinat göstergesinin ne olduğunu açıklayan küçük etiket */
+.koordinat-gostergesi::before {
+  content: 'EPSG:4326';
+  display: block;
+  font-family: inherit;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 1px;
+}
+
+/* Ölçek çubuğu — koordinat göstergesinin hemen üstünde */
+.map-container .ol-scale-line {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px 6px;
+  bottom: 62px;
+  left: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.map-container .ol-scale-line-inner {
+  color: var(--muted);
+  border-color: var(--muted);
+  font-size: 0.7rem;
+}
+
 .muted { color: var(--muted); font-size: 0.85rem; }
 
 /* ---------- Sağ panel ---------- */
@@ -512,4 +561,7 @@ kbd {
   .topbar-title { font-size: 0.95rem; }
   .badge.user { display: none; }
   .wkt-onizleme { display: none; }
+  /* Dar ekranda koordinat göstergesi haritanın yarısını kaplıyor */
+  .koordinat-gostergesi { font-size: 0.68rem; padding: 4px 8px; }
+  .map-container .ol-scale-line { bottom: 56px; }
 }
