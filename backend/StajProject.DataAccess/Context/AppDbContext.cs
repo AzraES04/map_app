@@ -13,19 +13,27 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
 
     // ---------- Ödev 3 / Görev 1: ModifiedDate otomatik güncelleme ----------
-    // Her SaveChanges çağrısından ÖNCE devreye girer. Böylece "modified_date yazmayı unuttum"
+    // Her kayıt işleminden ÖNCE devreye girer. Böylece "modified_date yazmayı unuttum"
     // diye bir durum kalmaz; kural tek yerde, merkezî olarak uygulanır.
+    //
+    // NEDEN parametresiz SaveChanges() değil de bool alan aşırı yükleme?
+    // DbContext içinde zincir şöyle: SaveChanges() -> SaveChanges(true)
+    //                                SaveChangesAsync(ct) -> SaveChangesAsync(true, ct)
+    // Yani BÜTÜN yollar bu iki metotta birleşiyor. Parametresizleri override etseydik,
+    // birisi doğrudan db.SaveChanges(false) çağırdığında kuralımız sessizce atlanırdı.
 
-    public override int SaveChanges()
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         ApplyAuditRules();
-        return base.SaveChanges();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
     {
         ApplyAuditRules();
-        return base.SaveChangesAsync(cancellationToken);
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
     /// <summary>
