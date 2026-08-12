@@ -1,0 +1,192 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --primary: #23606e;
+  --primary-dark: #17454f;
+  --bg: #f4f6f8;
+  --text: #1a2733;
+  --muted: #5a6b7b;
+  --border: #e2e8ee;
+  --error: #b3352b;
+  --ok: #1a7a4a;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* ---------- Login ekranı ---------- */
+
+.login-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: linear-gradient(135deg, #17454f 0%, #23606e 55%, #3b8291 100%);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 32px 28px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+}
+
+.login-logo { font-size: 2.4rem; text-align: center; margin-bottom: 6px; }
+
+.login-card h1 { font-size: 1.35rem; text-align: center; }
+
+.login-subtitle { color: var(--muted); text-align: center; margin-bottom: 20px; font-size: 0.95rem; }
+
+.login-card label { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--muted); }
+
+.login-card input {
+  padding: 11px 13px;
+  margin-bottom: 14px;
+  border: 1px solid #cfd9e2;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.login-card input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(35, 96, 110, 0.15);
+}
+
+.login-card button {
+  padding: 12px;
+  margin-top: 4px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.login-card button:hover:not(:disabled) { background: var(--primary-dark); }
+.login-card button:disabled { opacity: 0.6; cursor: default; }
+
+.info-banner {
+  background: #fff7e6;
+  border: 1px solid #f0d9a8;
+  color: #8a6d1a;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.87rem;
+  margin-bottom: 14px;
+}
+
+.error-banner {
+  background: #fdeceb;
+  border: 1px solid #f0b9b4;
+  color: var(--error);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.87rem;
+  margin-top: 12px;
+}
+
+.login-hint {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 16px;
+}
+
+.login-hint code {
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ---------- Harita ekranı ---------- */
+
+.map-layout { height: 100vh; display: flex; flex-direction: column; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.topbar-title { font-weight: 700; font-size: 1.05rem; }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.badge {
+  background: rgba(255, 255, 255, 0.16);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.logout-btn {
+  background: #fff;
+  color: var(--primary);
+  border: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.logout-btn:hover { background: #e8eef1; }
+
+.map-content { flex: 1; display: flex; min-height: 0; }
+
+.map-container { flex: 1; min-width: 0; }
+
+.side-panel {
+  width: 280px;
+  background: #fff;
+  border-left: 1px solid var(--border);
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.side-panel h2 { font-size: 1rem; margin-bottom: 12px; }
+
+.side-panel ul { list-style: none; }
+
+.side-panel li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.muted { color: var(--muted); font-size: 0.85rem; }
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 700px) {
+  .map-content { flex-direction: column; }
+  .side-panel {
+    width: 100%;
+    max-height: 30vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .topbar-title { font-size: 0.95rem; }
+  .badge.user { display: none; }
+}
