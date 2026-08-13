@@ -41,7 +41,7 @@ export const DRAW_TYPES = {
     label: 'Nokta',
     icon: '📍',
     endpoint: '/api/points',
-    color: '#23606e',
+    color: '#2e8fa8',
     hint: 'Haritaya tıklayarak nokta ekleyin.',
   },
   LineString: {
@@ -49,7 +49,7 @@ export const DRAW_TYPES = {
     label: 'Çizgi',
     icon: '📏',
     endpoint: '/api/lines',
-    color: '#b8642a',
+    color: '#e07b39',
     hint: 'Her tıklama bir kırılma noktası ekler. Bitirmek için çift tıklayın.',
   },
   Polygon: {
@@ -57,7 +57,7 @@ export const DRAW_TYPES = {
     label: 'Poligon',
     icon: '⬟',
     endpoint: '/api/polygons',
-    color: '#4a7c3f',
+    color: '#57a05a',
     hint: 'Köşeleri tıklayın; alanı kapatmak için çift tıklayın.',
   },
 }
@@ -70,16 +70,16 @@ export const DRAW_TYPE_KEYS = ['Point', 'LineString', 'Polygon']
  * Serbest renk seçici de var; bunlar sık kullanılanlar için kısayol.
  */
 export const RENK_SECENEKLERI = [
-  { deger: '#23606e', ad: 'Petrol' },
-  { deger: '#d94f3b', ad: 'Kiremit' },
-  { deger: '#4a7c3f', ad: 'Yeşil' },
-  { deger: '#b8642a', ad: 'Turuncu' },
+  { deger: '#2e8fa8', ad: 'Petrol' },
+  { deger: '#d9553f', ad: 'Kiremit' },
+  { deger: '#57a05a', ad: 'Yeşil' },
+  { deger: '#e07b39', ad: 'Turuncu' },
   { deger: '#6a4c93', ad: 'Mor' },
   { deger: '#1f7a8c', ad: 'Turkuaz' },
 ]
 
 /** Analiz aracının geçici poligon rengi — kayıtlı hiçbir renge benzemesin. */
-export const ANALIZ_RENGI = '#e0245e'
+export const ANALIZ_RENGI = '#ff4d7d'
 
 // Tek bir format nesnesini tekrar tekrar kullanıyoruz (her çağrıda yenisini
 // oluşturmak gereksiz; nesne durum tutmuyor, yeniden kullanılması güvenli).

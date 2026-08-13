@@ -32,7 +32,9 @@ import {
   RENK_SECENEKLERI, ANALIZ_RENGI,
 } from '../geo'
 import { listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir, kesisimAnalizi } from '../api'
-import { TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu, AnalizIkonu } from '../icons'
+import {
+  TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu, AnalizIkonu, SaatIkonu, KullaniciIkonu,
+} from '../icons'
 
 // Türkiye'nin yaklaşık merkezi (boylam, enlem) — 4326 cinsinden yazıp
 // fromLonLat ile haritanın diline (3857) çeviriyoruz.
@@ -143,29 +145,29 @@ function kayitStili(type) {
  */
 const analizStili = new Style({
   stroke: new Stroke({ color: ANALIZ_RENGI, width: 3, lineDash: [10, 6] }),
-  fill: new Fill({ color: 'rgba(224, 36, 94, 0.12)' }),
+  fill: new Fill({ color: 'rgba(255, 77, 125, 0.13)' }),
 })
 
 /** Henüz kaydedilmemiş çizim: kesikli turuncu — "bu geçici" mesajını verir. */
 const taslakStili = new Style({
   image: new Circle({
     radius: 7,
-    fill: new Fill({ color: '#e08b2f' }),
+    fill: new Fill({ color: '#e8a13c' }),
     stroke: new Stroke({ color: '#ffffff', width: 2 }),
   }),
-  stroke: new Stroke({ color: '#e08b2f', width: 3, lineDash: [8, 6] }),
-  fill: new Fill({ color: 'rgba(224, 139, 47, 0.20)' }),
+  stroke: new Stroke({ color: '#e8a13c', width: 3, lineDash: [8, 6] }),
+  fill: new Fill({ color: 'rgba(232, 161, 60, 0.20)' }),
 })
 
 /** Listede fareyle üzerine gelinen kaydın haritadaki vurgusu. */
 const vurguStili = new Style({
   image: new Circle({
     radius: 11,
-    fill: new Fill({ color: 'rgba(224, 139, 47, 0.9)' }),
+    fill: new Fill({ color: 'rgba(232, 161, 60, 0.92)' }),
     stroke: new Stroke({ color: '#ffffff', width: 3 }),
   }),
-  stroke: new Stroke({ color: '#e08b2f', width: 6 }),
-  fill: new Fill({ color: 'rgba(224, 139, 47, 0.35)' }),
+  stroke: new Stroke({ color: '#e8a13c', width: 6 }),
+  fill: new Fill({ color: 'rgba(232, 161, 60, 0.35)' }),
 })
 
 const BOS_KAYITLAR = { Point: [], LineString: [], Polygon: [] }
@@ -1083,10 +1085,14 @@ export default function MapPage() {
   return (
     <div className="map-layout">
       <header className="topbar">
-        <span className="topbar-title">🗺️ Harita Uygulaması</span>
+        {/* Emoji yerine CSS'teki marka noktası + ince SVG ikonlar:
+            karışık emoji kullanımı arayüzü amatör gösteriyordu. */}
+        <span className="topbar-title">Harita Uygulaması</span>
         <span className="topbar-right">
-          <span className={`badge${sureAzaldi ? ' badge-uyari' : ''}`}>⏱ {remaining}</span>
-          <span className="badge user">👤 {getUsername()}</span>
+          <span className={`badge${sureAzaldi ? ' badge-uyari' : ''}`}>
+            <SaatIkonu /> {remaining}
+          </span>
+          <span className="badge user"><KullaniciIkonu /> {getUsername()}</span>
           <button className="logout-btn" onClick={handleLogout}>Çıkış</button>
         </span>
       </header>

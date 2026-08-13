@@ -1,37 +1,128 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ============================================================================
+   TASARIM SİSTEMİ
+
+   Ana ilke: KOYU KROM, AYDINLIK İÇERİK.
+   Üst bar ve yan panel derin mürekkep tonunda; harita ve üzerindeki kartlar
+   aydınlık. Böylece harita "içerik" olarak öne çıkar, çevresi geri çekilir —
+   ve login ekranı, açılış sahnesi ve uygulama aynı görsel evrende buluşur.
+
+   Renkler iki kademede tanımlı:
+     1) Ham (primitive)  — mürekkep merdiveni, marka tonları
+     2) Anlamsal (semantic) — "yüzey", "kenar", "metin" gibi ROLLER
+   Bileşenler yalnızca anlamsal olanları kullanır; tema değiştirmek istersek
+   tek bir blok düzenlemek yeterli olur.
+   ========================================================================= */
+
 :root {
-  --primary: #23606e;
-  --primary-dark: #17454f;
-  --bg: #f4f6f8;
-  --text: #1a2733;
-  --muted: #5a6b7b;
-  --border: #e2e8ee;
-  --error: #b3352b;
-  --ok: #1a7a4a;
+  /* ---- 1) Ham renkler: teal alt tonlu mürekkep merdiveni ---------------- */
+  /* Nötr griden bilerek kaçındık; hafif teal alt ton markayla akraba kılıyor */
+  --murekkep-950: #080f12;
+  --murekkep-900: #0c161a;
+  --murekkep-850: #111d22;
+  --murekkep-800: #16242a;
+  --murekkep-700: #1d3038;
+  --murekkep-600: #274049;
 
-  /* Çizim tipi renkleri — geo.js'teki değerlerle aynı tutulmalı */
-  --nokta: #23606e;
-  --cizgi: #b8642a;
-  --poligon: #4a7c3f;
-  --taslak: #e08b2f;
-  --analiz: #e0245e;   /* envanter analizi — geo.js'teki ANALIZ_RENGI ile aynı */
+  --marka-500: #23606e;   /* markanın koyu tonu — açık zeminlerde ve login'de */
+  --marka-300: #52b3c7;   /* koyu zeminde okunabilir etkileşim tonu */
 
-  /* Ölçü birimleri: tek yerden değiştirilebilsin diye değişkene alındı */
-  --radius: 8px;
-  --radius-lg: 12px;
-  --shadow-sm: 0 1px 3px rgba(16, 32, 45, 0.08);
-  --shadow-md: 0 6px 18px rgba(16, 32, 45, 0.12);
-  --gecis: 0.15s ease;
+  /* ---- 2) Anlamsal roller: KOYU KROM ------------------------------------ */
+  --yuzey-0: var(--murekkep-900);   /* uygulama zemini */
+  --yuzey-1: var(--murekkep-850);   /* panel, üst bar */
+  --yuzey-2: var(--murekkep-800);   /* kart, girdi, sekme yuvası */
+  --yuzey-3: var(--murekkep-700);   /* hover / seçili */
+
+  /* Koyu zeminde kenarlar renk değil IŞIK'tır: beyazın düşük opaklığı,
+     alttaki yüzey ne olursa olsun doğru görünür. */
+  --kenar: rgba(255, 255, 255, 0.08);
+  --kenar-guclu: rgba(255, 255, 255, 0.15);
+
+  --metin: #e9f1f3;                 /* başlıklar, birincil metin */
+  --metin-orta: #a3b7bf;            /* ikincil metin */
+  /* WCAG AA (4.5:1) sınırını geçecek şekilde açıldı: #6d848d bölüm
+     başlıklarında 4.36'da kalıyordu, yani sınırın altındaydı. */
+  --metin-soluk: #8aa3ac;           /* etiketler, ipuçları */
+
+  /* ---- Anlamsal roller: AYDINLIK İÇERİK (harita üstü kartlar) ----------- */
+  --kart: #ffffff;
+  --kart-2: #f2f6f8;
+  --kart-kenar: #dfe7ec;
+  --kart-metin: #14212a;
+  --kart-metin-soluk: #5a6b7b;
+
+  /* ---- Durum renkleri: koyu zeminde okunabilir olacak şekilde açıldı ---- */
+  --ok: #3fbf88;
+  --error: #f0685a;
+  --uyari: #e0a339;
+
+  /* ---- Çizim tipi renkleri — geo.js'teki değerlerle AYNI olmalı --------- */
+  --nokta: #2e8fa8;
+  --cizgi: #e07b39;
+  --poligon: #57a05a;
+  --taslak: #e8a13c;
+  --analiz: #ff4d7d;
+
+  /* ---- Tipografi: viewport'a göre akıcı ölçek --------------------------- */
+  /* clamp(en küçük, tercih edilen, en büyük) → dar ekranda küçülür,
+     geniş ekranda büyür, ama asla okunmaz/dev olmaz. */
+  --yazi-xs: clamp(0.68rem, 0.66rem + 0.1vw, 0.74rem);
+  --yazi-sm: clamp(0.78rem, 0.76rem + 0.12vw, 0.86rem);
+  --yazi-md: clamp(0.86rem, 0.84rem + 0.14vw, 0.95rem);
+  --yazi-lg: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
+
+  /* ---- Ölçü ve hareket -------------------------------------------------- */
+  --radius: 9px;
+  --radius-lg: 13px;
+  --radius-full: 999px;
+
+  /* Koyu zeminde gölge tek başına yetmez (siyah üstüne siyah görünmez);
+     üstten ince bir ışık çizgisiyle birlikte kullanılır → "yükseklik" hissi. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 10px 28px -12px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 22px 50px -20px rgba(0, 0, 0, 0.75);
+  --isik-ust: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  --gecis: 0.15s cubic-bezier(0.32, 0.72, 0.35, 1);
+  --gecis-yavas: 0.3s cubic-bezier(0.32, 0.72, 0.35, 1);
+
+  /* ---- Geriye dönük takma adlar ----------------------------------------
+     Eski kurallar bu isimleri kullanıyor; sistemi tek noktadan besliyoruz. */
+  --primary: var(--marka-300);
+  --primary-dark: var(--marka-500);
+  --bg: var(--yuzey-0);
+  --text: var(--metin);
+  --muted: var(--metin-orta);
+  --border: var(--kenar);
+}
+
+/*
+  GRAİN (film grenli doku) — koyu yüzeylerdeki gradyan bantlaşmasını kırar.
+  Tek bir SVG gürültü filtresini data-URI olarak gömüyoruz: ağ isteği yok,
+  dosya yok. Çok düşük opaklıkta; fark edilmez ama yüzeyi "ucuz düz renk"
+  olmaktan çıkarır. Baskı ve sinemada aynı numara kullanılır.
+*/
+:root {
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.42'/%3E%3C/svg%3E");
 }
 
 html, body, #root { height: 100%; }
 
 body {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--yuzey-0);
+  color: var(--metin);
   line-height: 1.5;
+  /* Koyu zeminde ince yazılar kalın görünür; bu iki satır onları inceltip
+     macOS/Windows arasındaki farkı azaltır. */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--marka-300) 45%, transparent);
+  color: #fff;
 }
 
 /* ---------- Login ekranı ---------- */
@@ -246,44 +337,91 @@ body {
 
 .map-layout { height: 100vh; display: flex; flex-direction: column; }
 
+/*
+  ÜST BAR — koyu krom.
+  Haritaya gölge DÜŞÜRÜR (0 14px 30px -18px): böylece harita "altta,
+  çerçevenin içinde" durur. Düz bir çizgi yerine gölge kullanmak,
+  katmanlar arası derinliği anlatmanın en sessiz yolu.
+*/
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 18px;
-  background: var(--primary);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 11px 18px;
+  background: var(--yuzey-1);
+  color: var(--metin);
+  border-bottom: 1px solid var(--kenar);
+  box-shadow: var(--isik-ust), 0 14px 30px -18px rgba(0, 0, 0, 0.9);
   z-index: 10;
 }
 
-.topbar-title { font-weight: 700; font-size: 1.05rem; }
+/* Grain: düz koyu yüzeyi dokulandırır (bkz. --grain açıklaması) */
+.topbar::after,
+.side-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain);
+  opacity: 0.028;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
 
-.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-title {
+  font-weight: 650;
+  font-size: var(--yazi-lg);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* Başlıktaki marka noktası — logo yerine geçen minimal işaret */
+.topbar-title::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--marka-300);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--marka-300) 70%, transparent);
+}
+
+.topbar-right { display: flex; align-items: center; gap: 9px; }
 
 .badge {
-  background: rgba(255, 255, 255, 0.16);
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.85rem;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  color: var(--metin-orta);
+  padding: 4px 11px;
+  border-radius: var(--radius-full);
+  font-size: var(--yazi-sm);
+  font-variant-numeric: tabular-nums;   /* sayaç titremesin: rakamlar eşit genişlikte */
 }
 
 .logout-btn {
-  background: #fff;
-  color: var(--primary);
-  border: none;
+  background: var(--yuzey-2);
+  color: var(--metin-orta);
+  border: 1px solid var(--kenar-guclu);
   padding: 6px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-weight: 600;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--yazi-sm);
+  transition: background var(--gecis), color var(--gecis), border-color var(--gecis);
 }
 
-.logout-btn:hover { background: #e8eef1; }
+.logout-btn:hover {
+  background: var(--yuzey-3);
+  color: var(--metin);
+  border-color: color-mix(in oklab, var(--marka-300) 45%, transparent);
+}
 
 /* Son bir dakikada sayaç kırmızıya döner ve nabız atar — kullanıcı fark etsin */
 .badge-uyari {
-  background: #d9483b;
+  background: color-mix(in oklab, var(--error) 25%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--error) 55%, transparent);
+  color: #ffd9d3;
   animation: nabiz 1.4s ease-in-out infinite;
 }
 
@@ -292,12 +430,18 @@ body {
   50%      { opacity: 0.55; }
 }
 
-.map-content { flex: 1; display: flex; min-height: 0; }
+.map-content { flex: 1; display: flex; min-height: 0; background: var(--yuzey-0); }
 
 /* Haritanın sarmalayıcısı — üzerine binen düğmeler buna göre konumlanır */
 .map-alan { flex: 1; min-width: 0; position: relative; display: flex; }
 
 .map-container { flex: 1; min-width: 0; }
+
+/*
+  Haritanın oturduğu koyu zemin, tile'lar yüklenirken beyaz parlama yerine
+  sessiz bir boşluk gösterir. Küçük ayrıntı ama yükleme anında fark ediliyor.
+*/
+.map-container .ol-viewport { background: var(--murekkep-900); }
 
 /* ---------- Açılış sahnesi: uzaydan Türkiye'ye iniş ---------- */
 
@@ -440,15 +584,30 @@ body {
 
 .harita-popup:empty { display: none; }
 
+/*
+  Popup AYDINLIK bir adacık: gövde koyu olduğu için metin rengini
+  BURADA açıkça sıfırlamak zorundayız — yoksa açık zemine açık yazı miras
+  kalır ve içerik görünmez olur. Koyu/aydınlık karışık arayüzlerin
+  en sinsi hatası budur.
+*/
 .harita-popup:not(:empty) {
-  background: #fff;
-  border: 1px solid var(--border);
+  background: var(--kart);
+  color: var(--kart-metin);
+  border: 1px solid var(--kart-kenar);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
   padding: 12px 13px 11px;
-  font-size: 0.85rem;
-  animation: popupAc 0.16s ease-out;
+  font-size: var(--yazi-sm);
+  animation: popupAc 0.16s cubic-bezier(0.32, 0.72, 0.35, 1);
 }
+
+/* Kart içindeki girdiler de aydınlık bağlama ait */
+.harita-popup input {
+  background: var(--kart);
+  color: var(--kart-metin);
+}
+
+.harita-popup input::placeholder { color: color-mix(in oklab, var(--kart-metin-soluk) 70%, transparent); }
 
 /* Kartın altındaki küçük ok — kartı işaret ettiği geometriye bağlar */
 .harita-popup:not(:empty)::after {
@@ -460,7 +619,7 @@ body {
   border: 7px solid transparent;
   border-top-color: #fff;
   border-bottom: 0;
-  filter: drop-shadow(0 1px 0 var(--border));
+  filter: drop-shadow(0 1px 0 var(--kart-kenar));
 }
 
 @keyframes popupAc {
@@ -482,13 +641,13 @@ body {
   border: none;
   font-size: 1.15rem;
   line-height: 1;
-  color: var(--muted);
+  color: var(--kart-metin-soluk);
   cursor: pointer;
   padding: 0 2px;
   border-radius: 4px;
 }
 
-.popup-kapat:hover { color: var(--text); background: var(--bg); }
+.popup-kapat:hover { color: var(--kart-metin); background: var(--kart-2); }
 
 .popup-gorsel {
   display: block;
@@ -497,11 +656,11 @@ body {
   object-fit: cover;          /* oranı bozmadan çerçeveyi doldur */
   border-radius: var(--radius);
   margin-bottom: 9px;
-  background: var(--bg);
+  background: var(--kart-2);
 }
 
 .popup-aciklama {
-  color: var(--muted);
+  color: var(--kart-metin-soluk);
   font-size: 0.82rem;
   margin-bottom: 9px;
   line-height: 1.45;
@@ -516,8 +675,8 @@ body {
   margin-bottom: 11px;
 }
 
-.popup-bilgi dt { color: var(--muted); }
-.popup-bilgi dd { color: var(--text); }
+.popup-bilgi dt { color: var(--kart-metin-soluk); }
+.popup-bilgi dd { color: var(--kart-metin); }
 
 /* ---------- Öznitelik giriş pop-up'ı (Ödev 4 / Görev 2) ---------- */
 
@@ -528,14 +687,14 @@ body {
 
 .popup-ozet {
   font-size: 0.76rem;
-  color: var(--muted);
+  color: var(--kart-metin-soluk);
   margin-bottom: 10px;
 }
 
 .popup-form label {
   font-size: 0.74rem;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--kart-metin-soluk);
   margin-bottom: 4px;
 }
 
@@ -571,7 +730,7 @@ body {
   height: 22px;
   border-radius: 50%;
   border: 2px solid #fff;
-  box-shadow: 0 0 0 1px var(--border);
+  box-shadow: 0 0 0 1px var(--kart-kenar);
   cursor: pointer;
   padding: 0;
   transition: transform var(--gecis), box-shadow var(--gecis);
@@ -582,7 +741,7 @@ body {
 /* Seçili rengi kalın halkayla göster — sadece renkle ayırmak yetmez,
    renk körü kullanıcı için de ayırt edilebilir olmalı */
 .renk-nokta.secili {
-  box-shadow: 0 0 0 2px var(--text);
+  box-shadow: 0 0 0 2px var(--kart-metin);
   transform: scale(1.12);
 }
 
@@ -590,7 +749,7 @@ body {
   width: 26px;
   height: 26px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--kart-kenar);
   border-radius: 6px;
   background: none;
   cursor: pointer;
@@ -604,7 +763,7 @@ body {
 
 .popup-wkt summary {
   cursor: pointer;
-  color: var(--muted);
+  color: var(--kart-metin-soluk);
   font-weight: 600;
 }
 
@@ -612,11 +771,11 @@ body {
   display: block;
   margin-top: 5px;
   padding: 6px 7px;
-  background: var(--bg);
+  background: var(--kart-2);
   border-radius: 6px;
   font-family: ui-monospace, Consolas, monospace;
   font-size: 0.68rem;
-  color: var(--muted);
+  color: var(--kart-metin-soluk);
   word-break: break-all;
   max-height: 70px;
   overflow-y: auto;
@@ -647,11 +806,11 @@ body {
   gap: 6px;
   padding: 6px 11px 6px 8px;
   background: rgba(255, 255, 255, 0.94);
-  border: 1px solid var(--border);
+  border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
   font-size: 0.78rem;
   font-weight: 600;
-  color: var(--text);
+  color: var(--kart-metin);
   cursor: pointer;
   box-shadow: var(--shadow-sm);
   transition: background var(--gecis), transform var(--gecis), box-shadow var(--gecis);
@@ -676,12 +835,12 @@ body {
   left: 10px;
   z-index: 5;
   background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--border);
+  border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
   padding: 5px 11px;
   font-family: ui-monospace, Consolas, monospace;
   font-size: 0.74rem;
-  color: var(--text);
+  color: var(--kart-metin);
   box-shadow: var(--shadow-sm);
   pointer-events: none;         /* haritaya tıklamayı engellemesin */
   white-space: nowrap;
@@ -694,14 +853,14 @@ body {
   font-family: inherit;
   font-size: 0.62rem;
   letter-spacing: 0.05em;
-  color: var(--muted);
+  color: var(--kart-metin-soluk);
   margin-bottom: 1px;
 }
 
 /* Ölçek çubuğu — koordinat göstergesinin hemen üstünde */
 .map-container .ol-scale-line {
   background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--border);
+  border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
   padding: 2px 6px;
   bottom: 62px;
@@ -710,37 +869,71 @@ body {
 }
 
 .map-container .ol-scale-line-inner {
-  color: var(--muted);
-  border-color: var(--muted);
+  color: var(--kart-metin-soluk);
+  border-color: var(--kart-metin-soluk);
   font-size: 0.7rem;
 }
 
-.muted { color: var(--muted); font-size: 0.85rem; }
+/* .muted her iki bağlamda da kullanılıyor → varsayılan KOYU krom,
+   aydınlık kart içinde bağlama göre uyarlanıyor. */
+.muted { color: var(--metin-orta); font-size: var(--yazi-sm); }
+.harita-popup .muted { color: var(--kart-metin-soluk); }
 
 /* ---------- Sağ panel ---------- */
 
+/*
+  YAN PANEL — koyu krom.
+  Haritaya SOLA doğru gölge düşürür; üst barla birlikte haritayı çerçeveler.
+  Negatif yayılım (-18px) gölgeyi dar tutar: yumuşak bir kenar, leke değil.
+*/
 .side-panel {
+  position: relative;
   width: 330px;
   flex-shrink: 0;
-  background: #fff;
-  border-left: 1px solid var(--border);
+  background: var(--yuzey-1);
+  border-left: 1px solid var(--kenar);
+  box-shadow: -18px 0 34px -22px rgba(0, 0, 0, 0.95);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  z-index: 8;
+
+  /* İnce, koyu zeminle uyumlu kaydırma çubuğu (Firefox + standart) */
+  scrollbar-width: thin;
+  scrollbar-color: var(--murekkep-600) transparent;
 }
 
+/* WebKit tarafı: varsayılan kalın gri çubuk koyu temada sırıtıyor */
+.side-panel::-webkit-scrollbar { width: 10px; }
+.side-panel::-webkit-scrollbar-track { background: transparent; }
+.side-panel::-webkit-scrollbar-thumb {
+  background: var(--murekkep-600);
+  border-radius: var(--radius-full);
+  /* Şeffaf kenarlık + background-clip: çubuğu inceltmenin temiz yolu */
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.side-panel::-webkit-scrollbar-thumb:hover { background-color: var(--metin-soluk); background-clip: content-box; }
+
 .panel-section {
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 1;                       /* grain katmanının üstünde kalsın */
+  padding: 15px 17px;
+  border-bottom: 1px solid var(--kenar);
 }
 
 .panel-section.grow { flex: 1; border-bottom: none; }
 
+/*
+  Bölüm başlıkları: küçük, seyrek harfli, soluk.
+  Bilinçli olarak "geri çekilmiş" — göz önce içeriğe gitsin, başlığa değil.
+*/
 .side-panel h2 {
-  font-size: 0.78rem;
+  font-size: var(--yazi-xs);
+  font-weight: 650;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
+  letter-spacing: 0.09em;
+  color: var(--metin-soluk);
   margin-bottom: 12px;
   display: flex;
   align-items: center;
@@ -748,42 +941,60 @@ body {
 }
 
 .sayi {
-  background: var(--bg);
-  color: var(--muted);
-  border-radius: 999px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  color: var(--metin-orta);
+  border-radius: var(--radius-full);
   padding: 1px 8px;
-  font-size: 0.75rem;
+  font-size: var(--yazi-xs);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   margin-left: auto;
 }
 
+/* Renk noktası — koyu zeminde "yansıyan ışık" halkasıyla yüzer gibi durur */
 .dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14),
+              0 0 10px -2px currentColor;
+}
+
+/*
+  KOYU PANELDEKİ FORM ELEMANLARI — ortak temel.
+  Tek yerde tanımlayıp her bölümde tekrarlamıyoruz.
+*/
+.side-panel input[type='search'],
+.side-panel input[type='text'],
+.side-panel input[type='url'],
+.side-panel input:not([type]) {
+  width: 100%;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  color: var(--metin);
+  font-size: var(--yazi-sm);
+  font-family: inherit;
+  transition: border-color var(--gecis), box-shadow var(--gecis), background var(--gecis);
+}
+
+.side-panel input::placeholder { color: var(--metin-soluk); }
+
+.side-panel input:focus {
+  outline: none;
+  background: var(--murekkep-850);
+  border-color: color-mix(in oklab, var(--marka-300) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--marka-300) 18%, transparent);
 }
 
 /* ---------- ⓪ Yer arama ---------- */
 
 .arama-kutusu { position: relative; }
 
-.arama-kutusu input {
-  width: 100%;
-  padding: 9px 30px 9px 11px;
-  border: 1px solid #cfd9e2;
-  border-radius: var(--radius);
-  font-size: 0.87rem;
-  font-family: inherit;
-  transition: border-color var(--gecis), box-shadow var(--gecis);
-}
-
-.arama-kutusu input:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(35, 96, 110, 0.14);
-}
+.arama-kutusu input { padding: 9px 30px 9px 11px; }
 
 /* Tarayıcının kendi "×" düğmesini gizleyip kendimizinkini koyuyoruz */
 .arama-kutusu input::-webkit-search-cancel-button { display: none; }
@@ -803,7 +1014,7 @@ body {
   border-radius: 4px;
 }
 
-.arama-temizle:hover { color: var(--text); background: var(--bg); }
+.arama-temizle:hover { color: var(--text); background: var(--yuzey-2); }
 
 .arama-durum { margin-top: 8px; font-size: 0.8rem; color: var(--muted); }
 .arama-durum.hata { color: var(--error); }
@@ -825,7 +1036,7 @@ body {
   transition: background var(--gecis);
 }
 
-.arama-sonuclari button:hover { background: var(--bg); }
+.arama-sonuclari button:hover { background: var(--yuzey-3); }
 
 .arama-sonuclari svg { margin-top: 1px; flex-shrink: 0; }
 
@@ -855,27 +1066,43 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 4px;
-  background: #fff;
-  border: 1px solid var(--border);
+  gap: 5px;
+  padding: 11px 4px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
   border-radius: var(--radius);
-  font-size: 0.78rem;
+  font-size: var(--yazi-xs);
   font-weight: 600;
-  color: var(--text);
+  color: var(--metin-orta);
   cursor: pointer;
-  transition: background var(--gecis), border-color var(--gecis), transform var(--gecis);
+  box-shadow: var(--isik-ust);
+  transition: background var(--gecis), border-color var(--gecis),
+              color var(--gecis), transform var(--gecis);
 }
 
-.tool-btn:hover { background: var(--bg); border-color: #c6d2dc; }
+.tool-btn:hover {
+  background: var(--yuzey-3);
+  border-color: var(--kenar-guclu);
+  color: var(--metin);
+}
+
 .tool-btn:active { transform: scale(0.97); }
 
+/*
+  AKTİF ARAÇ — dolu marka rengi yerine "aydınlatılmış" bir yüzey:
+  koyu temada dolu parlak blok göz yorar. Marka rengini yüzeye %18
+  karıştırıp kenarı ve metni parlak bırakmak hem sakin hem net.
+*/
 .tool-btn.active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
-  box-shadow: var(--shadow-sm);
+  background: color-mix(in oklab, var(--marka-300) 18%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--marka-300) 60%, transparent);
+  color: #eafaff;
+  box-shadow: var(--isik-ust),
+              0 0 0 1px color-mix(in oklab, var(--marka-300) 25%, transparent),
+              0 6px 18px -10px color-mix(in oklab, var(--marka-300) 70%, transparent);
 }
+
+.tool-btn.active .tool-icon { color: var(--marka-300); }
 
 /* SVG ikon rengini butondan alır (currentColor) → aktif durumda beyaza döner */
 .tool-icon { display: flex; line-height: 1; }
@@ -893,18 +1120,26 @@ body {
 /* Pasif kayıt: soluk gösterilir ama SİLİNMİŞ değildir, listede durur */
 .geom-list li.pasif .geom-bilgi { opacity: 0.55; }
 
+/* Panelde (koyu) pasif rozeti */
 .pasif-rozet {
   display: inline-block;
-  background: #fff3d6;
-  border: 1px solid #f0d9a8;
-  color: #8a6d1a;
+  background: color-mix(in oklab, var(--uyari) 20%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--uyari) 45%, transparent);
+  color: color-mix(in oklab, var(--uyari) 70%, #fff);
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   margin-left: 6px;
   vertical-align: middle;
+}
+
+/* Popup (aydınlık) içindeyse açık zemine uyarlanır */
+.harita-popup .pasif-rozet {
+  background: #fff3d6;
+  border-color: #f0d9a8;
+  color: #8a6d1a;
 }
 
 .harita-popup .pasif-rozet { margin: 0 0 9px; }
@@ -921,7 +1156,7 @@ body {
 }
 
 kbd {
-  background: var(--bg);
+  background: var(--yuzey-2);
   border: 1px solid var(--border);
   border-bottom-width: 2px;
   border-radius: 4px;
@@ -930,100 +1165,103 @@ kbd {
   font-family: inherit;
 }
 
-/* ---------- ② Kayıt formu ---------- */
-
-.draw-form {
-  background: #fffdf7;
-  border-left: 3px solid var(--taslak);
-  display: flex;
-  flex-direction: column;
-  animation: acil 0.18s ease-out;
-}
+/* ---------- Düğmeler (hem popup hem panel) ---------- */
 
 @keyframes acil {
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: none; }
 }
 
-.draw-form .ozet {
-  font-size: 0.8rem;
-  color: var(--muted);
-  margin-bottom: 12px;
-}
-
-.draw-form label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--muted);
-  margin-bottom: 4px;
-}
-
-.draw-form label small { font-weight: 400; text-transform: none; }
-
-.draw-form input,
-.wkt-box {
-  padding: 8px 10px;
-  margin-bottom: 10px;
-  border: 1px solid #cfd9e2;
-  border-radius: var(--radius);
-  font-size: 0.85rem;
-  font-family: inherit;
-  transition: border-color var(--gecis), box-shadow var(--gecis);
-}
-
-.draw-form input:focus,
-.wkt-box:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(35, 96, 110, 0.15);
-}
-
-.wkt-box {
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
-  font-size: 0.72rem;
-  background: var(--bg);
-  color: var(--muted);
-  resize: vertical;
-  word-break: break-all;
-}
-
-.form-actions { display: flex; gap: 8px; }
-
 .btn-primary,
 .btn-ghost {
   flex: 1;
   padding: 9px;
   border-radius: var(--radius);
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: var(--yazi-sm);
+  font-weight: 650;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: background var(--gecis), opacity var(--gecis);
+  transition: background var(--gecis), border-color var(--gecis),
+              color var(--gecis), opacity var(--gecis), transform var(--gecis);
 }
 
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary:active:not(:disabled),
+.btn-ghost:active:not(:disabled) { transform: scale(0.975); }
 
-.btn-ghost { background: #fff; border-color: var(--border); color: var(--muted); }
-.btn-ghost:hover:not(:disabled) { background: var(--bg); }
+/*
+  VARSAYILAN BAĞLAM = harita üstündeki AYDINLIK popup.
+  Marka renginin koyu tonu burada doğru okunuyor.
+*/
+.btn-primary {
+  background: var(--marka-500);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(20, 33, 42, 0.25);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--marka-500) 88%, #000);
+}
+
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-ghost {
+  background: var(--kart);
+  border-color: var(--kart-kenar);
+  color: var(--kart-metin-soluk);
+}
+
+.btn-ghost:hover:not(:disabled) { background: var(--kart-2); color: var(--kart-metin); }
+
+/*
+  KOYU BAĞLAM = yan panel. Aynı sınıflar, farklı ortam.
+  Bileşeni ikiye bölmek yerine bağlama göre uyarlıyoruz — çağıran taraf
+  hangi renkte olduğunu bilmek zorunda kalmıyor.
+*/
+.side-panel .btn-primary {
+  background: color-mix(in oklab, var(--marka-300) 22%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--marka-300) 55%, transparent);
+  color: #eafaff;
+  box-shadow: var(--isik-ust);
+}
+
+.side-panel .btn-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--marka-300) 32%, var(--yuzey-2));
+}
+
+.side-panel .btn-ghost {
+  background: var(--yuzey-2);
+  border-color: var(--kenar);
+  color: var(--metin-orta);
+}
+
+.side-panel .btn-ghost:hover:not(:disabled) {
+  background: var(--yuzey-3);
+  color: var(--metin);
+}
 
 /* ---------- Envanter analizi (Ödev 4 / Görev 3) ---------- */
 
 /* Analiz aracı, kaydeden araçlardan görsel olarak ayrışsın */
 .tool-btn.analiz.active {
-  background: var(--analiz);
-  border-color: var(--analiz);
+  background: color-mix(in oklab, var(--analiz) 20%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--analiz) 60%, transparent);
+  color: #ffe6ee;
+  box-shadow: var(--isik-ust),
+              0 6px 18px -10px color-mix(in oklab, var(--analiz) 70%, transparent);
 }
 
+.tool-btn.analiz.active .tool-icon { color: var(--analiz); }
+
 .analiz-sonuc {
-  background: #fff5f8;
-  border-left: 3px solid var(--analiz);
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--analiz) 9%, var(--yuzey-1)) 0%,
+    var(--yuzey-1) 100%);
+  border-left: 2px solid var(--analiz);
   animation: acil 0.18s ease-out;
 }
 
 .analiz-toplam {
-  font-size: 0.9rem;
+  font-size: var(--yazi-md);
   margin-bottom: 9px;
 }
 
@@ -1043,13 +1281,14 @@ kbd {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius-full);
   padding: 3px 9px;
-  font-size: 0.78rem;
+  font-size: var(--yazi-xs);
   font-weight: 600;
-  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  color: var(--metin-orta);
 }
 
 .analiz-liste {
@@ -1082,14 +1321,16 @@ kbd {
   user-select: none;
 }
 
-.layer-toggle input { accent-color: var(--primary); cursor: pointer; }
+.layer-toggle input { accent-color: var(--marka-300); cursor: pointer; }
+
+.layer-toggle:hover { color: var(--metin); }
 
 /* ---------- ④ Kayıtlı geometriler ---------- */
 
 .geom-tabs {
   display: flex;
   gap: 4px;
-  background: var(--bg);
+  background: var(--yuzey-2);
   padding: 3px;
   border-radius: var(--radius);
   margin-bottom: 10px;
@@ -1103,13 +1344,19 @@ kbd {
   border-radius: 6px;
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--metin-soluk);
   cursor: pointer;
   transition: background var(--gecis), color var(--gecis);
 }
 
-.tab:hover { color: var(--text); }
-.tab.active { background: #fff; color: var(--text); box-shadow: var(--shadow-sm); }
+.tab:hover { color: var(--metin-orta); }
+
+/* Aktif sekme yuvadan YÜKSELİR: daha açık yüzey + üst ışık + gölge */
+.tab.active {
+  background: var(--yuzey-3);
+  color: var(--metin);
+  box-shadow: var(--isik-ust), var(--shadow-sm);
+}
 
 .geom-list { list-style: none; }
 
@@ -1125,7 +1372,16 @@ kbd {
   transition: background var(--gecis);
 }
 
-.geom-list li:hover { background: #fff8ee; }
+.geom-list li:hover { background: var(--yuzey-2); }
+
+/* Satırın solunda, hover'da beliren ince marka çizgisi */
+.geom-list li {
+  position: relative;
+  border-left: 2px solid transparent;
+  transition: background var(--gecis), border-color var(--gecis);
+}
+
+.geom-list li:hover { border-left-color: color-mix(in oklab, var(--marka-300) 65%, transparent); }
 
 .geom-bilgi { flex: 1; min-width: 0; }
 
@@ -1152,7 +1408,10 @@ kbd {
 }
 
 .geom-list li:hover .sil-btn { opacity: 1; }
-.sil-btn:hover { background: #fdeceb; }
+.sil-btn:hover {
+  background: color-mix(in oklab, var(--error) 22%, transparent);
+  color: var(--error);
+}
 
 .bos-durum {
   text-align: center;
@@ -1169,19 +1428,36 @@ kbd {
 
 /* ---------- Bildirim (toast) ---------- */
 
+/*
+  BİLDİRİM — koyu cam yüzey. Eskiden tamamı yeşil/kırmızı doluydu; bu,
+  ekranın ortasında büyük bir renk bloğu demekti. Şimdi gövde nötr koyu,
+  DURUM yalnızca soldaki ince renk şeridiyle anlatılıyor: daha sakin,
+  daha okunur ve arayüzün geri kalanıyla aynı dilde.
+*/
 .toast {
   position: fixed;
   bottom: 22px;
   left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   transform: translateX(-50%);
-  padding: 11px 20px;
+  padding: 11px 18px;
   border-radius: var(--radius-lg);
-  color: #fff;
-  font-size: 0.88rem;
+  background: color-mix(in oklab, var(--murekkep-800) 88%, transparent);
+  border: 1px solid var(--kenar-guclu);
+  border-left: 3px solid var(--metin-soluk);
+  color: var(--metin);
+  font-size: var(--yazi-sm);
   font-weight: 500;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg), var(--isik-ust);
   z-index: 1000;
-  animation: yukari 0.22s ease-out;
+  animation: yukari 0.22s cubic-bezier(0.32, 0.72, 0.35, 1);
+}
+
+/* Cam efekti yalnızca tarayıcı destekliyorsa; desteklemiyorsa yüzey zaten opak */
+@supports (backdrop-filter: blur(1px)) {
+  .toast { backdrop-filter: blur(14px) saturate(140%); }
 }
 
 @keyframes yukari {
@@ -1189,20 +1465,13 @@ kbd {
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-.toast-ok { background: var(--ok); }
-.toast-hata { background: var(--error); }
-
-/* Bildirim içindeki eylem düğmesi (örn. "Geri al") */
-.toast {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
+.toast-ok { border-left-color: var(--ok); }
+.toast-hata { border-left-color: var(--error); }
 
 .toast-eylem {
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  color: #fff;
+  background: color-mix(in oklab, var(--marka-300) 22%, transparent);
+  border: 1px solid color-mix(in oklab, var(--marka-300) 50%, transparent);
+  color: #eafaff;
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 0.82rem;
@@ -1217,10 +1486,15 @@ kbd {
 /* ---------- Erişilebilirlik ---------- */
 
 /* Klavyeyle gezinen kullanıcı nerede olduğunu görsün (fare tıklamasında çıkmaz) */
+/* Klavye odağı: koyu zeminde de görünen çift katmanlı halka */
 :focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--marka-300);
   outline-offset: 2px;
+  border-radius: 4px;
 }
+
+/* Aydınlık kartların içinde markanın koyu tonu daha okunur */
+.harita-popup :focus-visible { outline-color: var(--marka-500); }
 
 /* Hareket hassasiyeti olan kullanıcılar için animasyonları kapat */
 @media (prefers-reduced-motion: reduce) {
