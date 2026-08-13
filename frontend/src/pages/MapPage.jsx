@@ -22,7 +22,7 @@ import 'ol/ol.css'
 import { clearSession, getUsername, getExpiresAt, scheduleAutoLogout } from '../auth'
 import { DRAW_TYPES, DRAW_TYPE_KEYS, geometryToWkt, wktToFeature, describeGeometry } from '../geo'
 import { listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir } from '../api'
-import { TipIkonu, DuzenleIkonu, SilIkonu } from '../icons'
+import { TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu } from '../icons'
 
 // Türkiye'nin yaklaşık merkezi (boylam, enlem) — 4326 cinsinden yazıp
 // fromLonLat ile haritanın diline (3857) çeviriyoruz.
@@ -146,6 +146,7 @@ export default function MapPage() {
   const popupElement = useRef(null)    // popup'ın DOM kökü (OpenLayers konumlandırıyor)
   const popupOverlayRef = useRef(null)
   const toastZamanlayiciRef = useRef(null)
+  const sahneTemizleRef = useRef(null)   // açılış sahnesinin zamanlayıcı/dinleyici temizliği
 
   // --- Ekran durumu ---------------------------------------------------------
   const [activeTool, setActiveTool] = useState(null)      // null | 'Point' | 'LineString' | 'Polygon'
@@ -260,6 +261,73 @@ export default function MapPage() {
   //  Veritabanından kayıtları çek ve haritaya bas
   // ------------------------------------------------------------------------
   /**
+   * Açılış sahnesini oynatır: harita uzaya çekilir, gezegen diski belirir,
+   * sonra Türkiye'ye iniş yapar.
+   *
+   * Hem sayfa ilk açıldığında (bayrakYaz = true) hem de "Dünya" düğmesinden
+   * (bayrakYaz = false) çağrılıyor. Tek fonksiyon olduğu için iki yol da
+   * birebir aynı davranıyor.
+   *
+   * @param {boolean} bayrakYaz Animasyon tamamlanınca "bu oturumda oynatıldı"
+   *   bayrağını yaksın mı? Sadece otomatik açılışta true.
+   */
+  const sahneyiOynat = useCallback((bayrakYaz = false) => {
+    const map = mapRef.current
+    if (!map) return
+
+    const view = map.getView()
+    const viewport = map.getViewport()
+
+    // Önceki sahnenin zamanlayıcısı/dinleyicileri kalmışsa temizle.
+    // Bu olmadan düğmeye üst üste basmak birden fazla sahne başlatırdı.
+    if (sahneTemizleRef.current) sahneTemizleRef.current()
+
+    popupKapat()
+    view.cancelAnimations()
+    view.setCenter(fromLonLat(TURKEY_CENTER))
+    view.setZoom(UZAY_ZOOM)          // haritayı uzaya çek
+    setUzaySahnesi('kure')           // gezegen diski sahneye girer
+
+    const bitir = (tamamlandi) => {
+      if (sahneTemizleRef.current) sahneTemizleRef.current()
+      if (tamamlandi && bayrakYaz) sessionStorage.setItem(GIRIS_ANAHTARI, '1')
+      setUzaySahnesi(null)
+    }
+
+    // Kullanıcı beklemek istemiyorsa ilk dokunuşta sahneyi kes.
+    const atla = () => {
+      view.cancelAnimations()
+      view.setZoom(TURKEY_ZOOM)
+      bitir(false)
+    }
+    viewport.addEventListener('pointerdown', atla)
+    viewport.addEventListener('wheel', atla, { passive: true })
+
+    // Küre önce kısa bir süre sahnede dursun — göz onu "gezegen" olarak
+    // okumaya fırsat bulsun. Hemen zoomlarsak sadece bir geçiş efekti gibi durur.
+    const zamanlayici = setTimeout(() => {
+      setUzaySahnesi('inis')   // CSS: daire büyümeye ve sahne solmaya başlar
+
+      // Aynı anda OpenLayers zoom animasyonu. İkisi bağımsız çalışır ama
+      // eşzamanlı başladıkları için tek bir hareket gibi algılanır.
+      view.animate(
+        { zoom: TURKEY_ZOOM, duration: INIS_SURESI, easing: easeOut },
+        bitir,
+      )
+    }, KURE_BEKLEME)
+
+    // ⚠️ Dinleyicileri sahne bitince MUTLAKA kaldırıyoruz. Kalsalardı, kullanıcı
+    // animasyondan çok sonra haritaya tıkladığında "atla" tetiklenir ve zoom
+    // aniden Türkiye seviyesine geri dönerdi.
+    sahneTemizleRef.current = () => {
+      clearTimeout(zamanlayici)
+      viewport.removeEventListener('pointerdown', atla)
+      viewport.removeEventListener('wheel', atla)
+      sahneTemizleRef.current = null
+    }
+  }, [popupKapat])
+
+  /**
    * Sürüklenerek değiştirilen bir geometriyi sunucuya yazar.
    * Ad/açıklama/görsel aynı kalır; sadece WKT yenilenir.
    */
@@ -365,9 +433,10 @@ export default function MapPage() {
       document.visibilityState === 'visible'
 
     const view = new View({
-      // Merkez her iki durumda da Türkiye: sahne boyunca kaydırma yok, sadece zoom.
+      // Merkez sahne boyunca sabit: kaydırma yok, sadece zoom.
+      // Sahne oynayacaksa zoom'u sahneyiOynat() zaten uzaya çekecek.
       center: fromLonLat(TURKEY_CENTER),                  // 4326 → 3857
-      zoom: girisOynat ? UZAY_ZOOM : TURKEY_ZOOM,
+      zoom: TURKEY_ZOOM,
     })
 
     const map = new Map({
@@ -414,45 +483,8 @@ export default function MapPage() {
     map.addOverlay(popup)
     popupOverlayRef.current = popup
 
-    // --- Uzaydan Türkiye'ye iniş ---
-    let atlaDinleyici = null
-    let inisZamanlayici = null
-    if (girisOynat) {
-      setUzaySahnesi('kure')   // gezegen diski sahneye girer
-
-      /** Sahneyi kapat ve haritayı Türkiye'ye sabitle (hem normal bitiş hem "atla" için). */
-      const sahneyiBitir = (tamamlandi) => {
-        if (tamamlandi) sessionStorage.setItem(GIRIS_ANAHTARI, '1')
-        setUzaySahnesi(null)
-      }
-
-      // Küre önce kısa bir süre sahnede dursun — göz onu "gezegen" olarak
-      // okumaya fırsat bulsun. Hemen zoomlarsak sadece bir geçiş efekti gibi durur.
-      inisZamanlayici = setTimeout(() => {
-        setUzaySahnesi('inis')   // CSS: daire büyümeye ve sahne solmaya başlar
-
-        // Aynı anda OpenLayers zoom animasyonu. İkisi bağımsız çalışır ama
-        // eşzamanlı başladıkları için tek bir hareket gibi algılanır.
-        view.animate(
-          {
-            zoom: TURKEY_ZOOM,
-            duration: INIS_SURESI,
-            easing: easeOut,   // hızlı başlar, sona doğru yavaşlar: "yerine oturma"
-          },
-          sahneyiBitir,
-        )
-      }, KURE_BEKLEME)
-
-      // Kullanıcı beklemek istemiyorsa ilk dokunuşta sahneyi kes ve Türkiye'ye atla.
-      atlaDinleyici = () => {
-        clearTimeout(inisZamanlayici)
-        view.cancelAnimations()
-        view.setZoom(TURKEY_ZOOM)
-        setUzaySahnesi(null)
-      }
-      map.getViewport().addEventListener('pointerdown', atlaDinleyici, { once: true })
-      map.getViewport().addEventListener('wheel', atlaDinleyici, { once: true, passive: true })
-    }
+    // --- Uzaydan Türkiye'ye iniş (ilk açılış) ---
+    if (girisOynat) sahneyiOynat(true)
 
     yukle()
 
@@ -460,16 +492,12 @@ export default function MapPage() {
     // React StrictMode geliştirmede effect'i iki kez çalıştırır; bu satır
     // olmasaydı sayfada iki harita üst üste binerdi.
     return () => {
-      if (inisZamanlayici) clearTimeout(inisZamanlayici)
-      if (atlaDinleyici) {
-        map.getViewport().removeEventListener('pointerdown', atlaDinleyici)
-        map.getViewport().removeEventListener('wheel', atlaDinleyici)
-      }
+      if (sahneTemizleRef.current) sahneTemizleRef.current()
       view.cancelAnimations()   // bileşen kalkarken devam eden animasyon kalmasın
       map.setTarget(null)
       mapRef.current = null
     }
-  }, [yukle])
+  }, [yukle, sahneyiOynat])
 
   // ------------------------------------------------------------------------
   //  Oturum: otomatik çıkış + kalan süre sayacı
@@ -869,8 +897,40 @@ export default function MapPage() {
             </div>
           )}
 
-          {/* POPUP — OpenLayers bu div'i alıp harita koordinatına konumlandırır.
-              DOM'da hep duruyor; içeriği yalnızca bir kayıt seçiliyken doluyor. */}
+          <div className="harita-araclari">
+            <button type="button" className="harita-btn" onClick={turkiyeyeDon}
+                    title="Türkiye görünümüne dön">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M10 2.5 2.5 9h2v8h4v-5h3v5h4V9h2L10 2.5Z" />
+              </svg>
+              <span>Türkiye</span>
+            </button>
+
+            <button type="button" className="harita-btn" onClick={tumunuGoster}
+                    title="Tüm kayıtları ekrana sığdır">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4" fill="none"
+                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span>Tümü</span>
+            </button>
+
+            {/* Açılış sahnesini istediğin zaman tekrar oynat */}
+            <button type="button" className="harita-btn" onClick={() => sahneyiOynat(false)}
+                    title="Açılış animasyonunu tekrar oynat (uzaydan Türkiye'ye iniş)">
+              <DunyaIkonu />
+              <span>Dünya</span>
+            </button>
+          </div>
+
+          {/* POPUP — EN SONDA OLMALI.
+              OpenLayers Overlay, bu div'i DOM'dan alıp kendi kapsayıcısına taşır.
+              Artık React'in çocuk listesiyle gerçek DOM uyuşmadığı için, React
+              bu div'in ÖNÜNE yeni bir kardeş eklemeye çalışırsa
+              "insertBefore: node is not a child of this node" hatası alır ve
+              tüm sayfa çöker. Popup'ı en sona koyarak React'in ondan sonra
+              hiçbir şey eklemesi gerekmemesini garantiliyoruz.
+              (Uzay sahnesi koşullu olarak eklenip kaldırıldığı için bu şart.) */}
           <div ref={popupElement} className="harita-popup">
             {secili && (
               <>
@@ -937,24 +997,6 @@ export default function MapPage() {
             )}
           </div>
 
-          <div className="harita-araclari">
-            <button type="button" className="harita-btn" onClick={turkiyeyeDon}
-                    title="Türkiye görünümüne dön">
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M10 2.5 2.5 9h2v8h4v-5h3v5h4V9h2L10 2.5Z" />
-              </svg>
-              <span>Türkiye</span>
-            </button>
-
-            <button type="button" className="harita-btn" onClick={tumunuGoster}
-                    title="Tüm kayıtları ekrana sığdır">
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4" fill="none"
-                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              <span>Tümü</span>
-            </button>
-          </div>
         </div>
 
 

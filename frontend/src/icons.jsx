@@ -73,6 +73,19 @@ export function DuzenleIkonu({ size = 18 }) {
   )
 }
 
+/** Dünya — açılış sahnesini tekrar oynatma düğmesi için. */
+export function DunyaIkonu({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+         strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z" />
+    </svg>
+  )
+}
+
 /** Çöp kutusu. */
 export function SilIkonu({ size = 15 }) {
   return (
