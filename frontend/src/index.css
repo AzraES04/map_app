@@ -244,7 +244,7 @@ body {
 .map-container { transition: filter 1.6s ease-out; }
 
 .map-container.uzay-renk {
-  filter: saturate(1.6) contrast(1.14) brightness(0.78) hue-rotate(-12deg);
+  filter: saturate(1.6) contrast(1.14) brightness(0.85) hue-rotate(-12deg);
 }
 
 /*
@@ -265,8 +265,8 @@ body {
        parlak mavi şerit. İnce ve belirgin olması "fotoğrafik" hissin anahtarı. */
     radial-gradient(circle at center,
       rgba(255, 255, 255, 0) 96.5%,
-      rgba(var(--atmosfer), 0.70) 99%,
-      rgba(var(--atmosfer), 0.35) 100%),
+      rgba(var(--atmosfer), 0.55) 99%,
+      rgba(var(--atmosfer), 0.28) 100%),
     /* ana ışık kaynağı: sol üst */
     radial-gradient(circle at 33% 27%,
       rgba(255, 255, 255, 0.14),
