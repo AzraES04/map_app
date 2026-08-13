@@ -62,4 +62,13 @@ public class FakeGeometryRepository<TEntity> : IGeometryRepository<TEntity>
         entity.IsActive = true;
         return Task.FromResult(true);
     }
+
+    public Task<bool> SetActiveAsync(int id, bool isActive)
+    {
+        var entity = _store.FirstOrDefault(e => e.Id == id && !e.IsDeleted);
+        if (entity is null) return Task.FromResult(false);
+
+        entity.IsActive = isActive;
+        return Task.FromResult(true);
+    }
 }

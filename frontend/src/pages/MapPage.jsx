@@ -7,6 +7,8 @@ import OSM from 'ol/source/OSM'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
 import Draw from 'ol/interaction/Draw'
+import Modify from 'ol/interaction/Modify'
+import Snap from 'ol/interaction/Snap'
 import Overlay from 'ol/Overlay'
 import { Style, Circle, Fill, Stroke, Text } from 'ol/style'
 import { fromLonLat } from 'ol/proj'
@@ -19,12 +21,17 @@ import 'ol/ol.css'
 
 import { clearSession, getUsername, getExpiresAt, scheduleAutoLogout } from '../auth'
 import { DRAW_TYPES, DRAW_TYPE_KEYS, geometryToWkt, wktToFeature, describeGeometry } from '../geo'
-import { listele, kaydet, sil, geriAl } from '../api'
+import { listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir } from '../api'
+import { TipIkonu, DuzenleIkonu, SilIkonu } from '../icons'
 
 // Türkiye'nin yaklaşık merkezi (boylam, enlem) — 4326 cinsinden yazıp
 // fromLonLat ile haritanın diline (3857) çeviriyoruz.
 const TURKEY_CENTER = [35.24, 39.0]
 const TURKEY_ZOOM = 6.4
+
+// Dördüncü araç: çizim değil, var olan geometriyi düzenleme modu.
+// Çizim tiplerinden ayrı tutuluyor çünkü OpenLayers Draw'a verilecek bir tip değil.
+const DUZENLE = 'Duzenle'
 
 // --- Açılış sahnesi: "uzaydan Türkiye'ye iniş" ---
 //
@@ -252,6 +259,39 @@ export default function MapPage() {
   // ------------------------------------------------------------------------
   //  Veritabanından kayıtları çek ve haritaya bas
   // ------------------------------------------------------------------------
+  /**
+   * Sürüklenerek değiştirilen bir geometriyi sunucuya yazar.
+   * Ad/açıklama/görsel aynı kalır; sadece WKT yenilenir.
+   */
+  const geometriGuncelle = useCallback(async (feature) => {
+    const dto = feature.get('dto')
+    const tip = feature.get('tip')
+    if (!dto) return
+
+    try {
+      const yeni = await guncelle(
+        DRAW_TYPES[tip].endpoint,
+        dto.id,
+        {
+          name: dto.name,
+          description: dto.description,
+          imageUrl: dto.imageUrl,
+          wkt: geometryToWkt(feature.getGeometry()),   // 3857 → 4326
+        },
+        goLogin,
+      )
+      // Feature'a iliştirdiğimiz kaydı da tazele ki popup güncel WKT'yi göstersin.
+      feature.set('dto', yeni)
+      setRecords((onceki) => ({
+        ...onceki,
+        [tip]: onceki[tip].map((k) => (k.id === yeni.id ? yeni : k)),
+      }))
+      bildir('ok', `"${dto.name}" güncellendi.`)
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    }
+  }, [goLogin, bildir])
+
   const yukle = useCallback(async () => {
     try {
       // Üç isteği paralel atıyoruz; sırayla beklemenin anlamı yok.
@@ -455,7 +495,9 @@ export default function MapPage() {
   // ------------------------------------------------------------------------
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !activeTool) return undefined
+    // Sadece çizim tiplerinde kurulur; 'Duzenle' aracı ayrı bir effect'te ele alınıyor.
+    // Bu kontrol olmasaydı new Draw({ type: 'Duzenle' }) hata fırlatırdı.
+    if (!map || !DRAW_TYPE_KEYS.includes(activeTool)) return undefined
 
     const draw = new Draw({
       source: drawSourceRef.current,
@@ -494,6 +536,46 @@ export default function MapPage() {
       drawRef.current = null
     }
   }, [activeTool])
+
+  // ------------------------------------------------------------------------
+  //  DÜZENLEME etkileşimi — kaydedilmiş geometriyi sürükleyerek değiştirme
+  //
+  //  Modify: köşeleri sürüklemeyi, kenara tıklayıp yeni köşe eklemeyi ve
+  //          Alt+tıkla köşe silmeyi sağlar.
+  //  Snap:   imleç mevcut bir köşeye/kenara yaklaşınca oraya "yapışır".
+  //          Komşu poligonlar arasında boşluk/çakışma kalmasını önler — GIS'te
+  //          topolojik doğruluk için standart beklenti budur.
+  // ------------------------------------------------------------------------
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || activeTool !== DUZENLE) return undefined
+
+    const etkilesimler = []
+
+    // Üç kaynak için ayrı Modify: her biri kendi katmanının feature'larını düzenler.
+    DRAW_TYPE_KEYS.forEach((key) => {
+      const modify = new Modify({ source: sourcesRef.current[key] })
+
+      // Sürükleme bittiğinde değişen her feature'ı sunucuya yaz.
+      modify.on('modifyend', (evt) => {
+        evt.features.forEach((feature) => geometriGuncelle(feature))
+      })
+
+      map.addInteraction(modify)
+      etkilesimler.push(modify)
+    })
+
+    // ⚠️ Snap HER ZAMAN EN SONA eklenir. Snap, fare olaylarını diğer
+    // etkileşimlerden ÖNCE yakalayıp koordinatı düzeltmesi için en son
+    // eklenmiş olmalıdır (OpenLayers etkileşimleri ters sırada işler).
+    DRAW_TYPE_KEYS.forEach((key) => {
+      const snap = new Snap({ source: sourcesRef.current[key] })
+      map.addInteraction(snap)
+      etkilesimler.push(snap)
+    })
+
+    return () => etkilesimler.forEach((i) => map.removeInteraction(i))
+  }, [activeTool, geometriGuncelle])
 
   // ------------------------------------------------------------------------
   //  Harita üzerinde etkileşim (çizim aracı KAPALIYKEN)
@@ -660,6 +742,21 @@ export default function MapPage() {
    * Bu deseni kullanabilmemizin tek sebebi SOFT DELETE: kayıt veritabanında
    * duruyor, geri getirmek tek UPDATE. Fiziksel silme olsaydı geri alınamazdı.
    */
+  /**
+   * Aktif/pasif değiştirme (Ödev 3 / Görev 1'deki is_active kolonunun arayüzdeki karşılığı).
+   * Silmekten farkı: kayıt listede kalır, sadece "Pasif" rozetiyle işaretlenir.
+   */
+  const handleAktiflik = async (type, dto) => {
+    try {
+      await aktiflikDegistir(DRAW_TYPES[type].endpoint, dto.id, !dto.isActive, goLogin)
+      popupKapat()
+      await yukle()
+      bildir('ok', dto.isActive ? `"${dto.name}" askıya alındı.` : `"${dto.name}" aktif edildi.`)
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    }
+  }
+
   const handleDelete = async (type, dto) => {
     try {
       await sil(DRAW_TYPES[type].endpoint, dto.id, goLogin)
@@ -799,6 +896,8 @@ export default function MapPage() {
                   <p className="popup-aciklama">{secili.dto.description}</p>
                 )}
 
+                {!secili.dto.isActive && <span className="pasif-rozet">Pasif</span>}
+
                 <dl className="popup-bilgi">
                   <dt>Tip</dt>
                   <dd>{DRAW_TYPES[secili.tip].label}</dd>
@@ -818,10 +917,20 @@ export default function MapPage() {
                   </button>
                   <button
                     type="button"
+                    className="btn-ghost"
+                    onClick={() => handleAktiflik(secili.tip, secili.dto)}
+                    title={secili.dto.isActive
+                      ? 'Kaydı askıya al (silinmez, listede pasif görünür)'
+                      : 'Kaydı yeniden aktif et'}
+                  >
+                    {secili.dto.isActive ? 'Askıya al' : 'Aktif et'}
+                  </button>
+                  <button
+                    type="button"
                     className="btn-ghost sil"
                     onClick={() => handleDelete(secili.tip, secili.dto)}
                   >
-                    Sil
+                    <SilIkonu />
                   </button>
                 </div>
               </>
@@ -864,13 +973,32 @@ export default function MapPage() {
                   aria-pressed={activeTool === key}
                   title={`${DRAW_TYPES[key].label} çiz`}
                 >
-                  <span className="tool-icon">{DRAW_TYPES[key].icon}</span>
+                  <span className="tool-icon"><TipIkonu tip={key} /></span>
                   {DRAW_TYPES[key].label}
                 </button>
               ))}
             </div>
 
-            {activeTool ? (
+            {/* Düzenleme aracı ayrı bir satırda: çizim yapmıyor, var olanı değiştiriyor */}
+            <button
+              type="button"
+              className={`tool-btn genis${activeTool === DUZENLE ? ' active' : ''}`}
+              onClick={() => aracSec(DUZENLE)}
+              aria-pressed={activeTool === DUZENLE}
+              title="Kaydedilmiş geometrileri sürükleyerek düzenle"
+            >
+              <span className="tool-icon"><DuzenleIkonu /></span>
+              Düzenle
+            </button>
+
+            {activeTool === DUZENLE ? (
+              <p className="tool-hint">
+                Köşeleri sürükleyerek şekli değiştirin. Kenara tıklamak yeni köşe ekler,
+                <kbd>Alt</kbd> + tıklamak köşeyi siler.
+                <br />
+                Fare mevcut köşelere yapışır; bırakınca değişiklik kaydedilir.
+              </p>
+            ) : activeTool ? (
               <p className="tool-hint">
                 {DRAW_TYPES[activeTool].hint}
                 <br />
@@ -966,14 +1094,14 @@ export default function MapPage() {
                   className={`tab${activeTab === key ? ' active' : ''}`}
                   onClick={() => setActiveTab(key)}
                 >
-                  {DRAW_TYPES[key].icon} {records[key].length}
+                  <TipIkonu tip={key} size={15} /> {records[key].length}
                 </button>
               ))}
             </div>
 
             {records[activeTab].length === 0 ? (
               <p className="bos-durum">
-                <span className="bos-ikon">{DRAW_TYPES[activeTab].icon}</span>
+                <span className="bos-ikon"><TipIkonu tip={activeTab} size={30} /></span>
                 Henüz {DRAW_TYPES[activeTab].label.toLowerCase()} kaydı yok.
               </p>
             ) : (
@@ -981,11 +1109,13 @@ export default function MapPage() {
                 {records[activeTab].map((dto) => (
                   <li
                     key={dto.id}
+                    className={dto.isActive ? '' : 'pasif'}
                     onMouseEnter={() => vurgula(activeTab, dto)}
                     onClick={() => odaklan(activeTab, dto)}
                   >
                     <div className="geom-bilgi">
                       <strong>{dto.name}</strong>
+                      {!dto.isActive && <span className="pasif-rozet">Pasif</span>}
                       {dto.description && <span className="muted"> — {dto.description}</span>}
                       <code className="wkt-onizleme">{dto.wkt}</code>
                     </div>
@@ -995,7 +1125,7 @@ export default function MapPage() {
                       title="Sil"
                       onClick={(e) => { e.stopPropagation(); handleDelete(activeTab, dto) }}
                     >
-                      🗑
+                      <SilIkonu />
                     </button>
                   </li>
                 ))}

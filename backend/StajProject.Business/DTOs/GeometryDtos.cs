@@ -55,6 +55,12 @@ public class GeometryCreateDto
     public string Wkt { get; set; } = string.Empty;
 }
 
+/// <summary>Aktif/pasif değiştirme isteği gövdesi.</summary>
+public class SetActiveDto
+{
+    public bool IsActive { get; set; }
+}
+
 /// <summary>Var olan bir geometrinin adı/açıklaması güncellenirken kullanılır.</summary>
 public class GeometryUpdateDto
 {

@@ -26,4 +26,11 @@ public interface IGeometryRepository<TEntity> where TEntity : GeometryEntityBase
     /// veri hâlâ tabloda durduğu için silme işlemi tek UPDATE ile geri alınabilir.
     /// </summary>
     Task<bool> RestoreAsync(int id);
+
+    /// <summary>
+    /// Kaydı askıya alır veya yeniden aktif eder (is_active).
+    /// Pasif kayıt SİLİNMİŞ değildir: listelerde görünmeye devam eder, sadece
+    /// "şu an kullanımda değil" olarak işaretlenir.
+    /// </summary>
+    Task<bool> SetActiveAsync(int id, bool isActive);
 }

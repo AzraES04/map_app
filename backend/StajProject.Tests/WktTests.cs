@@ -199,6 +199,41 @@ public class WktTests
         Assert.False(await service.RestoreAsync(9999));      // hiç olmayan kayıt
     }
 
+    // ---------------- Aktif / pasif ----------------
+
+    [Fact]
+    public async Task SetActiveAsync_KaydiPasifYapar_AmaListedeKalir()
+    {
+        var service = CreatePointService();
+        var created = await service.CreateAsync(new GeometryCreateDto
+        {
+            Name = "Askıya alınacak",
+            Wkt = "POINT (30 40)"
+        });
+
+        var sonuc = await service.SetActiveAsync(created.Id, false);
+
+        Assert.True(sonuc);
+        var liste = await service.GetAllAsync();
+        Assert.Single(liste);                 // pasif ≠ silinmiş: listede duruyor
+        Assert.False(liste[0].IsActive);
+    }
+
+    [Fact]
+    public async Task SetActiveAsync_SilinenKayitIcin_FalseDoner()
+    {
+        var service = CreatePointService();
+        var created = await service.CreateAsync(new GeometryCreateDto
+        {
+            Name = "Silinecek",
+            Wkt = "POINT (30 40)"
+        });
+        await service.DeleteAsync(created.Id);
+
+        // Silinmiş kaydın aktifliğini değiştirmek anlamsız: önce geri alınmalı
+        Assert.False(await service.SetActiveAsync(created.Id, true));
+    }
+
     // ---------------- Görsel adresi doğrulaması ----------------
 
     [Theory]

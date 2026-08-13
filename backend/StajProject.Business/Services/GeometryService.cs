@@ -85,6 +85,8 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
 
     public Task<bool> RestoreAsync(int id) => _repository.RestoreAsync(id);
 
+    public Task<bool> SetActiveAsync(int id, bool isActive) => _repository.SetActiveAsync(id, isActive);
+
     /// <summary>
     /// Görsel adresini doğrular. Sadece http/https kabul ediyoruz.
     ///

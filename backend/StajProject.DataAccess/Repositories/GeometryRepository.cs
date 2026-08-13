@@ -103,4 +103,19 @@ public class GeometryRepository<TEntity> : IGeometryRepository<TEntity>
         await _context.SaveChangesAsync();
         return true;
     }
+
+    public async Task<bool> SetActiveAsync(int id, bool isActive)
+    {
+        // Burada IgnoreQueryFilters YOK: silinmiş bir kaydın aktifliğini
+        // değiştirmek anlamsız olurdu, önce geri alınması gerekir.
+        var entity = await Table.FirstOrDefaultAsync(e => e.Id == id);
+        if (entity is null)
+        {
+            return false;
+        }
+
+        entity.IsActive = isActive;
+        await _context.SaveChangesAsync();   // ModifiedDate otomatik damgalanır
+        return true;
+    }
 }

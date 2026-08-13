@@ -578,7 +578,41 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-.tool-icon { font-size: 1.15rem; line-height: 1; }
+/* SVG ikon rengini butondan alır (currentColor) → aktif durumda beyaza döner */
+.tool-icon { display: flex; line-height: 1; }
+
+/* Düzenle aracı tam genişlikte, yatay yerleşimli */
+.tool-btn.genis {
+  flex-direction: row;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px;
+}
+
+/* Pasif kayıt: soluk gösterilir ama SİLİNMİŞ değildir, listede durur */
+.geom-list li.pasif .geom-bilgi { opacity: 0.55; }
+
+.pasif-rozet {
+  display: inline-block;
+  background: #fff3d6;
+  border: 1px solid #f0d9a8;
+  color: #8a6d1a;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.harita-popup .pasif-rozet { margin: 0 0 9px; }
+
+/* Silme düğmesindeki SVG */
+.sil-btn { display: inline-flex; align-items: center; }
+.popup-eylemler .btn-ghost.sil { flex: 0 0 auto; display: flex; justify-content: center; }
 
 .tool-hint {
   margin-top: 10px;
@@ -767,7 +801,10 @@ kbd {
   line-height: 1.8;
 }
 
-.bos-ikon { display: block; font-size: 1.6rem; opacity: 0.35; }
+.bos-ikon { display: flex; justify-content: center; opacity: 0.28; margin-bottom: 4px; }
+
+/* Sekmelerdeki ikon + sayı yan yana */
+.tab { display: flex; align-items: center; justify-content: center; gap: 5px; }
 
 /* ---------- Bildirim (toast) ---------- */
 

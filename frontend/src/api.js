@@ -57,3 +57,32 @@ export async function geriAl(endpoint, id, onUnauthorized) {
   const res = await authFetch(`${endpoint}/${id}/restore`, { method: 'POST' }, onUnauthorized)
   if (!res.ok) throw new Error(await hataMesaji(res))
 }
+
+/** PUT — kaydı günceller. Wkt gönderilirse geometri de değişir. */
+export async function guncelle(endpoint, id, veri, onUnauthorized) {
+  const res = await authFetch(
+    `${endpoint}/${id}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(veri),
+    },
+    onUnauthorized,
+  )
+  if (!res.ok) throw new Error(await hataMesaji(res))
+  return res.json()
+}
+
+/** POST /{id}/active — kaydı askıya alır veya yeniden aktif eder (is_active). */
+export async function aktiflikDegistir(endpoint, id, isActive, onUnauthorized) {
+  const res = await authFetch(
+    `${endpoint}/${id}/active`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive }),
+    },
+    onUnauthorized,
+  )
+  if (!res.ok) throw new Error(await hataMesaji(res))
+}

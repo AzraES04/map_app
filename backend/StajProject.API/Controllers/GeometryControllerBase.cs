@@ -97,6 +97,22 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Kaydı askıya alır / yeniden aktif eder (Ödev 3 / Görev 1'deki is_active kolonu).
+    /// Silmekten farkı: pasif kayıt listelerde görünmeye devam eder.
+    /// </summary>
+    [HttpPost("{id:int}/active")]
+    public async Task<IActionResult> SetActive(int id, [FromBody] SetActiveDto dto)
+    {
+        var degisti = await _service.SetActiveAsync(id, dto.IsActive);
+        if (!degisti)
+        {
+            return NotFound(new { message = $"Id={id} olan kayıt bulunamadı." });
+        }
+
+        return NoContent();
+    }
+
     /// <summary>Soft delete: kayıt fiziksel olarak silinmez, is_deleted işaretlenir.</summary>
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)

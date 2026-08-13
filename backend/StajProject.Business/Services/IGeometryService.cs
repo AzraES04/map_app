@@ -17,4 +17,7 @@ public interface IGeometryService<TEntity> where TEntity : GeometryEntityBase
 
     /// <summary>Soft delete edilmiş kaydı geri getirir ("Geri al" işlemi).</summary>
     Task<bool> RestoreAsync(int id);
+
+    /// <summary>Kaydı askıya alır / yeniden aktif eder.</summary>
+    Task<bool> SetActiveAsync(int id, bool isActive);
 }
