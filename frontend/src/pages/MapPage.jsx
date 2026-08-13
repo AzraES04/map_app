@@ -12,7 +12,7 @@ import { fromLonLat } from 'ol/proj'
 import { defaults as varsayilanKontroller } from 'ol/control/defaults'
 import ScaleLine from 'ol/control/ScaleLine'
 import MousePosition from 'ol/control/MousePosition'
-import { easeOut } from 'ol/easing'
+import { easeOut, inAndOut } from 'ol/easing'
 import { createEmpty, extend as extentGenislet, isEmpty as extentBosMu } from 'ol/extent'
 import 'ol/ol.css'
 
@@ -25,10 +25,19 @@ import { listele, kaydet, sil } from '../api'
 const TURKEY_CENTER = [35.24, 39.0]
 const TURKEY_ZOOM = 6.4
 
-// Açılış animasyonunun başlangıç noktası: dünyaya bakan geniş açı.
-const DUNYA_CENTER = [18, 26]
-const DUNYA_ZOOM = 2.1
-const GIRIS_SURESI = 2200                       // ms
+// --- Açılış sahnesi: "uzayda dönen dünyadan Türkiye'ye iniş" ---
+//
+// OpenLayers gerçek bir 3B küre çizemez (o Cesium'un işi). Bunun yerine:
+//   1. Haritayı DAİREYE kırpıyoruz            → gezegen silueti
+//   2. Arkasına yıldız alanı koyuyoruz         → uzay
+//   3. Üstüne küresel gölge/parlama bindiriyoruz → hacim hissi
+//   4. Görüşü batıdan doğuya kaydırıyoruz      → dünyanın dönme illüzyonu
+//   5. Daireyi büyütüp Türkiye'ye zoomluyoruz  → atmosfere iniş
+const UZAY_CENTER = [-72, 22]     // Atlantik/Amerika üzeri — doğuya doğru "dönecek"
+const UZAY_ZOOM = 2.3             // Bu değerin altında OpenLayers dünyayı ekrana sabitler
+const DONUS_ARA_CENTER = [8, 32]  // dönüşün orta noktası (Afrika/Avrupa)
+const DONUS_SURESI = 1600         // ms — dünyanın dönme evresi
+const INIS_SURESI = 1900          // ms — Türkiye'ye iniş evresi
 const GIRIS_ANAHTARI = 'staj_giris_animasyonu'  // sessionStorage bayrağı
 
 // Etiketleri decluttter ederken üç katmanı da AYNI gruba koyuyoruz; böylece
@@ -137,6 +146,8 @@ export default function MapPage() {
   const [toast, setToast] = useState(null)                // { tur: 'ok' | 'hata', mesaj }
   const [saving, setSaving] = useState(false)
   const [remaining, setRemaining] = useState('')
+  // Açılış sahnesinin evresi: null (kapalı) | 'donus' (dünya dönüyor) | 'inis' (Türkiye'ye zoom)
+  const [uzaySahnesi, setUzaySahnesi] = useState(null)
 
   const goLogin = useCallback(
     () => navigate('/login', { replace: true, state: { expired: true } }),
@@ -254,9 +265,9 @@ export default function MapPage() {
       document.visibilityState === 'visible'
 
     const view = new View({
-      // Animasyon oynayacaksa dünyaya bakan geniş açıdan başla, yoksa direkt Türkiye.
-      center: fromLonLat(girisOynat ? DUNYA_CENTER : TURKEY_CENTER),   // 4326 → 3857
-      zoom: girisOynat ? DUNYA_ZOOM : TURKEY_ZOOM,
+      // Açılış sahnesi oynayacaksa uzaydan bakış konumundan başla, yoksa direkt Türkiye.
+      center: fromLonLat(girisOynat ? UZAY_CENTER : TURKEY_CENTER),   // 4326 → 3857
+      zoom: girisOynat ? UZAY_ZOOM : TURKEY_ZOOM,
     })
 
     const map = new Map({
@@ -291,26 +302,53 @@ export default function MapPage() {
     })
     mapRef.current = map
 
-    // --- Dünyadan Türkiye'ye uçuş ---
+    // --- Uzaydan Türkiye'ye iniş ---
     let atlaDinleyici = null
     if (girisOynat) {
+      setUzaySahnesi('donus')   // dairesel maske + yıldızlar sahneye girer
+
+      /** Sahneyi kapat ve haritayı Türkiye'ye sabitle (hem normal bitiş hem "atla" için). */
+      const sahneyiBitir = (tamamlandi) => {
+        if (tamamlandi) sessionStorage.setItem(GIRIS_ANAHTARI, '1')
+        setUzaySahnesi(null)
+      }
+
       view.animate(
+        // 1. EVRE — DÖNÜŞ: zoom sabit, sadece boylam batıdan doğuya kayıyor.
+        // Mercator'da yatay kaydırma = boylam rotasyonu; dairesel maske içinde
+        // bu, dünyanın kendi ekseninde dönmesi olarak algılanıyor.
+        // Ara nokta (Afrika/Avrupa) dönüşün hızını sabit tutuyor.
         {
-          center: fromLonLat(TURKEY_CENTER),
-          zoom: TURKEY_ZOOM,
-          duration: GIRIS_SURESI,
-          easing: easeOut,   // hızlı başlar, sona doğru yavaşlar: "yerine oturma" hissi
+          center: fromLonLat(DONUS_ARA_CENTER),
+          zoom: UZAY_ZOOM,
+          duration: DONUS_SURESI,
+          easing: inAndOut,   // yavaş başlar, hızlanır, yavaşlar
         },
-        // Bayrağı animasyon GERÇEKTEN tamamlandığında yakıyoruz. Baştan yaksaydık,
-        // animasyonun oynamadığı bir durumda kullanıcı onu bir daha hiç göremezdi.
-        (tamamlandi) => {
-          if (tamamlandi) sessionStorage.setItem(GIRIS_ANAHTARI, '1')
+        (donusTamam) => {
+          if (!donusTamam) return sahneyiBitir(false)
+
+          // 2. EVRE — İNİŞ: daire ekranı kaplayacak şekilde büyürken harita
+          // Türkiye'ye zoom yapar. CSS ile OpenLayers animasyonu eşzamanlı çalışır.
+          setUzaySahnesi('inis')
+          view.animate(
+            {
+              center: fromLonLat(TURKEY_CENTER),
+              zoom: TURKEY_ZOOM,
+              duration: INIS_SURESI,
+              easing: easeOut,   // hızlı başlar, sona doğru yavaşlar: "yerine oturma"
+            },
+            sahneyiBitir,
+          )
         },
       )
 
-      // Kullanıcı beklemek istemiyorsa ilk dokunuşta animasyonu kes.
-      // Animasyon boyunca haritanın kilitli hissettirmemesi için şart.
-      atlaDinleyici = () => view.cancelAnimations()
+      // Kullanıcı beklemek istemiyorsa ilk dokunuşta sahneyi kes ve Türkiye'ye atla.
+      atlaDinleyici = () => {
+        view.cancelAnimations()
+        view.setCenter(fromLonLat(TURKEY_CENTER))
+        view.setZoom(TURKEY_ZOOM)
+        setUzaySahnesi(null)
+      }
       map.getViewport().addEventListener('pointerdown', atlaDinleyici, { once: true })
       map.getViewport().addEventListener('wheel', atlaDinleyici, { once: true, passive: true })
     }
@@ -618,6 +656,17 @@ export default function MapPage() {
             eleman eklemesi çakışma yaratırdı. */}
         <div className="map-alan">
           <div ref={mapElement} className={`map-container${activeTool ? ' cizim-modu' : ''}`} />
+
+          {/* Açılış sahnesi. Haritanın ÜSTÜNE biner ama pointer-events: none olduğu
+              için tıklamalar haritaya geçer — böylece "atla" davranışı çalışır. */}
+          {uzaySahnesi && (
+            <div className={`uzay-sahnesi ${uzaySahnesi}`} aria-hidden="true">
+              {/* Uzay: tüm alanı kaplar, ortasındaki dairesel delikten harita görünür */}
+              <div className="yildizlar" />
+              {/* Küresel hacim: sol üstten ışık, sağ altta gölge + atmosfer parıltısı */}
+              <div className="kure-isik" />
+            </div>
+          )}
 
           <div className="harita-araclari">
             <button type="button" className="harita-btn" onClick={turkiyeyeDon}
