@@ -5,6 +5,32 @@ const TOKEN_KEY = 'staj_token'
 const EXPIRES_KEY = 'staj_token_expires'
 const USER_KEY = 'staj_username'
 
+/**
+ * Açılış sahnesinin bu oturumda oynatıldığını işaretleyen anahtar.
+ * Login ekranı ile harita ekranı ortak kullandığı için burada duruyor.
+ */
+export const GIRIS_ANIMASYON_ANAHTARI = 'staj_giris_animasyonu'
+
+/**
+ * Girişten sonra açılış sahnesi MUTLAKA oynasın diye bayrağı sıfırlar.
+ * Böylece login ekranındaki uzay teması, haritadaki "dünyadan Türkiye'ye
+ * iniş" sahnesiyle kesintisiz devam eder.
+ */
+export function girisAnimasyonunuSifirla() {
+  sessionStorage.removeItem(GIRIS_ANIMASYON_ANAHTARI)
+}
+
+/** Açılış sahnesi şu an oynatılmalı mı? (yan etkisi yoktur, sadece sorar) */
+export function girisAnimasyonuOynasinMi() {
+  return (
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches &&
+    !sessionStorage.getItem(GIRIS_ANIMASYON_ANAHTARI) &&
+    // Arka plan sekmesinde tarayıcı animasyon karesi üretmez; sahne görülmeden
+    // "oynatıldı" sayılmasın diye hiç başlatmıyoruz.
+    document.visibilityState === 'visible'
+  )
+}
+
 let logoutTimer = null
 
 export function saveSession({ token, expiresAt, username }) {

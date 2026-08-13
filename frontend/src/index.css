@@ -35,64 +35,164 @@ body {
 
 /* ---------- Login ekranı ---------- */
 
+/*
+  Login ekranı, harita ekranındaki açılış sahnesiyle AYNI evrende geçiyor:
+  aynı uzay siyahı, aynı atmosfer mavisi. Giriş yapılınca kart solup ekran
+  kararıyor, harita da uzay sahnesiyle açılıyor — arada kopukluk olmuyor.
+*/
 .login-wrapper {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: linear-gradient(135deg, #17454f 0%, #23606e 55%, #3b8291 100%);
+  overflow: hidden;
+  /* Merkezden değil, ALTTAN gelen ışık: gezegenin oradan yükseldiğini ima eder */
+  background: radial-gradient(ellipse 130% 90% at 50% 128%,
+    #08192a 0%, #04101c 32%, #01060c 62%, #000 100%);
+}
+
+/*
+  GEZEGEN KAVSİ — devasa bir dairenin yalnızca üst kenarı ekranda.
+  Bu, "uzaydan bakan bir yörünge kamerası" hissini tek elemanla verir;
+  tam bir küre çizmeye çalışmaktan çok daha inandırıcı durur.
+*/
+.login-gezegen {
+  position: absolute;
+  left: 50%;
+  top: 74vh;
+  width: 240vmax;
+  height: 240vmax;
+  margin-left: -120vmax;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 0%,
+    #0c2537 0%, #071726 4%, #030c15 12%, #01060b 26%);
+  /* Dairede border-top yalnızca ÜST çeyrek yayı boyar → atmosfer çizgisi */
+  border: 2px solid transparent;
+  border-top-color: rgba(var(--atmosfer), 0.45);
+  filter: drop-shadow(0 -4px 26px rgba(var(--atmosfer), 0.35));
+  transition: transform 850ms cubic-bezier(0.5, 0, 0.3, 1);
 }
 
 .login-card {
+  position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 380px;
-  background: #fff;
-  border-radius: 14px;
-  padding: 32px 28px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  /* Cam etkisi: arkasındaki uzay hafifçe görünür ama içerik okunur kalır */
+  background: rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: var(--radius-lg);
+  padding: 34px 30px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);   /* üst kenarda ince ışık */
+  color: #e8f1f7;
   display: flex;
   flex-direction: column;
+  transition: opacity 550ms ease, transform 650ms cubic-bezier(0.5, 0, 0.3, 1);
 }
 
-.login-logo { font-size: 2.4rem; text-align: center; margin-bottom: 6px; }
+.login-logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+  color: rgba(var(--atmosfer), 0.9);
+  filter: drop-shadow(0 0 14px rgba(var(--atmosfer), 0.4));
+}
 
-.login-card h1 { font-size: 1.35rem; text-align: center; }
+.login-card h1 {
+  font-size: 1.35rem;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
 
-.login-subtitle { color: var(--muted); text-align: center; margin-bottom: 20px; font-size: 0.95rem; }
+.login-subtitle {
+  color: rgba(232, 241, 247, 0.6);
+  text-align: center;
+  margin-bottom: 22px;
+  font-size: 0.92rem;
+}
 
-.login-card label { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; color: var(--muted); }
+.login-card label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: rgba(232, 241, 247, 0.62);
+}
 
 .login-card input {
   padding: 11px 13px;
   margin-bottom: 14px;
-  border: 1px solid #cfd9e2;
-  border-radius: 8px;
+  background: rgba(4, 12, 22, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius);
   font-size: 0.95rem;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  color: #eef5fa;
+  transition: border-color var(--gecis), box-shadow var(--gecis), background var(--gecis);
 }
+
+.login-card input::placeholder { color: rgba(232, 241, 247, 0.3); }
 
 .login-card input:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(35, 96, 110, 0.15);
+  background: rgba(4, 12, 22, 0.72);
+  border-color: rgba(var(--atmosfer), 0.75);
+  box-shadow: 0 0 0 3px rgba(var(--atmosfer), 0.16);
 }
 
 .login-card button {
   padding: 12px;
-  margin-top: 4px;
-  background: var(--primary);
+  margin-top: 6px;
+  background: linear-gradient(180deg, #2d7a8c 0%, var(--primary) 100%);
   color: #fff;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid rgba(var(--atmosfer), 0.35);
+  border-radius: var(--radius);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: filter var(--gecis), box-shadow var(--gecis), transform var(--gecis);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 22px rgba(var(--atmosfer), 0.15);
 }
 
-.login-card button:hover:not(:disabled) { background: var(--primary-dark); }
-.login-card button:disabled { opacity: 0.6; cursor: default; }
+.login-card button:hover:not(:disabled) {
+  filter: brightness(1.12);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4), 0 0 30px rgba(var(--atmosfer), 0.28);
+}
+
+.login-card button:active:not(:disabled) { transform: scale(0.985); }
+.login-card button:disabled { opacity: 0.65; cursor: default; }
+
+/* ---------- Girişten haritaya devir animasyonu ---------- */
+
+/* Kart yukarı doğru süzülerek kaybolur */
+.login-wrapper.cikis .login-card {
+  opacity: 0;
+  transform: translateY(-20px) scale(0.97);
+  pointer-events: none;
+}
+
+/* Gezegen yaklaşır: "yörüngeye iniyoruz" hissi */
+.login-wrapper.cikis .login-gezegen {
+  transform: translateY(-8vh) scale(1.08);
+}
+
+/* Perde: ekran karararak haritaya devreder. Harita da uzay sahnesiyle
+   açıldığı için kullanıcı iki ayrı sayfa olduğunu fark etmez. */
+.login-karartma {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 500ms ease 300ms;
+}
+
+.login-wrapper.cikis .login-karartma { opacity: 1; }
 
 .info-banner {
   background: #fff7e6;
@@ -116,15 +216,29 @@ body {
 
 .login-hint {
   text-align: center;
-  color: var(--muted);
+  color: rgba(232, 241, 247, 0.45);
   font-size: 0.8rem;
-  margin-top: 16px;
+  margin-top: 18px;
 }
 
 .login-hint code {
-  background: var(--bg);
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(232, 241, 247, 0.85);
   padding: 1px 6px;
   border-radius: 4px;
+}
+
+/* Login'deki bantlar koyu zemine uyarlanıyor (harita ekranındakiler açık kalır) */
+.login-card .info-banner {
+  background: rgba(240, 217, 168, 0.12);
+  border-color: rgba(240, 217, 168, 0.35);
+  color: #f0d9a8;
+}
+
+.login-card .error-banner {
+  background: rgba(217, 72, 59, 0.14);
+  border-color: rgba(217, 72, 59, 0.4);
+  color: #f5b1aa;
 }
 
 /* ---------- Harita ekranı ---------- */
@@ -546,6 +660,87 @@ body {
   display: inline-block;
   flex-shrink: 0;
 }
+
+/* ---------- ⓪ Yer arama ---------- */
+
+.arama-kutusu { position: relative; }
+
+.arama-kutusu input {
+  width: 100%;
+  padding: 9px 30px 9px 11px;
+  border: 1px solid #cfd9e2;
+  border-radius: var(--radius);
+  font-size: 0.87rem;
+  font-family: inherit;
+  transition: border-color var(--gecis), box-shadow var(--gecis);
+}
+
+.arama-kutusu input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(35, 96, 110, 0.14);
+}
+
+/* Tarayıcının kendi "×" düğmesini gizleyip kendimizinkini koyuyoruz */
+.arama-kutusu input::-webkit-search-cancel-button { display: none; }
+
+.arama-temizle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.arama-temizle:hover { color: var(--text); background: var(--bg); }
+
+.arama-durum { margin-top: 8px; font-size: 0.8rem; color: var(--muted); }
+.arama-durum.hata { color: var(--error); }
+
+.arama-sonuclari { list-style: none; margin-top: 8px; }
+
+.arama-sonuclari button {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--nokta);
+  transition: background var(--gecis);
+}
+
+.arama-sonuclari button:hover { background: var(--bg); }
+
+.arama-sonuclari svg { margin-top: 1px; flex-shrink: 0; }
+
+.arama-ad { min-width: 0; color: var(--text); }
+
+.arama-ad strong { display: block; font-size: 0.86rem; }
+
+/* Uzun adres zincirini iki satırda kes — panel taşmasın */
+.arama-ad small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.35;
+}
+
+.arama-ipucu { margin-top: 10px; font-size: 0.76rem; line-height: 1.45; }
 
 /* ---------- ① Çizim araçları ---------- */
 

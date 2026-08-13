@@ -19,7 +19,14 @@ import { easeOut } from 'ol/easing'
 import { createEmpty, extend as extentGenislet, isEmpty as extentBosMu } from 'ol/extent'
 import 'ol/ol.css'
 
-import { clearSession, getUsername, getExpiresAt, scheduleAutoLogout } from '../auth'
+import Feature from 'ol/Feature'
+import PointGeom from 'ol/geom/Point'
+
+import {
+  clearSession, getUsername, getExpiresAt, scheduleAutoLogout,
+  GIRIS_ANIMASYON_ANAHTARI, girisAnimasyonuOynasinMi,
+} from '../auth'
+import { yerAra } from '../geocode'
 import { DRAW_TYPES, DRAW_TYPE_KEYS, geometryToWkt, wktToFeature, describeGeometry } from '../geo'
 import { listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir } from '../api'
 import { TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu } from '../icons'
@@ -46,7 +53,7 @@ const DUZENLE = 'Duzenle'
 const UZAY_ZOOM = 2.4             // Bu değerin altında OpenLayers dünyayı ekrana sabitler
 const KURE_BEKLEME = 1200         // ms — küre sahnede dursun, sonra iniş başlasın
 const INIS_SURESI = 2600          // ms — Türkiye'ye iniş
-const GIRIS_ANAHTARI = 'staj_giris_animasyonu'  // sessionStorage bayrağı
+const GIRIS_ANAHTARI = GIRIS_ANIMASYON_ANAHTARI   // login ekranıyla ortak bayrak
 
 // Etiketleri decluttter ederken üç katmanı da AYNI gruba koyuyoruz; böylece
 // nokta etiketi ile poligon etiketi de birbiriyle çakışmıyor.
@@ -159,9 +166,18 @@ export default function MapPage() {
   const [saving, setSaving] = useState(false)
   const [remaining, setRemaining] = useState('')
   // Açılış sahnesinin evresi: null (kapalı) | 'kure' (gezegen sahnede) | 'inis' (Türkiye'ye zoom)
-  const [uzaySahnesi, setUzaySahnesi] = useState(null)
+  // İLK RENDER'DA da sahne açık olsun: aksi hâlde harita bir kare boyunca
+  // Türkiye görünümünde çizilir, sonra sahne üstüne biner — login'den gelirken
+  // göze çarpan bir "sıçrama" olurdu.
+  const [uzaySahnesi, setUzaySahnesi] = useState(() => (girisAnimasyonuOynasinMi() ? 'kure' : null))
   // Haritada tıklanan geometrinin popup içeriği: { dto, tip, ozet } | null
   const [secili, setSecili] = useState(null)
+
+  // --- Yer arama ---
+  const [arama, setArama] = useState('')
+  const [sonuclar, setSonuclar] = useState([])
+  const [araniyor, setAraniyor] = useState(false)
+  const [aramaHatasi, setAramaHatasi] = useState(null)
 
   const goLogin = useCallback(
     () => navigate('/login', { replace: true, state: { expired: true } }),
@@ -420,17 +436,9 @@ export default function MapPage() {
     const highlightSource = new VectorSource()
     highlightSourceRef.current = highlightSource
 
-    // --- Açılış animasyonu oynatılsın mı? ---
-    // İki koşul: (1) kullanıcı bu oturumda daha önce görmediyse — her sayfa
-    // yenilemesinde tekrar oynarsa sinir bozucu olur; (2) işletim sisteminde
-    // "hareketi azalt" ayarı kapalıysa (erişilebilirlik).
-    const hareketAzalt = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const girisOynat =
-      !hareketAzalt &&
-      !sessionStorage.getItem(GIRIS_ANAHTARI) &&
-      // Sayfa arka plan sekmesinde açıldıysa tarayıcı animasyon karesi üretmez;
-      // animasyon görülmeden "oynatıldı" sayılmasın diye hiç başlatmıyoruz.
-      document.visibilityState === 'visible'
+    // Açılış sahnesi oynatılsın mı? Karar auth.js'te (login ekranı da aynı
+    // bayrağı kullanıyor: giriş yapılınca sıfırlanıyor ki sahne mutlaka oynasın).
+    const girisOynat = girisAnimasyonuOynasinMi()
 
     const view = new View({
       // Merkez sahne boyunca sabit: kaydırma yok, sadece zoom.
@@ -498,6 +506,45 @@ export default function MapPage() {
       mapRef.current = null
     }
   }, [yukle, sahneyiOynat])
+
+  // ------------------------------------------------------------------------
+  //  Yer arama — kullanıcı yazdıkça Nominatim'e sorar
+  //
+  //  İki koruma var:
+  //   1. DEBOUNCE (450 ms): her tuşta istek atmıyoruz. Hem Nominatim'in
+  //      "saniyede 1 istek" kuralına uyuyoruz hem gereksiz trafik olmuyor.
+  //   2. ABORT: yeni tuşa basılınca önceki istek iptal ediliyor. Yoksa yavaş
+  //      dönen eski bir cevap, yeni aramanın sonuçlarının üstüne yazabilirdi
+  //      (yarış durumu — "race condition").
+  // ------------------------------------------------------------------------
+  useEffect(() => {
+    const metin = arama.trim()
+    if (metin.length < 3) {
+      setSonuclar([])
+      setAramaHatasi(null)
+      return undefined
+    }
+
+    const denetleyici = new AbortController()
+    setAraniyor(true)
+
+    const zamanlayici = setTimeout(async () => {
+      try {
+        setSonuclar(await yerAra(metin, denetleyici.signal))
+        setAramaHatasi(null)
+      } catch (err) {
+        // AbortError = biz iptal ettik, hata değil
+        if (err.name !== 'AbortError') setAramaHatasi('Arama servisine ulaşılamadı.')
+      } finally {
+        setAraniyor(false)
+      }
+    }, 450)
+
+    return () => {
+      clearTimeout(zamanlayici)
+      denetleyici.abort()
+    }
+  }, [arama])
 
   // ------------------------------------------------------------------------
   //  Oturum: otomatik çıkış + kalan süre sayacı
@@ -713,6 +760,46 @@ export default function MapPage() {
   // ------------------------------------------------------------------------
   //  Eylemler
   // ------------------------------------------------------------------------
+
+  /**
+   * Arama sonucuna tıklanınca: haritayı oraya götür ve o noktayı
+   * KAYDEDİLMEYİ BEKLEYEN taslak olarak hazırla.
+   *
+   * Elle çizim akışının aynısını kullanıyoruz (pending + form) — tek fark,
+   * geometrinin fareyle değil aramadan gelmesi. Böylece kaydetme, WKT üretimi
+   * ve projeksiyon dönüşümü için ikinci bir yol açmıyoruz.
+   */
+  const aramaSonucuSec = (yer) => {
+    const map = mapRef.current
+    if (!map) return
+
+    const koordinat = fromLonLat([yer.lon, yer.lat])   // 4326 → 3857
+    const geometri = new PointGeom(koordinat)
+
+    // Taslak katmanına koy: turuncu kesikli "henüz kaydedilmedi" görünümü
+    drawSourceRef.current.clear()
+    drawSourceRef.current.addFeature(new Feature({ geometry: geometri }))
+
+    setActiveTool(null)          // çizim aracı açıksa kapat, karışmasın
+    popupKapat()
+    setPending({
+      type: 'Point',
+      wkt: geometryToWkt(geometri),     // 3857 → 4326
+      ozet: describeGeometry(geometri),
+    })
+    setForm({ name: yer.ad, description: yer.tamAd, imageUrl: '' })
+
+    map.getView().animate({ center: koordinat, zoom: 14, duration: 700, easing: easeOut })
+
+    // Sonuç listesini kapat ama arama metnini bırak (kullanıcı görsün ne aradığını)
+    setSonuclar([])
+  }
+
+  const aramayiTemizle = () => {
+    setArama('')
+    setSonuclar([])
+    setAramaHatasi(null)
+  }
 
   const aracSec = (key) => {
     // Aynı butona tekrar basmak aracı kapatır (toggle davranışı).
@@ -1001,6 +1088,52 @@ export default function MapPage() {
 
 
         <aside className="side-panel">
+          {/* ---------- ⓪ YER ARA ---------- */}
+          <section className="panel-section">
+            <h2>Yer Ara</h2>
+
+            <div className="arama-kutusu">
+              <input
+                type="search"
+                value={arama}
+                onChange={(e) => setArama(e.target.value)}
+                placeholder="Örn: Anıtkabir, Sultanahmet…"
+                aria-label="Yer ara"
+              />
+              {arama && (
+                <button type="button" className="arama-temizle" onClick={aramayiTemizle}
+                        aria-label="Aramayı temizle">×</button>
+              )}
+            </div>
+
+            {araniyor && <p className="arama-durum">Aranıyor…</p>}
+            {aramaHatasi && <p className="arama-durum hata">{aramaHatasi}</p>}
+            {!araniyor && !aramaHatasi && arama.trim().length >= 3 && sonuclar.length === 0 && (
+              <p className="arama-durum">Sonuç bulunamadı.</p>
+            )}
+
+            {sonuclar.length > 0 && (
+              <ul className="arama-sonuclari">
+                {sonuclar.map((yer) => (
+                  <li key={yer.id}>
+                    <button type="button" onClick={() => aramaSonucuSec(yer)}>
+                      <TipIkonu tip="Point" size={14} />
+                      <span className="arama-ad">
+                        <strong>{yer.ad}</strong>
+                        <small>{yer.tamAd}</small>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="arama-ipucu muted">
+              Sonuca tıklayınca o konum taslak nokta olarak hazırlanır; sağdaki formu
+              doldurup kaydedin.
+            </p>
+          </section>
+
           {/* ---------- ① ÇİZİM ARAÇLARI ---------- */}
           <section className="panel-section">
             <h2>Çizim Araçları</h2>
