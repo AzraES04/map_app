@@ -82,7 +82,12 @@ function kayitStili(type) {
   // Renk artık KAYIT BAZINDA (Ödev 4 / Görev 2). Her feature için yeni Style
   // üretmek saniyede yüzlerce nesne demek olurdu; bu yüzden renge göre
   // önbelleğe alıyoruz — aynı renkteki tüm kayıtlar aynı Style'ı paylaşıyor.
-  const onbellek = new Map()
+  //
+  // ⚠️ Burada JavaScript'in Map'i KULLANILAMAZ: dosyanın başındaki
+  // `import Map from 'ol/Map'` bu ismi gölgeliyor, `new Map()` bir OpenLayers
+  // haritası üretirdi. Anahtarlarımız zaten renk METNİ olduğu için
+  // prototipsiz düz bir nesne hem yeterli hem daha basit.
+  const onbellek = Object.create(null)
 
   const stilUret = (renk) => {
     const gorunum = {
@@ -121,8 +126,8 @@ function kayitStili(type) {
   return (feature) => {
     // Kaydın kendi rengi yoksa tipin varsayılan rengine düş.
     const renk = feature.get('renk') || DRAW_TYPES[type].color
-    if (!onbellek.has(renk)) onbellek.set(renk, stilUret(renk))
-    const stiller = onbellek.get(renk)
+    if (!onbellek[renk]) onbellek[renk] = stilUret(renk)
+    const stiller = onbellek[renk]
 
     const ad = feature.get('ad')
     if (!ad) return stiller.sade
