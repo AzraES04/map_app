@@ -27,9 +27,12 @@ import {
   GIRIS_ANIMASYON_ANAHTARI, girisAnimasyonuOynasinMi,
 } from '../auth'
 import { yerAra } from '../geocode'
-import { DRAW_TYPES, DRAW_TYPE_KEYS, geometryToWkt, wktToFeature, describeGeometry } from '../geo'
-import { listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir } from '../api'
-import { TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu } from '../icons'
+import {
+  DRAW_TYPES, DRAW_TYPE_KEYS, geometryToWkt, wktToFeature, describeGeometry,
+  RENK_SECENEKLERI, ANALIZ_RENGI,
+} from '../geo'
+import { listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir, kesisimAnalizi } from '../api'
+import { TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu, AnalizIkonu } from '../icons'
 
 // Türkiye'nin yaklaşık merkezi (boylam, enlem) — 4326 cinsinden yazıp
 // fromLonLat ile haritanın diline (3857) çeviriyoruz.
@@ -39,6 +42,10 @@ const TURKEY_ZOOM = 6.4
 // Dördüncü araç: çizim değil, var olan geometriyi düzenleme modu.
 // Çizim tiplerinden ayrı tutuluyor çünkü OpenLayers Draw'a verilecek bir tip değil.
 const DUZENLE = 'Duzenle'
+
+// Envanter analizi aracı (Ödev 4 / Görev 3). Poligon çizdirir ama kaydetmez;
+// çizilen alanla kesişen envanterleri sayar.
+const ANALIZ = 'Analiz'
 
 // --- Açılış sahnesi: "uzaydan Türkiye'ye iniş" ---
 //
@@ -70,47 +77,69 @@ const DECLUTTER_GRUBU = 'geometri-etiketleri'
  * feature için ayrı çağırır, böylece etiket metnini feature'dan okuyabiliyoruz.
  */
 function kayitStili(type) {
-  const renk = DRAW_TYPES[type].color
   const cizgiMi = type === 'LineString'
 
-  const gorunum = {
-    image: new Circle({
-      radius: 7,
-      fill: new Fill({ color: renk }),
-      stroke: new Stroke({ color: '#ffffff', width: 2 }),
-      // 'obstacle': işaretçinin KENDİSİ declutter yüzünden gizlenmez, ama
-      // etiketler onun üstüne binmemek için etrafından dolaşır.
-      // Bu olmasaydı üst üste gelen iki nokta birbirini yok ederdi.
-      declutterMode: 'obstacle',
-    }),
-    stroke: new Stroke({ color: renk, width: 3 }),
-    fill: new Fill({ color: `${renk}33` }),   // sondaki 33 = %20 saydamlık (hex alfa)
+  // Renk artık KAYIT BAZINDA (Ödev 4 / Görev 2). Her feature için yeni Style
+  // üretmek saniyede yüzlerce nesne demek olurdu; bu yüzden renge göre
+  // önbelleğe alıyoruz — aynı renkteki tüm kayıtlar aynı Style'ı paylaşıyor.
+  const onbellek = new Map()
+
+  const stilUret = (renk) => {
+    const gorunum = {
+      image: new Circle({
+        radius: 7,
+        fill: new Fill({ color: renk }),
+        stroke: new Stroke({ color: '#ffffff', width: 2 }),
+        // 'obstacle': işaretçinin KENDİSİ declutter yüzünden gizlenmez, ama
+        // etiketler onun üstüne binmemek için etrafından dolaşır.
+        // Bu olmasaydı üst üste gelen iki nokta birbirini yok ederdi.
+        declutterMode: 'obstacle',
+      }),
+      stroke: new Stroke({ color: renk, width: 3 }),
+      fill: new Fill({ color: `${renk}33` }),   // sondaki 33 = %20 saydamlık (hex alfa)
+    }
+
+    return {
+      sade: new Style(gorunum),
+      etiketli: new Style({
+        ...gorunum,
+        text: new Text({
+          font: '600 12px system-ui, -apple-system, "Segoe UI", sans-serif',
+          fill: new Fill({ color: '#1a2733' }),
+          // Beyaz "halo" — etiketin OSM'in yeşil/gri alanları üzerinde de okunmasını sağlar.
+          stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: 3.5 }),
+          // Çizgide etiket çizginin eğrisini takip eder; nokta/poligonda düz yazılır.
+          placement: cizgiMi ? 'line' : 'point',
+          textBaseline: cizgiMi ? 'bottom' : 'middle',
+          offsetY: type === 'Point' ? -17 : 0,      // nokta işaretçisinin üstünde dursun
+          overflow: false,                          // sığmıyorsa yazma (declutter mantığı)
+        }),
+      }),
+    }
   }
-
-  const sadeStil = new Style(gorunum)
-
-  const etiketliStil = new Style({
-    ...gorunum,
-    text: new Text({
-      font: '600 12px system-ui, -apple-system, "Segoe UI", sans-serif',
-      fill: new Fill({ color: '#1a2733' }),
-      // Beyaz "halo" — etiketin OSM'in yeşil/gri alanları üzerinde de okunmasını sağlar.
-      stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: 3.5 }),
-      // Çizgide etiket çizginin eğrisini takip eder; nokta/poligonda düz yazılır.
-      placement: cizgiMi ? 'line' : 'point',
-      textBaseline: cizgiMi ? 'bottom' : 'middle',
-      offsetY: type === 'Point' ? -17 : 0,      // nokta işaretçisinin üstünde dursun
-      overflow: false,                          // sığmıyorsa yazma (declutter mantığı)
-    }),
-  })
 
   return (feature) => {
+    // Kaydın kendi rengi yoksa tipin varsayılan rengine düş.
+    const renk = feature.get('renk') || DRAW_TYPES[type].color
+    if (!onbellek.has(renk)) onbellek.set(renk, stilUret(renk))
+    const stiller = onbellek.get(renk)
+
     const ad = feature.get('ad')
-    if (!ad) return sadeStil
-    etiketliStil.getText().setText(ad)
-    return etiketliStil
+    if (!ad) return stiller.sade
+    stiller.etiketli.getText().setText(ad)
+    return stiller.etiketli
   }
 }
+
+/**
+ * Envanter analizi için çizilen GEÇİCİ poligon (Ödev 4 / Görev 3).
+ * Kesikli, canlı pembe — kayıtlı hiçbir renge benzemiyor ki kullanıcı
+ * "bu kaydedilmedi, sadece analiz için" mesajını görsel olarak alsın.
+ */
+const analizStili = new Style({
+  stroke: new Stroke({ color: ANALIZ_RENGI, width: 3, lineDash: [10, 6] }),
+  fill: new Fill({ color: 'rgba(224, 36, 94, 0.12)' }),
+})
 
 /** Henüz kaydedilmemiş çizim: kesikli turuncu — "bu geçici" mesajını verir. */
 const taslakStili = new Style({
@@ -150,6 +179,7 @@ export default function MapPage() {
   const drawRef = useRef(null)         // aktif Draw interaction
   const highlightSourceRef = useRef(null)
   const aracGrubuRef = useRef(null)    // kaydettikten sonra odağı geri vermek için
+  const analizSourceRef = useRef(null) // geçici analiz poligonu (veritabanına gitmez)
   const popupElement = useRef(null)    // popup'ın DOM kökü (OpenLayers konumlandırıyor)
   const popupOverlayRef = useRef(null)
   const toastZamanlayiciRef = useRef(null)
@@ -158,7 +188,14 @@ export default function MapPage() {
   // --- Ekran durumu ---------------------------------------------------------
   const [activeTool, setActiveTool] = useState(null)      // null | 'Point' | 'LineString' | 'Polygon'
   const [pending, setPending] = useState(null)            // çizildi, henüz kaydedilmedi
-  const [form, setForm] = useState({ name: '', description: '', imageUrl: '' })
+  // Renk varsayılanı: kullanıcı dokunmasa bile geçerli bir değer gitsin.
+  const [form, setForm] = useState({
+    name: '', description: '', imageUrl: '', color: RENK_SECENEKLERI[0].deger,
+  })
+
+  // Envanter analizi sonucu (Ödev 4 / Görev 3): { total, pointCount, ... } | null
+  const [analizSonuc, setAnalizSonuc] = useState(null)
+  const [analizYukleniyor, setAnalizYukleniyor] = useState(false)
   const [records, setRecords] = useState(BOS_KAYITLAR)
   const [visible, setVisible] = useState({ Point: true, LineString: true, Polygon: true })
   const [activeTab, setActiveTab] = useState('Point')
@@ -256,6 +293,30 @@ export default function MapPage() {
       default:
         return geometry.getExtent().slice(0, 2)
     }
+  }, [])
+
+  /**
+   * Verilen WKT poligonuyla kesişen envanterleri sayar (Ödev 4 / Görev 3).
+   * Hesabı PostGIS yapıyor; burada sadece isteği atıp sonucu gösteriyoruz.
+   */
+  const analizCalistir = useCallback(async (wkt, haricTutulanId) => {
+    setAnalizYukleniyor(true)
+    try {
+      const sonuc = await kesisimAnalizi(wkt, haricTutulanId, goLogin)
+      setAnalizSonuc(sonuc)
+      return sonuc
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+      return null
+    } finally {
+      setAnalizYukleniyor(false)
+    }
+  }, [goLogin, bildir])
+
+  /** Analiz poligonunu ve sonucunu haritadan kaldırır. */
+  const analizTemizle = useCallback(() => {
+    analizSourceRef.current?.clear()
+    setAnalizSonuc(null)
   }, [])
 
   const popupKapat = useCallback(() => {
@@ -398,6 +459,7 @@ export default function MapPage() {
           // Bu aynı zamanda "eski state'e takılma" (stale closure) riskini de kaldırıyor.
           feature.set('dto', dto)
           feature.set('tip', key)
+          feature.set('renk', dto.color)      // stil fonksiyonu rengi buradan okuyor
           source.addFeature(feature)
         })
       })
@@ -436,6 +498,11 @@ export default function MapPage() {
     const highlightSource = new VectorSource()
     highlightSourceRef.current = highlightSource
 
+    // Analiz poligonu kendi kaynağında: kayıtlı katmanlarla karışmasın,
+    // "Temizle" dendiğinde tek clear() ile silinsin.
+    const analizSource = new VectorSource()
+    analizSourceRef.current = analizSource
+
     // Açılış sahnesi oynatılsın mı? Karar auth.js'te (login ekranı da aynı
     // bayrağı kullanıyor: giriş yapılınca sıfırlanıyor ki sahne mutlaka oynasın).
     const girisOynat = girisAnimasyonuOynasinMi()
@@ -457,6 +524,7 @@ export default function MapPage() {
         layers.LineString,
         layers.Point,
         new VectorLayer({ source: drawSource, style: taslakStili }),
+        new VectorLayer({ source: analizSource, style: analizStili }),
         new VectorLayer({ source: highlightSource, style: vurguStili }),
       ],
       view,
@@ -589,15 +657,22 @@ export default function MapPage() {
       setPending(null)
     })
 
-    // Çizim bitti: geometriyi WKT'ye çevir ve kayıt formunu aç.
+    // Çizim bitti (Ödev 4 / Görev 2): öznitelik giriş POP-UP'ı açılır.
+    // Popup, çizilen geometrinin üzerine tutturuluyor — kullanıcı neyi
+    // isimlendirdiğini görerek yazsın diye.
     draw.on('drawend', (evt) => {
       const geometry = evt.feature.getGeometry()
+      setSecili(null)                        // bilgi kartı açıksa kapansın
       setPending({
         type: activeTool,
         wkt: geometryToWkt(geometry),        // 3857 → 4326 dönüşümü burada
         ozet: describeGeometry(geometry),
       })
-      setForm({ name: '', description: '', imageUrl: '' })
+      setForm({
+        name: '', description: '', imageUrl: '',
+        color: DRAW_TYPES[activeTool].color,   // tipin rengi ön seçili gelsin
+      })
+      popupOverlayRef.current?.setPosition(popupKonumu(geometry))
     })
 
     map.addInteraction(draw)
@@ -610,7 +685,45 @@ export default function MapPage() {
       map.removeInteraction(draw)
       drawRef.current = null
     }
-  }, [activeTool])
+  }, [activeTool, popupKonumu])
+
+  // ------------------------------------------------------------------------
+  //  ENVANTER ANALİZİ aracı (Ödev 4 / Görev 3)
+  //
+  //  Poligon çizdirir ama VERİTABANINA KAYDETMEZ. Çizim bittiği anda
+  //  alanla kesişen envanterler sayılır. Poligon haritada kalır; kullanıcı
+  //  "Temizle" diyene kadar durur, böylece sonucu inceleyebilir.
+  // ------------------------------------------------------------------------
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || activeTool !== ANALIZ) return undefined
+
+    const draw = new Draw({
+      source: analizSourceRef.current,
+      type: 'Polygon',
+      style: analizStili,
+    })
+
+    // Yeni analiz başlarken önceki alanı ve sonucu sil (tek analiz aynı anda).
+    draw.on('drawstart', () => {
+      analizSourceRef.current.clear()
+      setAnalizSonuc(null)
+    })
+
+    draw.on('drawend', (evt) => {
+      // Kaydetmiyoruz — sadece WKT'ye çevirip sunucuya "bunu kesenleri say" diyoruz.
+      analizCalistir(geometryToWkt(evt.feature.getGeometry()))
+    })
+
+    map.addInteraction(draw)
+    drawRef.current = draw
+
+    return () => {
+      draw.abortDrawing()
+      map.removeInteraction(draw)
+      drawRef.current = null
+    }
+  }, [activeTool, analizCalistir])
 
   // ------------------------------------------------------------------------
   //  DÜZENLEME etkileşimi — kaydedilmiş geometriyi sürükleyerek değiştirme
@@ -806,11 +919,13 @@ export default function MapPage() {
     setActiveTool((onceki) => (onceki === key ? null : key))
     drawSourceRef.current?.clear()
     setPending(null)
+    popupKapat()
   }
 
   const vazgec = () => {
     drawSourceRef.current?.clear()
     setPending(null)
+    popupKapat()
   }
 
   const handleSave = async (e) => {
@@ -819,22 +934,35 @@ export default function MapPage() {
 
     setSaving(true)
     try {
-      await kaydet(
+      const kaydedilen = await kaydet(
         DRAW_TYPES[pending.type].endpoint,
         {
           name: form.name.trim(),
           // Boş metin yerine null: veritabanında "değer yok"un doğru karşılığı NULL'dur
           description: form.description.trim() || null,
           imageUrl: form.imageUrl.trim() || null,
+          color: form.color,                 // Ödev 4 / Görev 2
           wkt: pending.wkt,
         },
         goLogin,
       )
+      const kaydedilenTip = pending.type
       drawSourceRef.current.clear()
       setPending(null)
-      setActiveTab(pending.type)          // kaydedilen tipin sekmesine geç
+      popupKapat()
+      setActiveTab(kaydedilenTip)         // kaydedilen tipin sekmesine geç
       await yukle()
-      bildir('ok', `${DRAW_TYPES[pending.type].label} kaydedildi.`)
+      bildir('ok', `${DRAW_TYPES[kaydedilenTip].label} kaydedildi.`)
+
+      // Ödev 4 / Görev 3 — Çizilen Poligon Analizi:
+      // Yeni bir poligon kaydedildiğinde, içinde kalan envanter otomatik sayılır.
+      // Kendisini saymamak için id'si hariç tutuluyor.
+      if (kaydedilenTip === 'Polygon') {
+        const sonuc = await analizCalistir(pending.wkt, kaydedilen?.id)
+        if (sonuc) {
+          bildir('ok', `"${kaydedilen.name}" alanında ${sonuc.total} envanter var.`)
+        }
+      }
 
       // Odağı aktif araç düğmesine geri ver: form kapanınca odak boşlukta kalmasın,
       // klavye kullanıcısı arka arkaya çizim yapabilsin.
@@ -1019,10 +1147,95 @@ export default function MapPage() {
               hiçbir şey eklemesi gerekmemesini garantiliyoruz.
               (Uzay sahnesi koşullu olarak eklenip kaldırıldığı için bu şart.) */}
           <div ref={popupElement} className="harita-popup">
-            {secili && (
+            {/* ÖZNİTELİK GİRİŞ POP-UP'I (Ödev 4 / Görev 2)
+                drawend anında açılır; İsim ve Renk zorunlu alanlardır. */}
+            {pending && (
+              <form className="popup-form" onSubmit={handleSave}>
+                <div className="popup-baslik">
+                  <span className="dot" style={{ background: form.color }} />
+                  <strong>Yeni {DRAW_TYPES[pending.type].label}</strong>
+                  <button type="button" className="popup-kapat" onClick={vazgec}
+                          aria-label="Vazgeç">×</button>
+                </div>
+
+                <p className="popup-ozet">{pending.ozet}</p>
+
+                <label htmlFor="p-ad">İsim *</label>
+                <input
+                  id="p-ad"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Örn: Anıtkabir"
+                  maxLength={200}
+                  required
+                  autoFocus
+                />
+
+                <label>Renk *</label>
+                <div className="renk-secici">
+                  {RENK_SECENEKLERI.map((r) => (
+                    <button
+                      key={r.deger}
+                      type="button"
+                      className={`renk-nokta${form.color === r.deger ? ' secili' : ''}`}
+                      style={{ background: r.deger }}
+                      title={r.ad}
+                      aria-label={r.ad}
+                      aria-pressed={form.color === r.deger}
+                      onClick={() => setForm({ ...form, color: r.deger })}
+                    />
+                  ))}
+                  {/* Hazır renkler yetmezse tarayıcının renk seçicisi */}
+                  <input
+                    type="color"
+                    className="renk-ozel"
+                    value={form.color}
+                    onChange={(e) => setForm({ ...form, color: e.target.value })}
+                    title="Özel renk seç"
+                  />
+                </div>
+
+                <label htmlFor="p-aciklama">Açıklama</label>
+                <input
+                  id="p-aciklama"
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="İsteğe bağlı"
+                  maxLength={1000}
+                />
+
+                <label htmlFor="p-gorsel">Görsel adresi</label>
+                <input
+                  id="p-gorsel"
+                  type="url"
+                  value={form.imageUrl}
+                  onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                  placeholder="https://..."
+                  maxLength={500}
+                />
+
+                <details className="popup-wkt">
+                  <summary>WKT (EPSG:4326)</summary>
+                  <code>{pending.wkt}</code>
+                </details>
+
+                <div className="popup-eylemler">
+                  <button type="submit" className="btn-primary"
+                          disabled={saving || !form.name.trim()}>
+                    {saving ? 'Kaydediliyor…' : 'Kaydet'}
+                  </button>
+                  <button type="button" className="btn-ghost" onClick={vazgec} disabled={saving}>
+                    Vazgeç
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {secili && !pending && (
               <>
                 <div className="popup-baslik">
-                  <span className="dot" style={{ background: DRAW_TYPES[secili.tip].color }} />
+                  <span className="dot"
+                        style={{ background: secili.dto.color || DRAW_TYPES[secili.tip].color }} />
                   <strong>{secili.dto.name}</strong>
                   <button type="button" className="popup-kapat" onClick={popupKapat}
                           aria-label="Kapat">×</button>
@@ -1166,7 +1379,26 @@ export default function MapPage() {
               Düzenle
             </button>
 
-            {activeTool === DUZENLE ? (
+            {/* Envanter Analizi (Ödev 4 / Görev 3) — çizer, saymaya yarar, KAYDETMEZ */}
+            <button
+              type="button"
+              className={`tool-btn genis analiz${activeTool === ANALIZ ? ' active' : ''}`}
+              onClick={() => aracSec(ANALIZ)}
+              aria-pressed={activeTool === ANALIZ}
+              title="Geçici poligon çizip altında kalan envanteri say"
+            >
+              <span className="tool-icon"><AnalizIkonu /></span>
+              Envanter Analizi
+            </button>
+
+            {activeTool === ANALIZ ? (
+              <p className="tool-hint">
+                Analiz alanını çizin; köşeleri tıklayıp çift tıkla bitirin.
+                <br />
+                Alanla <strong>en ufak teması</strong> olan envanterler de sayılır.
+                Bu poligon <strong>veritabanına kaydedilmez</strong>.
+              </p>
+            ) : activeTool === DUZENLE ? (
               <p className="tool-hint">
                 Köşeleri sürükleyerek şekli değiştirin. Kenara tıklamak yeni köşe ekler,
                 <kbd>Alt</kbd> + tıklamak köşeyi siler.
@@ -1184,58 +1416,56 @@ export default function MapPage() {
             )}
           </section>
 
-          {/* ---------- ② KAYIT FORMU (çizim bitince belirir) ---------- */}
-          {pending && (
-            <form className="panel-section draw-form" onSubmit={handleSave}>
+          {/* ---------- ② ANALİZ SONUCU (Ödev 4 / Görev 3) ---------- */}
+          {(analizYukleniyor || analizSonuc) && (
+            <section className="panel-section analiz-sonuc">
               <h2>
-                <span className="dot" style={{ background: DRAW_TYPES[pending.type].color }} />
-                Yeni {DRAW_TYPES[pending.type].label}
+                <span className="dot" style={{ background: ANALIZ_RENGI }} />
+                Analiz Sonucu
               </h2>
 
-              <p className="ozet">{pending.ozet}</p>
+              {analizYukleniyor ? (
+                <p className="muted">Kesişim hesaplanıyor…</p>
+              ) : (
+                <>
+                  <p className="analiz-toplam">
+                    <strong>{analizSonuc.total}</strong> envanter
+                    <span className="muted"> bu alanla kesişiyor</span>
+                  </p>
 
-              <label htmlFor="ad">Ad *</label>
-              <input
-                id="ad"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Örn: Anıtkabir"
-                maxLength={200}
-                required
-                autoFocus
-              />
+                  <div className="analiz-kirilim">
+                    {DRAW_TYPE_KEYS.map((key) => {
+                      const sayi = key === 'Point' ? analizSonuc.pointCount
+                        : key === 'LineString' ? analizSonuc.lineCount
+                          : analizSonuc.polygonCount
+                      return (
+                        <span key={key} className="analiz-rozet">
+                          <TipIkonu tip={key} size={13} />
+                          {sayi}
+                        </span>
+                      )
+                    })}
+                  </div>
 
-              <label htmlFor="aciklama">Açıklama</label>
-              <input
-                id="aciklama"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                placeholder="İsteğe bağlı"
-                maxLength={1000}
-              />
+                  {analizSonuc.items.length > 0 && (
+                    <ul className="analiz-liste">
+                      {analizSonuc.items.map((item) => (
+                        <li key={`${item.geometryType}-${item.id}`}>
+                          <span className="dot" style={{
+                            background: item.color || DRAW_TYPES[item.geometryType].color,
+                          }} />
+                          {item.name}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
 
-              <label htmlFor="gorsel">Görsel adresi <small>(isteğe bağlı)</small></label>
-              <input
-                id="gorsel"
-                type="url"
-                value={form.imageUrl}
-                onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-                placeholder="https://..."
-                maxLength={500}
-              />
-
-              <label htmlFor="wkt">WKT <small>(EPSG:4326)</small></label>
-              <textarea id="wkt" className="wkt-box" value={pending.wkt} readOnly rows={3} />
-
-              <div className="form-actions">
-                <button type="submit" className="btn-primary" disabled={saving || !form.name.trim()}>
-                  {saving ? 'Kaydediliyor…' : 'Kaydet'}
-                </button>
-                <button type="button" className="btn-ghost" onClick={vazgec} disabled={saving}>
-                  Vazgeç
-                </button>
-              </div>
-            </form>
+                  <button type="button" className="btn-ghost genis" onClick={analizTemizle}>
+                    Analizi temizle
+                  </button>
+                </>
+              )}
+            </section>
           )}
 
           {/* ---------- ③ KATMANLAR ---------- */}

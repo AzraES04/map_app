@@ -86,6 +86,20 @@ export function DunyaIkonu({ size = 16 }) {
   )
 }
 
+/** Envanter analizi — kesikli alan içinde büyüteç. */
+export function AnalizIkonu({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+         strokeLinejoin="round" aria-hidden="true">
+      {/* Analiz alanı: kesikli çerçeve — "geçici, kaydedilmiyor" mesajı */}
+      <path d="M3 8V3h5M21 8V3h-5M3 16v5h5M21 16v5h-5" strokeDasharray="3 2.5" />
+      <circle cx="11.5" cy="11.5" r="3.6" />
+      <path d="m14.3 14.3 3 3" />
+    </svg>
+  )
+}
+
 /** Çöp kutusu. */
 export function SilIkonu({ size = 15 }) {
   return (

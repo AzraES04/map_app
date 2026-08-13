@@ -58,6 +58,27 @@ export async function geriAl(endpoint, id, onUnauthorized) {
   if (!res.ok) throw new Error(await hataMesaji(res))
 }
 
+/**
+ * POST /api/analysis/intersect — kesişim analizi (Ödev 4 / Görev 3).
+ *
+ * Gönderilen poligon veritabanına KAYDEDİLMEZ; sadece sorgu parametresidir.
+ * Kesişim hesabı PostGIS'te (ST_Intersects) yapılır — envanterin tamamını
+ * tarayıcıya indirip burada hesaplamak hem yavaş hem gereksiz olurdu.
+ */
+export async function kesisimAnalizi(wkt, haricTutulanPolygonId, onUnauthorized) {
+  const res = await authFetch(
+    '/api/analysis/intersect',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wkt, haricTutulanPolygonId: haricTutulanPolygonId ?? null }),
+    },
+    onUnauthorized,
+  )
+  if (!res.ok) throw new Error(await hataMesaji(res))
+  return res.json()
+}
+
 /** PUT — kaydı günceller. Wkt gönderilirse geometri de değişir. */
 export async function guncelle(endpoint, id, veri, onUnauthorized) {
   const res = await authFetch(

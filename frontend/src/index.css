@@ -15,6 +15,7 @@
   --cizgi: #b8642a;
   --poligon: #4a7c3f;
   --taslak: #e08b2f;
+  --analiz: #e0245e;   /* envanter analizi — geo.js'teki ANALIZ_RENGI ile aynı */
 
   /* Ölçü birimleri: tek yerden değiştirilebilsin diye değişkene alındı */
   --radius: 8px;
@@ -518,6 +519,109 @@ body {
 .popup-bilgi dt { color: var(--muted); }
 .popup-bilgi dd { color: var(--text); }
 
+/* ---------- Öznitelik giriş pop-up'ı (Ödev 4 / Görev 2) ---------- */
+
+/* Form popup'ı bilgi kartından biraz geniş: içinde giriş alanları var */
+.harita-popup:has(.popup-form) { min-width: 268px; }
+
+.popup-form { display: flex; flex-direction: column; }
+
+.popup-ozet {
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.popup-form label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.popup-form input[type='text'],
+.popup-form input[type='url'],
+.popup-form input:not([type]) {
+  padding: 7px 9px;
+  margin-bottom: 9px;
+  border: 1px solid #cfd9e2;
+  border-radius: var(--radius);
+  font-size: 0.83rem;
+  font-family: inherit;
+  transition: border-color var(--gecis), box-shadow var(--gecis);
+}
+
+.popup-form input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(35, 96, 110, 0.15);
+}
+
+/* Renk seçici: hazır renkler + serbest seçim */
+.renk-secici {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.renk-nokta {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--gecis), box-shadow var(--gecis);
+}
+
+.renk-nokta:hover { transform: scale(1.12); }
+
+/* Seçili rengi kalın halkayla göster — sadece renkle ayırmak yetmez,
+   renk körü kullanıcı için de ayırt edilebilir olmalı */
+.renk-nokta.secili {
+  box-shadow: 0 0 0 2px var(--text);
+  transform: scale(1.12);
+}
+
+.renk-ozel {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+/* WKT'yi katlanabilir yaptık: popup'ta yer kaplamasın ama istenirse görülsün */
+.popup-wkt {
+  margin-bottom: 10px;
+  font-size: 0.72rem;
+}
+
+.popup-wkt summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.popup-wkt code {
+  display: block;
+  margin-top: 5px;
+  padding: 6px 7px;
+  background: var(--bg);
+  border-radius: 6px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+  word-break: break-all;
+  max-height: 70px;
+  overflow-y: auto;
+}
+
 .popup-eylemler { display: flex; gap: 7px; }
 
 .popup-eylemler button { padding: 7px 10px; font-size: 0.8rem; }
@@ -903,6 +1007,68 @@ kbd {
 
 .btn-ghost { background: #fff; border-color: var(--border); color: var(--muted); }
 .btn-ghost:hover:not(:disabled) { background: var(--bg); }
+
+/* ---------- Envanter analizi (Ödev 4 / Görev 3) ---------- */
+
+/* Analiz aracı, kaydeden araçlardan görsel olarak ayrışsın */
+.tool-btn.analiz.active {
+  background: var(--analiz);
+  border-color: var(--analiz);
+}
+
+.analiz-sonuc {
+  background: #fff5f8;
+  border-left: 3px solid var(--analiz);
+  animation: acil 0.18s ease-out;
+}
+
+.analiz-toplam {
+  font-size: 0.9rem;
+  margin-bottom: 9px;
+}
+
+.analiz-toplam strong {
+  font-size: 1.5rem;
+  color: var(--analiz);
+  margin-right: 4px;
+}
+
+.analiz-kirilim {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.analiz-rozet {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.analiz-liste {
+  list-style: none;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.analiz-liste li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  font-size: 0.83rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.btn-ghost.genis { width: 100%; flex: none; }
 
 /* ---------- ③ Katmanlar ---------- */
 
