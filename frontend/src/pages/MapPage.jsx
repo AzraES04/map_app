@@ -36,8 +36,8 @@ const TURKEY_ZOOM = 6.4
 // Kaydırma/dönme YOK: sahne boyunca merkez sabit, sadece zoom değişiyor.
 // Bu, hareketi tek bir eksene indirdiği için daha sakin ve kontrollü duruyor.
 const UZAY_ZOOM = 2.4             // Bu değerin altında OpenLayers dünyayı ekrana sabitler
-const KURE_BEKLEME = 700          // ms — küre sahnede dursun, sonra iniş başlasın
-const INIS_SURESI = 2000          // ms — Türkiye'ye iniş
+const KURE_BEKLEME = 1200         // ms — küre sahnede dursun, sonra iniş başlasın
+const INIS_SURESI = 2600          // ms — Türkiye'ye iniş
 const GIRIS_ANAHTARI = 'staj_giris_animasyonu'  // sessionStorage bayrağı
 
 // Etiketleri decluttter ederken üç katmanı da AYNI gruba koyuyoruz; böylece
@@ -645,7 +645,15 @@ export default function MapPage() {
             harita div'inin çocuklarını OpenLayers yönetiyor, React'in oraya
             eleman eklemesi çakışma yaratırdı. */}
         <div className="map-alan">
-          <div ref={mapElement} className={`map-container${activeTool ? ' cizim-modu' : ''}`} />
+          {/* uzay-renk: açılış sahnesi boyunca haritaya renk derecelendirmesi uygulanır
+              (denizler derin maviye, karalar doygun ve koyu). Sahne kapanınca sınıf
+              kalkar ve CSS geçişiyle normal harita renklerine yumuşakça döner. */}
+          <div
+            ref={mapElement}
+            className={
+              `map-container${activeTool ? ' cizim-modu' : ''}${uzaySahnesi ? ' uzay-renk' : ''}`
+            }
+          />
 
           {/* Açılış sahnesi. Haritanın ÜSTÜNE biner ama pointer-events: none olduğu
               için tıklamalar haritaya geçer — böylece "atla" davranışı çalışır. */}
