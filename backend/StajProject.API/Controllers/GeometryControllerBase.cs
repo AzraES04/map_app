@@ -81,6 +81,22 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Silinen kaydı geri getirir. Soft delete kullandığımız için veri hâlâ
+    /// tabloda duruyor; bu uç tek bir UPDATE ile silmeyi geri alıyor.
+    /// </summary>
+    [HttpPost("{id:int}/restore")]
+    public async Task<IActionResult> Restore(int id)
+    {
+        var geriAlindi = await _service.RestoreAsync(id);
+        if (!geriAlindi)
+        {
+            return NotFound(new { message = $"Id={id} için geri alınacak silinmiş kayıt bulunamadı." });
+        }
+
+        return NoContent();
+    }
+
     /// <summary>Soft delete: kayıt fiziksel olarak silinmez, is_deleted işaretlenir.</summary>
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)

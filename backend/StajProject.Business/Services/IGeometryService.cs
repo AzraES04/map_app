@@ -14,4 +14,7 @@ public interface IGeometryService<TEntity> where TEntity : GeometryEntityBase
     Task<GeometryDto> CreateAsync(GeometryCreateDto dto);
     Task<GeometryDto?> UpdateAsync(int id, GeometryUpdateDto dto);
     Task<bool> DeleteAsync(int id);
+
+    /// <summary>Soft delete edilmiş kaydı geri getirir ("Geri al" işlemi).</summary>
+    Task<bool> RestoreAsync(int id);
 }

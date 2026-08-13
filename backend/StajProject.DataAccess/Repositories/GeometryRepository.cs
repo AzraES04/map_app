@@ -61,6 +61,7 @@ public class GeometryRepository<TEntity> : IGeometryRepository<TEntity>
 
         current.Name = entity.Name;
         current.Description = entity.Description;
+        current.ImageUrl = entity.ImageUrl;
         current.Geometry = entity.Geometry;
 
         // ModifiedDate'i elle yazmıyoruz — AppDbContext.ApplyAuditRules() otomatik basıyor.
@@ -78,6 +79,27 @@ public class GeometryRepository<TEntity> : IGeometryRepository<TEntity>
 
         entity.IsDeleted = true;
         entity.IsActive = false;
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RestoreAsync(int id)
+    {
+        // DİKKAT — buradaki IgnoreQueryFilters() olmazsa olmaz.
+        // Global query filter (!IsDeleted) yüzünden normal sorgu silinmiş kaydı
+        // GÖREMEZ; onu geri getirebilmek için filtreyi bilinçli olarak aşıyoruz.
+        // Bu, filtrenin doğru kullanımına iyi bir örnek: kural varsayılan, istisna açık.
+        var entity = await Table
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(e => e.Id == id);
+
+        if (entity is null || !entity.IsDeleted)
+        {
+            return false;   // kayıt yok ya da zaten silinmemiş
+        }
+
+        entity.IsDeleted = false;
+        entity.IsActive = true;
         await _context.SaveChangesAsync();
         return true;
     }

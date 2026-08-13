@@ -15,6 +15,7 @@ public interface IGeometryEntity : IAuditableEntity
     int Id { get; set; }
     string Name { get; set; }
     string? Description { get; set; }
+    string? ImageUrl { get; set; }
     DateTime CreatedAt { get; set; }
 
     // Durum kolonları (is_deleted / is_active / modified_date) IAuditableEntity'den geliyor.
@@ -33,6 +34,13 @@ public abstract class GeometryEntityBase : IGeometryEntity
     public string Name { get; set; } = string.Empty;
 
     public string? Description { get; set; }
+
+    /// <summary>
+    /// İsteğe bağlı görsel adresi (http/https). Dosya YÜKLEMİYORUZ — kullanıcı
+    /// hazır bir resim adresi yapıştırır. Böylece depolama, boyut limiti, MIME
+    /// doğrulama ve telif gibi bir yığın sorunla uğraşmadan görsel desteği oluyor.
+    /// </summary>
+    public string? ImageUrl { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

@@ -161,6 +161,95 @@ public class WktTests
         Assert.False(await service.DeleteAsync(created.Id));   // ikinci kez silinemez
     }
 
+    // ---------------- Geri alma (soft delete'in vitrini) ----------------
+
+    [Fact]
+    public async Task RestoreAsync_SilinenKaydiGeriGetirir()
+    {
+        var service = CreatePointService();
+        var created = await service.CreateAsync(new GeometryCreateDto
+        {
+            Name = "Geri gelecek",
+            Wkt = "POINT (30 40)"
+        });
+
+        await service.DeleteAsync(created.Id);
+        Assert.Empty(await service.GetAllAsync());          // listeden düştü
+
+        var geriAlindi = await service.RestoreAsync(created.Id);
+
+        Assert.True(geriAlindi);
+        var liste = await service.GetAllAsync();
+        Assert.Single(liste);                                // geri geldi
+        Assert.Equal("Geri gelecek", liste[0].Name);
+        Assert.True(liste[0].IsActive);                      // yeniden aktif
+    }
+
+    [Fact]
+    public async Task RestoreAsync_SilinmemisKayitIcin_FalseDoner()
+    {
+        var service = CreatePointService();
+        var created = await service.CreateAsync(new GeometryCreateDto
+        {
+            Name = "Duruyor",
+            Wkt = "POINT (30 40)"
+        });
+
+        Assert.False(await service.RestoreAsync(created.Id));
+        Assert.False(await service.RestoreAsync(9999));      // hiç olmayan kayıt
+    }
+
+    // ---------------- Görsel adresi doğrulaması ----------------
+
+    [Theory]
+    [InlineData("https://ornek.com/foto.jpg")]
+    [InlineData("http://ornek.com/foto.png")]
+    public async Task CreateAsync_GecerliGorselAdresi_Kaydedilir(string adres)
+    {
+        var service = CreatePointService();
+
+        var created = await service.CreateAsync(new GeometryCreateDto
+        {
+            Name = "Görselli",
+            Wkt = "POINT (30 40)",
+            ImageUrl = adres
+        });
+
+        Assert.Equal(adres, created.ImageUrl);
+    }
+
+    [Theory]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("data:image/png;base64,AAAA")]
+    [InlineData("file:///C:/gizli.png")]
+    [InlineData("sadece-bir-metin")]
+    public async Task CreateAsync_GuvensizGorselAdresi_Reddedilir(string adres)
+    {
+        var service = CreatePointService();
+
+        await Assert.ThrowsAsync<WktFormatException>(() => service.CreateAsync(new GeometryCreateDto
+        {
+            Name = "Kötü adres",
+            Wkt = "POINT (30 40)",
+            ImageUrl = adres
+        }));
+    }
+
+    [Fact]
+    public async Task CreateAsync_BosGorselAdresi_NullKaydedilir()
+    {
+        var service = CreatePointService();
+
+        var created = await service.CreateAsync(new GeometryCreateDto
+        {
+            Name = "Görselsiz",
+            Wkt = "POINT (30 40)",
+            ImageUrl = "   "
+        });
+
+        Assert.Null(created.ImageUrl);   // boş metin değil, NULL
+    }
+
     [Fact]
     public async Task UpdateAsync_GeometriBosBirakilirsa_SadeceAdDegisir()
     {

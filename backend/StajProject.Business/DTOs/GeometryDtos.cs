@@ -22,6 +22,9 @@ public class GeometryDto
     /// <summary>Geometri tipi: "Point" | "LineString" | "Polygon".</summary>
     public string GeometryType { get; set; } = string.Empty;
 
+    /// <summary>İsteğe bağlı görsel adresi; popup'ta gösterilir.</summary>
+    public string? ImageUrl { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedDate { get; set; }
     public bool IsActive { get; set; }
@@ -36,6 +39,13 @@ public class GeometryCreateDto
 
     [MaxLength(1000, ErrorMessage = "Açıklama en fazla 1000 karakter olabilir.")]
     public string? Description { get; set; }
+
+    /// <summary>
+    /// İsteğe bağlı görsel adresi. Yalnızca http/https kabul edilir —
+    /// bkz. GeometryService.DogrulaGorselAdresi.
+    /// </summary>
+    [MaxLength(500, ErrorMessage = "Görsel adresi en fazla 500 karakter olabilir.")]
+    public string? ImageUrl { get; set; }
 
     /// <summary>
     /// EPSG:4326 koordinatlarıyla WKT metni.
@@ -54,6 +64,9 @@ public class GeometryUpdateDto
 
     [MaxLength(1000)]
     public string? Description { get; set; }
+
+    [MaxLength(500)]
+    public string? ImageUrl { get; set; }
 
     /// <summary>Boş bırakılırsa geometri değişmez, sadece ad/açıklama güncellenir.</summary>
     public string? Wkt { get; set; }

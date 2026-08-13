@@ -20,4 +20,10 @@ public interface IGeometryRepository<TEntity> where TEntity : GeometryEntityBase
 
     /// <summary>Fiziksel silme değil; is_deleted bayrağını kaldırır.</summary>
     Task<bool> SoftDeleteAsync(int id);
+
+    /// <summary>
+    /// Soft delete edilmiş kaydı geri getirir. Soft delete'in asıl faydası budur:
+    /// veri hâlâ tabloda durduğu için silme işlemi tek UPDATE ile geri alınabilir.
+    /// </summary>
+    Task<bool> RestoreAsync(int id);
 }
