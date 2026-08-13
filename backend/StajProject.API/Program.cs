@@ -1,44 +1,32 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using StajProject.API.Middleware;
+using StajProject.Business;
 using StajProject.Business.Auth;
-using StajProject.Business.Services;
-using StajProject.DataAccess.Context;
-using StajProject.DataAccess.Repositories;
-using StajProject.Entities;
+using StajProject.DataAccess;
+
+// ============================================================================
+//  SUNUM KATMANI (Presentation)
+//
+//  Bu dosya artık SADECE sunum katmanının işleriyle ilgilenir:
+//  kimlik doğrulama, Swagger, CORS, middleware boru hattı.
+//
+//  Veri erişimi ve iş mantığı kendi katmanlarında kayıtlıdır:
+//    AddDataAccessLayer() → DbContext + repository'ler   (DataAccess)
+//    AddBusinessLayer()   → servisler + JwtSettings      (Business)
+//
+//  Böylece yeni bir repository/servis eklendiğinde bu dosya değişmez.
+// ============================================================================
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ---- Servis kayıtları (Dependency Injection) ----
+// ---- Katman kayıtları ----
+builder.Services.AddDataAccessLayer(builder.Configuration);
+builder.Services.AddBusinessLayer(builder.Configuration);
 
-// DbContext: PostgreSQL + PostGIS (NetTopologySuite)
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        npgsql => npgsql.UseNetTopologySuite()));
-
-// Katmanlar: Repository (DataAccess) ve Service (Business)
-builder.Services.AddScoped<ILocationRepository, LocationRepository>();
-builder.Services.AddScoped<ILocationService, LocationService>();
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IAuthService, AuthService>();
-
-// Geometri katmanı: aynı generic sınıflar, üç farklı tip argümanıyla kaydediliyor.
-// Controller "IGeometryService<PointEntity> istiyorum" dediğinde DI konteyneri
-// buradaki eşleşmeye bakıp GeometryService<PointEntity, Point> nesnesini üretir.
-builder.Services.AddScoped<IGeometryRepository<PointEntity>, GeometryRepository<PointEntity>>();
-builder.Services.AddScoped<IGeometryRepository<LineEntity>, GeometryRepository<LineEntity>>();
-builder.Services.AddScoped<IGeometryRepository<PolygonEntity>, GeometryRepository<PolygonEntity>>();
-
-builder.Services.AddScoped<IGeometryService<PointEntity>, GeometryService<PointEntity, NetTopologySuite.Geometries.Point>>();
-builder.Services.AddScoped<IGeometryService<LineEntity>, GeometryService<LineEntity, NetTopologySuite.Geometries.LineString>>();
-builder.Services.AddScoped<IGeometryService<PolygonEntity>, GeometryService<PolygonEntity, NetTopologySuite.Geometries.Polygon>>();
-
-// ---- JWT Kimlik Doğrulama ----
-builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
+// ---- JWT kimlik doğrulama (sunum katmanının işi) ----
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtSettings>()!;
 
 builder.Services
@@ -54,7 +42,7 @@ builder.Services
             ValidIssuer = jwt.Issuer,
             ValidAudience = jwt.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
-            ClockSkew = TimeSpan.Zero           // varsayılan 5 dk toleransı kaldır: süre dolar dolmaz 401
+            ClockSkew = TimeSpan.Zero           // varsayılan 5 dk toleransı kaldır
         };
     });
 builder.Services.AddAuthorization();
@@ -62,7 +50,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// Swagger'a "Authorize" düğmesi ekle (Bearer token ile korumalı uçları test edebilmek için)
+// Swagger'a "Authorize" düğmesi ekle
 builder.Services.AddSwaggerGen(options =>
 {
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -97,35 +85,20 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Uygulama açılışında bekleyen EF Core migration'larını uygula ve demo kullanıcıyı ekle
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+// ---- Açılış işleri: şema (DataAccess) + başlangıç verisi (Business) ----
+app.Services.MigrateDatabase();
+await app.Services.SeedDatabaseAsync();
 
-    // Seed: hiç kullanıcı yoksa demo kullanıcı oluştur (admin / staj123)
-    //
-    // DİKKAT (Ödev 3 / Görev 1): Artık User üzerinde global query filter var.
-    // Düz "db.Users.Any()" yazarsak EF buna otomatik "WHERE is_deleted = false" ekler.
-    // Yani admin'i soft delete ile sildiysen, uygulama her açılışta "hiç kullanıcı yok"
-    // sanıp yeni bir admin yaratır ve silme işlemin boşa gider.
-    // Filtreyi bilinçli olarak devre dışı bırakıp TÜM satırlara bakıyoruz:
-    if (!db.Users.IgnoreQueryFilters().Any())
-    {
-        var hasher = new PasswordHasher<User>();
-        var admin = new User { Username = "admin" };
-        admin.PasswordHash = hasher.HashPassword(admin, "staj123");
-        db.Users.Add(admin);
-        db.SaveChanges();
-    }
-}
+// ---- Middleware boru hattı ----
+// Hata yakalayıcı EN BAŞTA: altındaki tüm katmanların hatalarını sarabilmesi için.
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseCors("AllowFrontend");
 
-app.UseAuthentication();   // önce kimlik doğrulama (token'ı çözer) hesap sorgulama
+app.UseAuthentication();   // önce kimlik doğrulama (token'ı çözer)
 app.UseAuthorization();    // sonra yetkilendirme ([Authorize] kontrolü)
 
 app.MapControllers();

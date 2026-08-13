@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StajProject.Business.DTOs;
-using StajProject.Business.Geo;
 using StajProject.Business.Services;
 using StajProject.Entities;
 
@@ -49,36 +48,22 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase
     [HttpPost]
     public async Task<ActionResult<GeometryDto>> Create([FromBody] GeometryCreateDto dto)
     {
-        try
-        {
-            var created = await _service.CreateAsync(dto);
-            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
-        }
-        catch (WktFormatException ex)
-        {
-            // Hata sunucuda değil, istemcinin gönderdiği veride → 500 değil 400.
-            return BadRequest(new { message = ex.Message });
-        }
+        // try/catch YOK: doğrulama hatalarını ExceptionHandlingMiddleware 400'e çeviriyor.
+        var created = await _service.CreateAsync(dto);
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
     /// <summary>Ad/açıklama (ve istenirse geometri) günceller.</summary>
     [HttpPut("{id:int}")]
     public async Task<ActionResult<GeometryDto>> Update(int id, [FromBody] GeometryUpdateDto dto)
     {
-        try
+        var updated = await _service.UpdateAsync(id, dto);
+        if (updated is null)
         {
-            var updated = await _service.UpdateAsync(id, dto);
-            if (updated is null)
-            {
-                return NotFound(new { message = $"Id={id} olan kayıt bulunamadı." });
-            }
+            return NotFound(new { message = $"Id={id} olan kayıt bulunamadı." });
+        }
 
-            return Ok(updated);
-        }
-        catch (WktFormatException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        return Ok(updated);
     }
 
     /// <summary>

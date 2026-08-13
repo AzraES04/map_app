@@ -167,6 +167,7 @@ public class AppDbContext : DbContext
         entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
         entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(1000);
         entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasMaxLength(500);
+        entity.Property(e => e.Color).HasColumnName("color").HasMaxLength(7);   // "#RRGGBB"
         entity.Property(e => e.CreatedAt).HasColumnName("created_at");
 
         // Durum takibi kolonları — users tablosundakiyle birebir aynı desen

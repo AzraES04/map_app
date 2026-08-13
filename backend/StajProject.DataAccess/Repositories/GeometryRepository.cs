@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using StajProject.DataAccess.Context;
 using StajProject.Entities;
 
@@ -62,6 +62,7 @@ public class GeometryRepository<TEntity> : IGeometryRepository<TEntity>
         current.Name = entity.Name;
         current.Description = entity.Description;
         current.ImageUrl = entity.ImageUrl;
+        current.Color = entity.Color;
         current.Geometry = entity.Geometry;
 
         // ModifiedDate'i elle yazmıyoruz — AppDbContext.ApplyAuditRules() otomatik basıyor.

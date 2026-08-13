@@ -1,4 +1,4 @@
-using NetTopologySuite.Geometries;
+﻿using NetTopologySuite.Geometries;
 using StajProject.Business.DTOs;
 using StajProject.Business.Geo;
 using StajProject.DataAccess.Repositories;
@@ -51,6 +51,7 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
             Name = dto.Name,
             Description = dto.Description,
             ImageUrl = DogrulaGorselAdresi(dto.ImageUrl),
+            Color = NormalizeRenk(dto.Color),
             Geometry = geometry,
             CreatedAt = DateTime.UtcNow
         };
@@ -70,6 +71,7 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
         existing.Name = dto.Name;
         existing.Description = dto.Description;
         existing.ImageUrl = DogrulaGorselAdresi(dto.ImageUrl);
+        existing.Color = NormalizeRenk(dto.Color);
 
         // Wkt boş gönderildiyse geometriye dokunmuyoruz — sadece ad/açıklama güncellenir.
         if (!string.IsNullOrWhiteSpace(dto.Wkt))
@@ -114,6 +116,28 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
         return temiz;
     }
 
+    /// <summary>
+    /// Rengi normalleştirir: boşluk kırpılır, küçük harfe indirilir, biçim doğrulanır.
+    /// DTO'daki [RegularExpression] zaten kontrol ediyor ama servis kendi başına da
+    /// güvenli olmalı — iş kuralı, kendisini çağıran katmana güvenmez.
+    /// </summary>
+    private static string? NormalizeRenk(string? renk)
+    {
+        if (string.IsNullOrWhiteSpace(renk))
+        {
+            return null;
+        }
+
+        var temiz = renk.Trim().ToLowerInvariant();
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(temiz, "^#[0-9a-f]{6}$"))
+        {
+            throw new WktFormatException("Renk #RRGGBB biçiminde olmalıdır (örn. #23606e).");
+        }
+
+        return temiz;
+    }
+
     /// <summary>Entity → DTO. Geometri burada WKT metnine dönüşür.</summary>
     private static GeometryDto MapToDto(TEntity entity) => new()
     {
@@ -123,6 +147,7 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
         Wkt = WktConverter.Write(entity.Geometry),
         GeometryType = entity.Geometry.GeometryType,
         ImageUrl = entity.ImageUrl,
+        Color = entity.Color,
         CreatedAt = entity.CreatedAt,
         ModifiedDate = entity.ModifiedDate,
         IsActive = entity.IsActive

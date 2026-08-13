@@ -25,6 +25,9 @@ public class GeometryDto
     /// <summary>İsteğe bağlı görsel adresi; popup'ta gösterilir.</summary>
     public string? ImageUrl { get; set; }
 
+    /// <summary>Kullanıcının seçtiği renk (#RRGGBB).</summary>
+    public string? Color { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedDate { get; set; }
     public bool IsActive { get; set; }
@@ -46,6 +49,10 @@ public class GeometryCreateDto
     /// </summary>
     [MaxLength(500, ErrorMessage = "Görsel adresi en fazla 500 karakter olabilir.")]
     public string? ImageUrl { get; set; }
+
+    /// <summary>Görüntüleme rengi. #RRGGBB biçiminde olmalı (Ödev 4 / Görev 2).</summary>
+    [RegularExpression("^#([0-9a-fA-F]{6})$", ErrorMessage = "Renk #RRGGBB biçiminde olmalıdır.")]
+    public string? Color { get; set; }
 
     /// <summary>
     /// EPSG:4326 koordinatlarıyla WKT metni.
@@ -73,6 +80,9 @@ public class GeometryUpdateDto
 
     [MaxLength(500)]
     public string? ImageUrl { get; set; }
+
+    [RegularExpression("^#([0-9a-fA-F]{6})$", ErrorMessage = "Renk #RRGGBB biçiminde olmalıdır.")]
+    public string? Color { get; set; }
 
     /// <summary>Boş bırakılırsa geometri değişmez, sadece ad/açıklama güncellenir.</summary>
     public string? Wkt { get; set; }

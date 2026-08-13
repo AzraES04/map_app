@@ -27,10 +27,4 @@ public class AuthController : ControllerBase
 
         return Ok(response);
     }
-
-    [HttpPost("deneme")]
-    public int Deneme()
-    {
-        return 0;
-    }
 }

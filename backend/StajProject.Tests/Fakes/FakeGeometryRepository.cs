@@ -1,4 +1,4 @@
-using StajProject.DataAccess.Repositories;
+﻿using StajProject.DataAccess.Repositories;
 using StajProject.Entities;
 
 namespace StajProject.Tests.Fakes;
@@ -36,6 +36,7 @@ public class FakeGeometryRepository<TEntity> : IGeometryRepository<TEntity>
         current.Name = entity.Name;
         current.Description = entity.Description;
         current.ImageUrl = entity.ImageUrl;
+        current.Color = entity.Color;
         current.Geometry = entity.Geometry;
         current.ModifiedDate = DateTime.UtcNow;   // gerçekte AppDbContext yapıyor
         return Task.FromResult<TEntity?>(current);

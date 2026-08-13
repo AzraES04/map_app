@@ -27,7 +27,12 @@ public class UserRepository : IUserRepository
         return user;
     }
 
-    public Task<bool> AnyAsync() => _context.Users.AnyAsync();
+    /// <summary>
+    /// Tabloda HERHANGİ bir kullanıcı var mı? Global query filter bilinçli olarak
+    /// devre dışı: soft delete ile silinmiş kullanıcılar da sayılmalı, yoksa seed
+    /// her açılışta yeni bir admin yaratır ve silme işlemi boşa gider.
+    /// </summary>
+    public Task<bool> AnyAsync() => _context.Users.IgnoreQueryFilters().AnyAsync();
 
     // ---------- Ödev 3 / Görev 1: durum yönetimi ----------
 

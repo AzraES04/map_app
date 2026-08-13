@@ -16,6 +16,7 @@ public interface IGeometryEntity : IAuditableEntity
     string Name { get; set; }
     string? Description { get; set; }
     string? ImageUrl { get; set; }
+    string? Color { get; set; }
     DateTime CreatedAt { get; set; }
 
     // Durum kolonları (is_deleted / is_active / modified_date) IAuditableEntity'den geliyor.
@@ -41,6 +42,12 @@ public abstract class GeometryEntityBase : IGeometryEntity
     /// doğrulama ve telif gibi bir yığın sorunla uğraşmadan görsel desteği oluyor.
     /// </summary>
     public string? ImageUrl { get; set; }
+
+    /// <summary>
+    /// Kullanıcının seçtiği görüntüleme rengi (#RRGGBB). Ödev 4 / Görev 2.
+    /// Boş bırakılırsa frontend geometri tipinin varsayılan rengini kullanır.
+    /// </summary>
+    public string? Color { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
