@@ -12,7 +12,7 @@ import { fromLonLat } from 'ol/proj'
 import { defaults as varsayilanKontroller } from 'ol/control/defaults'
 import ScaleLine from 'ol/control/ScaleLine'
 import MousePosition from 'ol/control/MousePosition'
-import { easeOut, inAndOut } from 'ol/easing'
+import { easeOut } from 'ol/easing'
 import { createEmpty, extend as extentGenislet, isEmpty as extentBosMu } from 'ol/extent'
 import 'ol/ol.css'
 
@@ -25,19 +25,19 @@ import { listele, kaydet, sil } from '../api'
 const TURKEY_CENTER = [35.24, 39.0]
 const TURKEY_ZOOM = 6.4
 
-// --- Açılış sahnesi: "uzayda dönen dünyadan Türkiye'ye iniş" ---
+// --- Açılış sahnesi: "uzaydan Türkiye'ye iniş" ---
 //
 // OpenLayers gerçek bir 3B küre çizemez (o Cesium'un işi). Bunun yerine:
-//   1. Haritayı DAİREYE kırpıyoruz            → gezegen silueti
-//   2. Arkasına yıldız alanı koyuyoruz         → uzay
-//   3. Üstüne küresel gölge/parlama bindiriyoruz → hacim hissi
-//   4. Görüşü batıdan doğuya kaydırıyoruz      → dünyanın dönme illüzyonu
-//   5. Daireyi büyütüp Türkiye'ye zoomluyoruz  → atmosfere iniş
-const UZAY_CENTER = [-72, 22]     // Atlantik/Amerika üzeri — doğuya doğru "dönecek"
-const UZAY_ZOOM = 2.3             // Bu değerin altında OpenLayers dünyayı ekrana sabitler
-const DONUS_ARA_CENTER = [8, 32]  // dönüşün orta noktası (Afrika/Avrupa)
-const DONUS_SURESI = 1600         // ms — dünyanın dönme evresi
-const INIS_SURESI = 1900          // ms — Türkiye'ye iniş evresi
+//   1. Haritayı DAİREYE kırpıyoruz              → gezegen silueti
+//   2. Dışını derin uzay gradyanıyla kapatıyoruz → derinlik
+//   3. Üstüne küresel gölge + atmosfer halkası   → hacim hissi
+//   4. Daireyi büyütüp Türkiye'ye zoomluyoruz    → atmosfere iniş
+//
+// Kaydırma/dönme YOK: sahne boyunca merkez sabit, sadece zoom değişiyor.
+// Bu, hareketi tek bir eksene indirdiği için daha sakin ve kontrollü duruyor.
+const UZAY_ZOOM = 2.4             // Bu değerin altında OpenLayers dünyayı ekrana sabitler
+const KURE_BEKLEME = 700          // ms — küre sahnede dursun, sonra iniş başlasın
+const INIS_SURESI = 2000          // ms — Türkiye'ye iniş
 const GIRIS_ANAHTARI = 'staj_giris_animasyonu'  // sessionStorage bayrağı
 
 // Etiketleri decluttter ederken üç katmanı da AYNI gruba koyuyoruz; böylece
@@ -265,8 +265,8 @@ export default function MapPage() {
       document.visibilityState === 'visible'
 
     const view = new View({
-      // Açılış sahnesi oynayacaksa uzaydan bakış konumundan başla, yoksa direkt Türkiye.
-      center: fromLonLat(girisOynat ? UZAY_CENTER : TURKEY_CENTER),   // 4326 → 3857
+      // Merkez her iki durumda da Türkiye: sahne boyunca kaydırma yok, sadece zoom.
+      center: fromLonLat(TURKEY_CENTER),                  // 4326 → 3857
       zoom: girisOynat ? UZAY_ZOOM : TURKEY_ZOOM,
     })
 
@@ -304,8 +304,9 @@ export default function MapPage() {
 
     // --- Uzaydan Türkiye'ye iniş ---
     let atlaDinleyici = null
+    let inisZamanlayici = null
     if (girisOynat) {
-      setUzaySahnesi('donus')   // dairesel maske + yıldızlar sahneye girer
+      setUzaySahnesi('kure')   // gezegen diski sahneye girer
 
       /** Sahneyi kapat ve haritayı Türkiye'ye sabitle (hem normal bitiş hem "atla" için). */
       const sahneyiBitir = (tamamlandi) => {
@@ -313,39 +314,27 @@ export default function MapPage() {
         setUzaySahnesi(null)
       }
 
-      view.animate(
-        // 1. EVRE — DÖNÜŞ: zoom sabit, sadece boylam batıdan doğuya kayıyor.
-        // Mercator'da yatay kaydırma = boylam rotasyonu; dairesel maske içinde
-        // bu, dünyanın kendi ekseninde dönmesi olarak algılanıyor.
-        // Ara nokta (Afrika/Avrupa) dönüşün hızını sabit tutuyor.
-        {
-          center: fromLonLat(DONUS_ARA_CENTER),
-          zoom: UZAY_ZOOM,
-          duration: DONUS_SURESI,
-          easing: inAndOut,   // yavaş başlar, hızlanır, yavaşlar
-        },
-        (donusTamam) => {
-          if (!donusTamam) return sahneyiBitir(false)
+      // Küre önce kısa bir süre sahnede dursun — göz onu "gezegen" olarak
+      // okumaya fırsat bulsun. Hemen zoomlarsak sadece bir geçiş efekti gibi durur.
+      inisZamanlayici = setTimeout(() => {
+        setUzaySahnesi('inis')   // CSS: daire büyümeye ve sahne solmaya başlar
 
-          // 2. EVRE — İNİŞ: daire ekranı kaplayacak şekilde büyürken harita
-          // Türkiye'ye zoom yapar. CSS ile OpenLayers animasyonu eşzamanlı çalışır.
-          setUzaySahnesi('inis')
-          view.animate(
-            {
-              center: fromLonLat(TURKEY_CENTER),
-              zoom: TURKEY_ZOOM,
-              duration: INIS_SURESI,
-              easing: easeOut,   // hızlı başlar, sona doğru yavaşlar: "yerine oturma"
-            },
-            sahneyiBitir,
-          )
-        },
-      )
+        // Aynı anda OpenLayers zoom animasyonu. İkisi bağımsız çalışır ama
+        // eşzamanlı başladıkları için tek bir hareket gibi algılanır.
+        view.animate(
+          {
+            zoom: TURKEY_ZOOM,
+            duration: INIS_SURESI,
+            easing: easeOut,   // hızlı başlar, sona doğru yavaşlar: "yerine oturma"
+          },
+          sahneyiBitir,
+        )
+      }, KURE_BEKLEME)
 
       // Kullanıcı beklemek istemiyorsa ilk dokunuşta sahneyi kes ve Türkiye'ye atla.
       atlaDinleyici = () => {
+        clearTimeout(inisZamanlayici)
         view.cancelAnimations()
-        view.setCenter(fromLonLat(TURKEY_CENTER))
         view.setZoom(TURKEY_ZOOM)
         setUzaySahnesi(null)
       }
@@ -359,6 +348,7 @@ export default function MapPage() {
     // React StrictMode geliştirmede effect'i iki kez çalıştırır; bu satır
     // olmasaydı sayfada iki harita üst üste binerdi.
     return () => {
+      if (inisZamanlayici) clearTimeout(inisZamanlayici)
       if (atlaDinleyici) {
         map.getViewport().removeEventListener('pointerdown', atlaDinleyici)
         map.getViewport().removeEventListener('wheel', atlaDinleyici)
@@ -662,8 +652,8 @@ export default function MapPage() {
           {uzaySahnesi && (
             <div className={`uzay-sahnesi ${uzaySahnesi}`} aria-hidden="true">
               {/* Uzay: tüm alanı kaplar, ortasındaki dairesel delikten harita görünür */}
-              <div className="yildizlar" />
-              {/* Küresel hacim: sol üstten ışık, sağ altta gölge + atmosfer parıltısı */}
+              <div className="uzay-katmani" />
+              {/* Küresel hacim: sol üstten ışık, sağ altta gölge + atmosfer halkası */}
               <div className="kure-isik" />
             </div>
           )}
