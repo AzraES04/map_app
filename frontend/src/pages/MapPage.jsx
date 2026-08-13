@@ -7,6 +7,7 @@ import OSM from 'ol/source/OSM'
 import VectorLayer from 'ol/layer/Vector'
 import VectorSource from 'ol/source/Vector'
 import Draw from 'ol/interaction/Draw'
+import Overlay from 'ol/Overlay'
 import { Style, Circle, Fill, Stroke, Text } from 'ol/style'
 import { fromLonLat } from 'ol/proj'
 import { defaults as varsayilanKontroller } from 'ol/control/defaults'
@@ -18,7 +19,7 @@ import 'ol/ol.css'
 
 import { clearSession, getUsername, getExpiresAt, scheduleAutoLogout } from '../auth'
 import { DRAW_TYPES, DRAW_TYPE_KEYS, geometryToWkt, wktToFeature, describeGeometry } from '../geo'
-import { listele, kaydet, sil } from '../api'
+import { listele, kaydet, sil, geriAl } from '../api'
 
 // Türkiye'nin yaklaşık merkezi (boylam, enlem) — 4326 cinsinden yazıp
 // fromLonLat ile haritanın diline (3857) çeviriyoruz.
@@ -135,28 +136,48 @@ export default function MapPage() {
   const drawRef = useRef(null)         // aktif Draw interaction
   const highlightSourceRef = useRef(null)
   const aracGrubuRef = useRef(null)    // kaydettikten sonra odağı geri vermek için
+  const popupElement = useRef(null)    // popup'ın DOM kökü (OpenLayers konumlandırıyor)
+  const popupOverlayRef = useRef(null)
+  const toastZamanlayiciRef = useRef(null)
 
   // --- Ekran durumu ---------------------------------------------------------
   const [activeTool, setActiveTool] = useState(null)      // null | 'Point' | 'LineString' | 'Polygon'
   const [pending, setPending] = useState(null)            // çizildi, henüz kaydedilmedi
-  const [form, setForm] = useState({ name: '', description: '' })
+  const [form, setForm] = useState({ name: '', description: '', imageUrl: '' })
   const [records, setRecords] = useState(BOS_KAYITLAR)
   const [visible, setVisible] = useState({ Point: true, LineString: true, Polygon: true })
   const [activeTab, setActiveTab] = useState('Point')
   const [toast, setToast] = useState(null)                // { tur: 'ok' | 'hata', mesaj }
   const [saving, setSaving] = useState(false)
   const [remaining, setRemaining] = useState('')
-  // Açılış sahnesinin evresi: null (kapalı) | 'donus' (dünya dönüyor) | 'inis' (Türkiye'ye zoom)
+  // Açılış sahnesinin evresi: null (kapalı) | 'kure' (gezegen sahnede) | 'inis' (Türkiye'ye zoom)
   const [uzaySahnesi, setUzaySahnesi] = useState(null)
+  // Haritada tıklanan geometrinin popup içeriği: { dto, tip, ozet } | null
+  const [secili, setSecili] = useState(null)
 
   const goLogin = useCallback(
     () => navigate('/login', { replace: true, state: { expired: true } }),
     [navigate],
   )
 
-  const bildir = useCallback((tur, mesaj) => {
-    setToast({ tur, mesaj })
-    setTimeout(() => setToast(null), 3500)
+  /**
+   * Alt ortada bildirim gösterir.
+   * @param {'ok'|'hata'} tur
+   * @param {string} mesaj
+   * @param {{etiket: string, calistir: Function}} [eylem] Bildirime düğme ekler (örn. "Geri al")
+   */
+  const bildir = useCallback((tur, mesaj, eylem) => {
+    // Önceki zamanlayıcıyı iptal et: yoksa eski bildirimin sayacı yeni bildirimi kapatır.
+    if (toastZamanlayiciRef.current) clearTimeout(toastZamanlayiciRef.current)
+
+    setToast({ tur, mesaj, eylem })
+    // Düğmeli bildirimde kullanıcıya karar verecek zaman tanı.
+    toastZamanlayiciRef.current = setTimeout(() => setToast(null), eylem ? 7000 : 3500)
+  }, [])
+
+  const toastKapat = useCallback(() => {
+    if (toastZamanlayiciRef.current) clearTimeout(toastZamanlayiciRef.current)
+    setToast(null)
   }, [])
 
   // ------------------------------------------------------------------------
@@ -194,6 +215,40 @@ export default function MapPage() {
     [],
   )
 
+  /**
+   * Popup'ın hangi koordinata tutunacağını belirler.
+   * Nokta → kendisi; çizgi → orta noktası; poligon → iç merkezi.
+   * Sınırlayıcı kutunun merkezini kullanmıyoruz: "C" gibi içbükey bir poligonda
+   * o merkez şeklin DIŞINA düşebilir, popup boşlukta asılı kalırdı.
+   */
+  const popupKonumu = useCallback((geometry) => {
+    switch (geometry.getType()) {
+      case 'Point':
+        return geometry.getCoordinates()
+      case 'LineString':
+        return geometry.getCoordinateAt(0.5)          // %50'si — çizginin ortası
+      case 'Polygon':
+        return geometry.getInteriorPoint().getCoordinates().slice(0, 2)
+      default:
+        return geometry.getExtent().slice(0, 2)
+    }
+  }, [])
+
+  const popupKapat = useCallback(() => {
+    setSecili(null)
+    popupOverlayRef.current?.setPosition(undefined)   // undefined = popup'ı gizle
+  }, [])
+
+  /** Haritadaki bir geometriye tıklanınca popup'ı aç. */
+  const popupAc = useCallback((feature) => {
+    const dto = feature.get('dto')
+    const tip = feature.get('tip')
+    if (!dto) return
+
+    setSecili({ dto, tip, ozet: describeGeometry(feature.getGeometry()) })
+    popupOverlayRef.current?.setPosition(popupKonumu(feature.getGeometry()))
+  }, [popupKonumu])
+
   // ------------------------------------------------------------------------
   //  Veritabanından kayıtları çek ve haritaya bas
   // ------------------------------------------------------------------------
@@ -214,6 +269,11 @@ export default function MapPage() {
           const feature = wktToFeature(dto.wkt)
           feature.setId(`${key}-${dto.id}`)   // sonradan bulabilmek için kimlik
           feature.set('ad', dto.name)         // stil fonksiyonu etiketi buradan okuyor
+          // Kaydın tamamını feature'a iliştiriyoruz: haritada tıklandığında
+          // popup içeriğini state'te aramaya gerek kalmıyor, doğrudan burada.
+          // Bu aynı zamanda "eski state'e takılma" (stale closure) riskini de kaldırıyor.
+          feature.set('dto', dto)
+          feature.set('tip', key)
           source.addFeature(feature)
         })
       })
@@ -301,6 +361,18 @@ export default function MapPage() {
       ]),
     })
     mapRef.current = map
+
+    // Popup: React'in yönettiği bir div'i OpenLayers harita koordinatına bağlıyoruz.
+    // OL elemanı kendi kapsayıcısına taşır ve konumunu yönetir; içeriği React çizer.
+    const popup = new Overlay({
+      element: popupElement.current,
+      positioning: 'bottom-center',   // popup'ın ALTI, verilen koordinata oturur
+      offset: [0, -16],               // işaretçinin biraz üstünde dursun
+      // autoPan: popup ekranın dışına taşarsa harita kendiliğinden kayıp onu içeri alır
+      autoPan: { animation: { duration: 300 }, margin: 28 },
+    })
+    map.addOverlay(popup)
+    popupOverlayRef.current = popup
 
     // --- Uzaydan Türkiye'ye iniş ---
     let atlaDinleyici = null
@@ -408,7 +480,7 @@ export default function MapPage() {
         wkt: geometryToWkt(geometry),        // 3857 → 4326 dönüşümü burada
         ozet: describeGeometry(geometry),
       })
-      setForm({ name: '', description: '' })
+      setForm({ name: '', description: '', imageUrl: '' })
     })
 
     map.addInteraction(draw)
@@ -472,9 +544,14 @@ export default function MapPage() {
       const feature = pikseldekiFeature(evt.pixel)
 
       if (feature) {
-        odaklanFeature(feature)       // şekle tıklandı → ona yaklaş
+        // Şekle tıklandı → bilgi kartını aç.
+        // Otomatik zoom YAPMIYORUZ: popup açılırken harita da hareket etseydi
+        // kart ekranda kayar, okumak zorlaşırdı. Yaklaşmak isteyen kartın
+        // içindeki "Yakınlaş" düğmesini kullanıyor.
+        popupAc(feature)
       } else {
-        // Boş alana tıklandı → oraya git (zoom seviyesi korunur)
+        // Boş alana tıklandı → popup'ı kapat ve oraya git (zoom korunur)
+        popupKapat()
         map.getView().animate({ center: evt.coordinate, duration: 450, easing: easeOut })
       }
     }
@@ -487,7 +564,7 @@ export default function MapPage() {
       map.un('singleclick', tekTiklama)
       map.getViewport().style.cursor = ''
     }
-  }, [activeTool, odaklanFeature, vurgulaFeature])
+  }, [activeTool, popupAc, popupKapat, vurgulaFeature])
 
   // ------------------------------------------------------------------------
   //  Klavye kısayolları
@@ -547,7 +624,13 @@ export default function MapPage() {
     try {
       await kaydet(
         DRAW_TYPES[pending.type].endpoint,
-        { name: form.name.trim(), description: form.description.trim() || null, wkt: pending.wkt },
+        {
+          name: form.name.trim(),
+          // Boş metin yerine null: veritabanında "değer yok"un doğru karşılığı NULL'dur
+          description: form.description.trim() || null,
+          imageUrl: form.imageUrl.trim() || null,
+          wkt: pending.wkt,
+        },
         goLogin,
       )
       drawSourceRef.current.clear()
@@ -566,13 +649,36 @@ export default function MapPage() {
     }
   }
 
+  /**
+   * Silme — onay sormadan.
+   *
+   * Klasik "Emin misiniz?" kutusu yerine "sil + geri al" desenini kullanıyoruz.
+   * Gerekçe: onay kutusu HER silmede kullanıcıyı durdurur, oysa hata nadirdir;
+   * üstelik insanlar bir süre sonra okumadan onaylar, yani koruma da sağlamaz.
+   * Geri alma ise sadece hata yapıldığında devreye girer ve gerçekten kurtarır.
+   *
+   * Bu deseni kullanabilmemizin tek sebebi SOFT DELETE: kayıt veritabanında
+   * duruyor, geri getirmek tek UPDATE. Fiziksel silme olsaydı geri alınamazdı.
+   */
   const handleDelete = async (type, dto) => {
-    if (!window.confirm(`"${dto.name}" kaydı silinsin mi?`)) return
     try {
       await sil(DRAW_TYPES[type].endpoint, dto.id, goLogin)
       temizleVurgu()
+      popupKapat()
       await yukle()
-      bildir('ok', 'Kayıt silindi.')
+
+      bildir('ok', `"${dto.name}" silindi.`, {
+        etiket: 'Geri al',
+        calistir: async () => {
+          try {
+            await geriAl(DRAW_TYPES[type].endpoint, dto.id, goLogin)
+            await yukle()
+            bildir('ok', `"${dto.name}" geri alındı.`)
+          } catch (err) {
+            if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+          }
+        },
+      })
     } catch (err) {
       if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
     }
@@ -666,6 +772,62 @@ export default function MapPage() {
             </div>
           )}
 
+          {/* POPUP — OpenLayers bu div'i alıp harita koordinatına konumlandırır.
+              DOM'da hep duruyor; içeriği yalnızca bir kayıt seçiliyken doluyor. */}
+          <div ref={popupElement} className="harita-popup">
+            {secili && (
+              <>
+                <div className="popup-baslik">
+                  <span className="dot" style={{ background: DRAW_TYPES[secili.tip].color }} />
+                  <strong>{secili.dto.name}</strong>
+                  <button type="button" className="popup-kapat" onClick={popupKapat}
+                          aria-label="Kapat">×</button>
+                </div>
+
+                {secili.dto.imageUrl && (
+                  <img
+                    className="popup-gorsel"
+                    src={secili.dto.imageUrl}
+                    alt={secili.dto.name}
+                    loading="lazy"
+                    // Adres kırıksa boş çerçeve yerine görseli tamamen gizle
+                    onError={(e) => { e.currentTarget.style.display = 'none' }}
+                  />
+                )}
+
+                {secili.dto.description && (
+                  <p className="popup-aciklama">{secili.dto.description}</p>
+                )}
+
+                <dl className="popup-bilgi">
+                  <dt>Tip</dt>
+                  <dd>{DRAW_TYPES[secili.tip].label}</dd>
+                  <dt>Konum</dt>
+                  <dd>{secili.ozet}</dd>
+                  <dt>Eklendi</dt>
+                  <dd>{new Date(secili.dto.createdAt).toLocaleString('tr-TR')}</dd>
+                </dl>
+
+                <div className="popup-eylemler">
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => odaklan(secili.tip, secili.dto)}
+                  >
+                    Yakınlaş
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost sil"
+                    onClick={() => handleDelete(secili.tip, secili.dto)}
+                  >
+                    Sil
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
           <div className="harita-araclari">
             <button type="button" className="harita-btn" onClick={turkiyeyeDon}
                     title="Türkiye görünümüne dön">
@@ -747,6 +909,16 @@ export default function MapPage() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 placeholder="İsteğe bağlı"
                 maxLength={1000}
+              />
+
+              <label htmlFor="gorsel">Görsel adresi <small>(isteğe bağlı)</small></label>
+              <input
+                id="gorsel"
+                type="url"
+                value={form.imageUrl}
+                onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                placeholder="https://..."
+                maxLength={500}
               />
 
               <label htmlFor="wkt">WKT <small>(EPSG:4326)</small></label>
@@ -837,7 +1009,16 @@ export default function MapPage() {
           bölmeden bildirimi seslendirir. Görsel toast'ın işitsel karşılığı. */}
       {toast && (
         <div className={`toast toast-${toast.tur}`} role="status" aria-live="polite">
-          {toast.mesaj}
+          <span>{toast.mesaj}</span>
+          {toast.eylem && (
+            <button
+              type="button"
+              className="toast-eylem"
+              onClick={() => { toastKapat(); toast.eylem.calistir() }}
+            >
+              {toast.eylem.etiket}
+            </button>
+          )}
         </div>
       )}
     </div>

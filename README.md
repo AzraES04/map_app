@@ -69,6 +69,18 @@ formu (ad, açıklama, salt okunur WKT önizlemesi) → ③ Katman aç/kapa → 
 **Klavye:** `Esc` çizimi iptal eder, `Backspace` son noktayı siler.
 (Kullanıcı forma yazı yazarken bu kısayollar devre dışıdır.)
 
+**Haritada etkileşim:** Çizim aracı kapalıyken geometrinin üzerine gelince vurgulanır,
+tıklanınca **bilgi kartı (popup)** açılır — ad, görsel, açıklama, konum özeti, eklenme
+tarihi ve "Yakınlaş" / "Sil" düğmeleri. Boş alana tıklamak haritayı oraya kaydırır.
+
+**Görsel desteği:** Her geometriye isteğe bağlı bir `image_url` verilebilir; kart içinde
+gösterilir. Dosya yükleme altyapısı yoktur — kullanıcı hazır bir adres yapıştırır ve
+backend yalnızca `http`/`https` şemasını kabul eder (`GeometryService.DogrulaGorselAdresi`).
+
+**Silme deseni:** Onay kutusu yerine **"sil + geri al"** kullanılır. Silinen kayıt için
+7 saniye boyunca "Geri al" düğmeli bir bildirim çıkar. Bu desen ancak soft delete ile
+mümkündür: veri tabloda durduğu için geri getirmek tek `UPDATE`'tir.
+
 ---
 
 ## 3) WKT ve Projeksiyon Yönetimi
@@ -226,8 +238,9 @@ WKT çözümleme/tip doğrulama/SRID yönetimi, geometri servisi ve `LocationSer
 | GET | `/api/points` · `/api/lines` · `/api/polygons` | Kayıtları WKT olarak listeler |
 | GET | `/api/points/{id}` | Tek kayıt |
 | POST | `/api/points` | `{ name, description, wkt }` |
-| PUT | `/api/points/{id}` | Ad/açıklama (+ opsiyonel geometri) günceller |
+| PUT | `/api/points/{id}` | Ad/açıklama/görsel (+ opsiyonel geometri) günceller |
 | DELETE | `/api/points/{id}` | Soft delete |
+| POST | `/api/points/{id}/restore` | Silmeyi geri alır (soft delete sayesinde mümkün) |
 | GET/POST/DELETE | `/api/locations` | 2. ödevden kalan tablo (geriye dönük uyumluluk) |
 
 Geometri uçlarının tamamı `[Authorize]` ile korunur — token yoksa veya süresi dolduysa **401**.

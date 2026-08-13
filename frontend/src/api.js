@@ -47,3 +47,13 @@ export async function sil(endpoint, id, onUnauthorized) {
   const res = await authFetch(`${endpoint}/${id}`, { method: 'DELETE' }, onUnauthorized)
   if (!res.ok) throw new Error(await hataMesaji(res))
 }
+
+/**
+ * POST /{id}/restore — silmeyi geri alır.
+ * Bu uç ancak soft delete kullandığımız için mümkün: kayıt fiziksel olarak
+ * silinseydi geri getirilecek bir veri kalmazdı.
+ */
+export async function geriAl(endpoint, id, onUnauthorized) {
+  const res = await authFetch(`${endpoint}/${id}/restore`, { method: 'POST' }, onUnauthorized)
+  if (!res.ok) throw new Error(await hataMesaji(res))
+}

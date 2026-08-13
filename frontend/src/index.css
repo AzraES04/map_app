@@ -314,6 +314,103 @@ body {
   .uzay-sahnesi { display: none; }
 }
 
+/* ---------- Haritadaki bilgi kartı (popup) ---------- */
+
+.harita-popup {
+  /* İçi boşken hiç görünmesin: OpenLayers elemanı DOM'da tutuyor ama
+     kayıt seçili değilken içerik yok, boş bir kutu asılı kalmasın. */
+  min-width: 220px;
+  max-width: 280px;
+}
+
+.harita-popup:empty { display: none; }
+
+.harita-popup:not(:empty) {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 12px 13px 11px;
+  font-size: 0.85rem;
+  animation: popupAc 0.16s ease-out;
+}
+
+/* Kartın altındaki küçük ok — kartı işaret ettiği geometriye bağlar */
+.harita-popup:not(:empty)::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  margin-left: -7px;
+  border: 7px solid transparent;
+  border-top-color: #fff;
+  border-bottom: 0;
+  filter: drop-shadow(0 1px 0 var(--border));
+}
+
+@keyframes popupAc {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.popup-baslik {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 9px;
+}
+
+.popup-baslik strong { flex: 1; font-size: 0.92rem; line-height: 1.25; }
+
+.popup-kapat {
+  background: none;
+  border: none;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 4px;
+}
+
+.popup-kapat:hover { color: var(--text); background: var(--bg); }
+
+.popup-gorsel {
+  display: block;
+  width: 100%;
+  height: 120px;
+  object-fit: cover;          /* oranı bozmadan çerçeveyi doldur */
+  border-radius: var(--radius);
+  margin-bottom: 9px;
+  background: var(--bg);
+}
+
+.popup-aciklama {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-bottom: 9px;
+  line-height: 1.45;
+}
+
+/* Etiket/değer çiftleri: iki sütunlu ızgara, hizalı ve okunaklı */
+.popup-bilgi {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  font-size: 0.78rem;
+  margin-bottom: 11px;
+}
+
+.popup-bilgi dt { color: var(--muted); }
+.popup-bilgi dd { color: var(--text); }
+
+.popup-eylemler { display: flex; gap: 7px; }
+
+.popup-eylemler button { padding: 7px 10px; font-size: 0.8rem; }
+
+.btn-ghost.sil { color: var(--error); border-color: #f0c3bf; }
+.btn-ghost.sil:hover { background: #fdeceb; }
+
 /* ---------- Harita üzerindeki gezinme düğmeleri ---------- */
 
 .harita-araclari {
@@ -696,6 +793,28 @@ kbd {
 
 .toast-ok { background: var(--ok); }
 .toast-hata { background: var(--error); }
+
+/* Bildirim içindeki eylem düğmesi (örn. "Geri al") */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.toast-eylem {
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--gecis);
+}
+
+.toast-eylem:hover { background: rgba(255, 255, 255, 0.32); }
 
 /* ---------- Erişilebilirlik ---------- */
 
