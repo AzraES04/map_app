@@ -1309,6 +1309,71 @@ kbd {
 
 .btn-ghost.genis { width: 100%; flex: none; }
 
+/* Analiz listesi satırları tıklanabilir: haritada o kayda yaklaşır */
+.analiz-liste li {
+  cursor: pointer;
+  padding-inline: 4px;
+  border-radius: 6px;
+  transition: background var(--gecis);
+}
+
+.analiz-liste li:hover { background: var(--yuzey-2); }
+
+.analiz-ad {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analiz-liste li svg { color: var(--metin-soluk); flex-shrink: 0; }
+
+/* ---------- Klavye kısayolu künyesi ---------- */
+
+.kisayol-kunye {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--kenar);
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+  line-height: 2;
+}
+
+.kisayol-kunye kbd { margin-right: 2px; }
+
+/* ---------- Yükleme iskeleti ---------- */
+
+/*
+  Boş panel yerine "yapı" göstermek, algılanan bekleme süresini kısaltır:
+  kullanıcı neyin geleceğini görür. Parlama animasyonu (shimmer) tek bir
+  gradyanın kaydırılmasıyla yapılıyor — ek DOM veya JS yok.
+*/
+.geom-list.iskelet li { cursor: default; border-left-color: transparent; }
+.geom-list.iskelet li:hover { background: none; }
+
+.iskelet-satir {
+  display: block;
+  height: 10px;
+  margin: 4px 0;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--yuzey-2) 25%,
+    var(--yuzey-3) 50%,
+    var(--yuzey-2) 75%
+  );
+  background-size: 300% 100%;
+  animation: parla 1.4s ease-in-out infinite;
+}
+
+.iskelet-satir.kisa { width: 42%; height: 8px; opacity: 0.7; }
+
+@keyframes parla {
+  from { background-position: 100% 0; }
+  to   { background-position: -100% 0; }
+}
+
 /* ---------- ③ Katmanlar ---------- */
 
 .layer-toggle {
@@ -1482,6 +1547,64 @@ kbd {
 }
 
 .toast-eylem:hover { background: rgba(255, 255, 255, 0.32); }
+
+/* ---------- Hata sınırı (Error Boundary) ---------- */
+
+.hata-sinir {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(ellipse 120% 80% at 50% 0%,
+    var(--murekkep-800) 0%, var(--murekkep-900) 55%, var(--murekkep-950) 100%);
+}
+
+.hata-kart {
+  max-width: 420px;
+  text-align: center;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar-guclu);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px;
+  box-shadow: var(--shadow-lg), var(--isik-ust);
+}
+
+.hata-kart svg { color: var(--uyari); margin-bottom: 12px; }
+
+.hata-kart h1 { font-size: var(--yazi-lg); margin-bottom: 8px; }
+
+.hata-kart p {
+  color: var(--metin-orta);
+  font-size: var(--yazi-sm);
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.hata-kart .btn-primary {
+  width: 100%;
+  background: color-mix(in oklab, var(--marka-300) 22%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--marka-300) 55%, transparent);
+  color: #eafaff;
+}
+
+.hata-detay {
+  text-align: left;
+  margin-bottom: 18px;
+  font-size: var(--yazi-xs);
+}
+
+.hata-detay summary { cursor: pointer; color: var(--metin-soluk); }
+
+.hata-detay code {
+  display: block;
+  margin-top: 8px;
+  padding: 9px 10px;
+  background: var(--murekkep-950);
+  border-radius: var(--radius);
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--error);
+  word-break: break-word;
+}
 
 /* ---------- Erişilebilirlik ---------- */
 

@@ -1,5 +1,8 @@
 using System.Text;
+using System.Text.Json;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using StajProject.API.Middleware;
@@ -46,6 +49,48 @@ builder.Services
         };
     });
 builder.Services.AddAuthorization();
+
+// ---- Hız sınırı: kaba kuvvet (brute force) saldırısına karşı ----
+//
+// Login ucu sınırsız denenebiliyordu; saldırgan dakikada binlerce şifre
+// deneyebilirdi. .NET 8'in yerleşik rate limiter'ı ile IP başına
+// dakikada 5 deneme ile sınırlıyoruz.
+const string GirisPolitikasi = "giris";
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy(GirisPolitikasi, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            // Sayaç IP BAŞINA tutulur; bir kullanıcının denemeleri
+            // diğerlerini kilitlemez.
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "bilinmeyen",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,   // sıraya alma, doğrudan reddet
+            }));
+
+    // Reddedilen isteğe, frontend'in beklediği { message } biçiminde cevap ver.
+    options.OnRejected = async (context, iptal) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json; charset=utf-8";
+
+        // Kullanıcıya ne kadar bekleyeceğini söyle (hem başlıkta hem gövdede)
+        var saniye = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var sure)
+            ? (int)sure.TotalSeconds
+            : 60;
+        context.HttpContext.Response.Headers.RetryAfter = saniye.ToString();
+
+        await context.HttpContext.Response.WriteAsync(
+            JsonSerializer.Serialize(new
+            {
+                message = $"Çok fazla giriş denemesi yaptınız. {saniye} saniye sonra tekrar deneyin."
+            }),
+            iptal);
+    };
+});
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -97,6 +142,9 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseCors("AllowFrontend");
+
+// Hız sınırı, kimlik doğrulamadan ÖNCE: geçersiz istekler daha az iş yapsın diye
+app.UseRateLimiter();
 
 app.UseAuthentication();   // önce kimlik doğrulama (token'ı çözer)
 app.UseAuthorization();    // sonra yetkilendirme ([Authorize] kontrolü)

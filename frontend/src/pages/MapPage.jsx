@@ -143,6 +143,22 @@ function kayitStili(type) {
  * Kesikli, canlı pembe — kayıtlı hiçbir renge benzemiyor ki kullanıcı
  * "bu kaydedilmedi, sadece analiz için" mesajını görsel olarak alsın.
  */
+/**
+ * Analizde BULUNAN envanterlerin vurgusu.
+ * Sayı vermek yetmiyordu — kullanıcı "hangileri?" diye soruyordu.
+ * Kayıtların üstüne, analiz renginde bir halka/kalınlaştırma bindiriyoruz;
+ * kaydın kendi rengi altta görünmeye devam ettiği için kimlik kaybolmuyor.
+ */
+const analizBulunanStili = new Style({
+  image: new Circle({
+    radius: 12,
+    fill: new Fill({ color: 'rgba(255, 77, 125, 0.22)' }),
+    stroke: new Stroke({ color: ANALIZ_RENGI, width: 2.5 }),
+  }),
+  stroke: new Stroke({ color: ANALIZ_RENGI, width: 7 }),
+  fill: new Fill({ color: 'rgba(255, 77, 125, 0.14)' }),
+})
+
 const analizStili = new Style({
   stroke: new Stroke({ color: ANALIZ_RENGI, width: 3, lineDash: [10, 6] }),
   fill: new Fill({ color: 'rgba(255, 77, 125, 0.13)' }),
@@ -187,6 +203,13 @@ export default function MapPage() {
   const highlightSourceRef = useRef(null)
   const aracGrubuRef = useRef(null)    // kaydettikten sonra odağı geri vermek için
   const analizSourceRef = useRef(null) // geçici analiz poligonu (veritabanına gitmez)
+  const analizBulunanRef = useRef(null) // analizde bulunan envanterlerin vurgu katmanı
+  const aramaGirdiRef = useRef(null)    // "/" kısayolunun odaklanacağı arama kutusu
+  // Klavye dinleyicisi, aşağıda TANIMLANAN aracSec'i çağırmak zorunda. Doğrudan
+  // referans versek "temporal dead zone" hatası alırdık (bu projede bir kez yaşandı).
+  // Ref üzerinden erişmek hem o sorunu çözüyor hem de dinleyicinin her araç
+  // değişiminde sökülüp yeniden kurulmasını engelliyor.
+  const aracSecRef = useRef(() => {})
   const popupElement = useRef(null)    // popup'ın DOM kökü (OpenLayers konumlandırıyor)
   const popupOverlayRef = useRef(null)
   const toastZamanlayiciRef = useRef(null)
@@ -203,6 +226,8 @@ export default function MapPage() {
   // Envanter analizi sonucu (Ödev 4 / Görev 3): { total, pointCount, ... } | null
   const [analizSonuc, setAnalizSonuc] = useState(null)
   const [analizYukleniyor, setAnalizYukleniyor] = useState(false)
+  // İlk yüklemede panel bomboş kalmasın diye iskelet satırlar gösteriyoruz
+  const [kayitlarYukleniyor, setKayitlarYukleniyor] = useState(true)
   const [records, setRecords] = useState(BOS_KAYITLAR)
   const [visible, setVisible] = useState({ Point: true, LineString: true, Polygon: true })
   const [activeTab, setActiveTab] = useState('Point')
@@ -311,6 +336,22 @@ export default function MapPage() {
     try {
       const sonuc = await kesisimAnalizi(wkt, haricTutulanId, goLogin)
       setAnalizSonuc(sonuc)
+
+      // Bulunanları HARİTADA da göster: sadece sayı vermek "hangileri?"
+      // sorusunu cevapsız bırakıyordu.
+      const vurgu = analizBulunanRef.current
+      if (vurgu) {
+        vurgu.clear()
+        sonuc.items.forEach((item) => {
+          // Analiz sonucu WKT taşıyor; onu haritanın projeksiyonuna çevirip
+          // vurgu katmanına klon olarak koyuyoruz (orijinaller kendi
+          // katmanlarında kalsın, iki katmana birden feature konulamaz).
+          const feature = wktToFeature(item.wkt)
+          feature.setId(`analiz-${item.geometryType}-${item.id}`)
+          vurgu.addFeature(feature)
+        })
+      }
+
       return sonuc
     } catch (err) {
       if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
@@ -320,11 +361,20 @@ export default function MapPage() {
     }
   }, [goLogin, bildir])
 
-  /** Analiz poligonunu ve sonucunu haritadan kaldırır. */
+  /** Analiz poligonunu, bulunan vurgularını ve sonucu haritadan kaldırır. */
   const analizTemizle = useCallback(() => {
     analizSourceRef.current?.clear()
+    analizBulunanRef.current?.clear()
     setAnalizSonuc(null)
   }, [])
+
+  /** Analiz listesindeki bir kayda tıklanınca haritayı ona götür. */
+  const analizOgesineGit = useCallback((item) => {
+    const feature = analizBulunanRef.current?.getFeatureById(
+      `analiz-${item.geometryType}-${item.id}`,
+    )
+    odaklanFeature(feature)
+  }, [odaklanFeature])
 
   const popupKapat = useCallback(() => {
     setSecili(null)
@@ -445,6 +495,7 @@ export default function MapPage() {
   }, [goLogin, bildir])
 
   const yukle = useCallback(async () => {
+    setKayitlarYukleniyor(true)
     try {
       // Üç isteği paralel atıyoruz; sırayla beklemenin anlamı yok.
       const [points, lines, polygons] = await Promise.all(
@@ -475,6 +526,8 @@ export default function MapPage() {
     } catch (err) {
       // 401 ise authFetch zaten login'e yönlendirdi; diğer hataları gösteriyoruz.
       if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    } finally {
+      setKayitlarYukleniyor(false)
     }
   }, [goLogin, bildir])
 
@@ -510,6 +563,9 @@ export default function MapPage() {
     const analizSource = new VectorSource()
     analizSourceRef.current = analizSource
 
+    const analizBulunanSource = new VectorSource()
+    analizBulunanRef.current = analizBulunanSource
+
     // Açılış sahnesi oynatılsın mı? Karar auth.js'te (login ekranı da aynı
     // bayrağı kullanıyor: giriş yapılınca sıfırlanıyor ki sahne mutlaka oynasın).
     const girisOynat = girisAnimasyonuOynasinMi()
@@ -531,6 +587,8 @@ export default function MapPage() {
         layers.LineString,
         layers.Point,
         new VectorLayer({ source: drawSource, style: taslakStili }),
+        // Bulunanlar analiz poligonunun ALTINDA: poligonun kesikli kenarı üstte kalsın
+        new VectorLayer({ source: analizBulunanSource, style: analizBulunanStili }),
         new VectorLayer({ source: analizSource, style: analizStili }),
         new VectorLayer({ source: highlightSource, style: vurguStili }),
       ],
@@ -714,6 +772,7 @@ export default function MapPage() {
     // Yeni analiz başlarken önceki alanı ve sonucu sil (tek analiz aynı anda).
     draw.on('drawstart', () => {
       analizSourceRef.current.clear()
+      analizBulunanRef.current?.clear()
       setAnalizSonuc(null)
     })
 
@@ -848,27 +907,58 @@ export default function MapPage() {
   // ------------------------------------------------------------------------
   useEffect(() => {
     const onKeyDown = (e) => {
-      // Kullanıcı forma yazı yazıyorsa kısayolları çalıştırma!
-      // Bu kontrol olmadan ad alanında Backspace'e basmak çizimin son
-      // noktasını silerdi.
       const tag = e.target.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      const yaziyor = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable
 
+      // "/" → arama kutusuna atla. Yazarken çalışmamalı, o yüzden ilk kontrol bu.
+      if (e.key === '/' && !yaziyor) {
+        e.preventDefault()
+        aramaGirdiRef.current?.focus()
+        aramaGirdiRef.current?.select()
+        return
+      }
+
+      // Esc, metin alanındayken de çalışsın: açık popup'ı kapatmanın en doğal yolu.
       if (e.key === 'Escape') {
         drawRef.current?.abortDrawing()      // yarım çizimi iptal et
         drawSourceRef.current?.clear()
         setPending(null)
+        popupKapat()
+        e.target.blur?.()                    // odak metin alanındaysa bırak
+        return
       }
+
+      // Bundan sonrası yalnızca yazı yazılmıyorken. Bu kontrol olmadan ad
+      // alanında Backspace'e basmak çizimin son noktasını silerdi.
+      if (yaziyor) return
 
       if (e.key === 'Backspace' && drawRef.current) {
         e.preventDefault()                   // tarayıcı "geri" gitmesin
         drawRef.current.removeLastPoint()
+        return
+      }
+
+      // Değiştirici tuşlarla birlikte basılmışsa tarayıcının kısayolu olabilir
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+
+      // Araç kısayolları: 1/2/3 çizim, D düzenle, A analiz
+      const kisayollar = {
+        '1': DRAW_TYPE_KEYS[0],
+        '2': DRAW_TYPE_KEYS[1],
+        '3': DRAW_TYPE_KEYS[2],
+        d: DUZENLE,
+        a: ANALIZ,
+      }
+      const arac = kisayollar[e.key.toLowerCase()]
+      if (arac) {
+        e.preventDefault()
+        aracSecRef.current(arac)
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [popupKapat])
 
   // ------------------------------------------------------------------------
   //  Katman görünürlüğü
@@ -928,6 +1018,9 @@ export default function MapPage() {
     setPending(null)
     popupKapat()
   }
+
+  // Klavye dinleyicisinin çağırabilmesi için güncel fonksiyonu ref'te tut
+  aracSecRef.current = aracSec
 
   const vazgec = () => {
     drawSourceRef.current?.clear()
@@ -1318,10 +1411,11 @@ export default function MapPage() {
 
             <div className="arama-kutusu">
               <input
+                ref={aramaGirdiRef}
                 type="search"
                 value={arama}
                 onChange={(e) => setArama(e.target.value)}
-                placeholder="Örn: Anıtkabir, Sultanahmet…"
+                placeholder="Örn: Anıtkabir, Sultanahmet…  ( / )"
                 aria-label="Yer ara"
               />
               {arama && (
@@ -1425,6 +1519,14 @@ export default function MapPage() {
             ) : (
               <p className="tool-hint muted">Çizime başlamak için bir araç seçin.</p>
             )}
+
+            {/* Kısayol künyesi — araç seçili değilken görünür, yer kaplamasın */}
+            {!activeTool && (
+              <p className="kisayol-kunye">
+                <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> araçlar ·
+                <kbd>D</kbd> düzenle · <kbd>A</kbd> analiz · <kbd>/</kbd> ara
+              </p>
+            )}
           </section>
 
           {/* ---------- ② ANALİZ SONUCU (Ödev 4 / Görev 3) ---------- */}
@@ -1461,11 +1563,16 @@ export default function MapPage() {
                   {analizSonuc.items.length > 0 && (
                     <ul className="analiz-liste">
                       {analizSonuc.items.map((item) => (
-                        <li key={`${item.geometryType}-${item.id}`}>
+                        <li
+                          key={`${item.geometryType}-${item.id}`}
+                          onClick={() => analizOgesineGit(item)}
+                          title="Haritada bu kayda yaklaş"
+                        >
                           <span className="dot" style={{
                             background: item.color || DRAW_TYPES[item.geometryType].color,
                           }} />
-                          {item.name}
+                          <span className="analiz-ad">{item.name}</span>
+                          <TipIkonu tip={item.geometryType} size={12} />
                         </li>
                       ))}
                     </ul>
@@ -1515,7 +1622,21 @@ export default function MapPage() {
               ))}
             </div>
 
-            {records[activeTab].length === 0 ? (
+            {kayitlarYukleniyor && records[activeTab].length === 0 ? (
+              /* İSKELET: veri gelene kadar boş panel yerine yapı göster.
+                 aria-hidden — ekran okuyucuya sahte satır okutmanın anlamı yok;
+                 durumu aşağıdaki aria-live bölgesi bildiriyor. */
+              <ul className="geom-list iskelet" aria-hidden="true">
+                {[0, 1, 2].map((i) => (
+                  <li key={i}>
+                    <div className="geom-bilgi">
+                      <span className="iskelet-satir" style={{ width: `${68 - i * 12}%` }} />
+                      <span className="iskelet-satir kisa" />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : records[activeTab].length === 0 ? (
               <p className="bos-durum">
                 <span className="bos-ikon"><TipIkonu tip={activeTab} size={30} /></span>
                 Henüz {DRAW_TYPES[activeTab].label.toLowerCase()} kaydı yok.

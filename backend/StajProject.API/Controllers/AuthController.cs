@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using StajProject.Business.DTOs;
 using StajProject.Business.Services;
 
@@ -15,8 +16,12 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
-    /// <summary>Kullanıcı adı ve şifre ile giriş yapar, başarılıysa JWT döner.</summary>
+    /// <summary>
+    /// Kullanıcı adı ve şifre ile giriş yapar, başarılıysa JWT döner.
+    /// IP başına dakikada 5 deneme ile sınırlıdır (kaba kuvvet koruması).
+    /// </summary>
     [HttpPost("login")]
+    [EnableRateLimiting("giris")]
     public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginRequestDto request)
     {
         var response = await _authService.LoginAsync(request);
