@@ -98,6 +98,29 @@ builder.Services.AddEndpointsApiExplorer();
 // Swagger'a "Authorize" düğmesi ekle
 builder.Services.AddSwaggerGen(options =>
 {
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "StajProject API",
+        Version = "v1",
+        Description =
+            "Katmanlı mimari (API → Business → DataAccess → Entities), PostGIS geometri " +
+            "tabloları ve WKT tabanlı veri transferi. Geometriler EPSG:4326 (WGS84) " +
+            "olarak saklanır; harita EPSG:3857 kullandığı için dönüşüm istemcide yapılır.",
+    });
+
+    // Kodda yazdığımız /// <summary> açıklamalarını Swagger'a taşı.
+    // İki dosya: uç açıklamaları API'den, DTO alan açıklamaları Business'tan.
+    foreach (var xml in new[] { "StajProject.API.xml", "StajProject.Business.xml" })
+    {
+        var yol = Path.Combine(AppContext.BaseDirectory, xml);
+        if (File.Exists(yol))
+        {
+            // includeControllerXmlComments: controller sınıfının kendi
+            // <summary>'sini de grup açıklaması olarak göster
+            options.IncludeXmlComments(yol, includeControllerXmlComments: true);
+        }
+    }
+
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",

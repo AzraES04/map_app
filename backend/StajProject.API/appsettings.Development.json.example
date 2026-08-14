@@ -1,0 +1,20 @@
+{
+  "//": [
+    "ŞABLON DOSYA — bunu kopyalayıp adındaki '.example' ekini silin:",
+    "  appsettings.Development.json.example  →  appsettings.Development.json",
+    "",
+    "Sonra kendi değerlerinizi girin. Asıl dosya .gitignore'da olduğu için",
+    "git'e gitmez; sırlarınız depoda görünmez.",
+    "",
+    "ASP.NET Core yapılandırmayı katman katman okur:",
+    "  appsettings.json  →  appsettings.<Ortam>.json  →  ortam değişkenleri",
+    "Sonraki katman öncekini EZER. Bu yüzden burada yalnızca DEĞİŞEN",
+    "anahtarları yazmak yeterli; Issuer/Audience gibi sabitler appsettings.json'da kalır."
+  ],
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=staj_db;Username=stajyer;Password=SIFRENIZ"
+  },
+  "Jwt": {
+    "Key": "EN-AZ-32-KARAKTERLIK-KENDI-GIZLI-ANAHTARINIZ"
+  }
+}
