@@ -1,4 +1,4 @@
-using StajProject.Entities;
+﻿using StajProject.Entities;
 
 namespace StajProject.DataAccess.Repositories;
 
@@ -13,8 +13,17 @@ namespace StajProject.DataAccess.Repositories;
 /// <typeparam name="TEntity">PointEntity, LineEntity veya PolygonEntity.</typeparam>
 public interface IGeometryRepository<TEntity> where TEntity : GeometryEntityBase
 {
-    Task<List<TEntity>> GetAllAsync();
-    Task<TEntity?> GetByIdAsync(int id);
+    /// <summary>
+    /// Kayıtları listeler. <paramref name="userId"/> verilirse YALNIZCA o
+    /// kullanıcının çizimleri döner (Ödev 5); null ise tümü.
+    /// </summary>
+    Task<List<TEntity>> GetAllAsync(int? userId = null);
+
+    /// <summary>
+    /// Tek kayıt. <paramref name="userId"/> verilirse başkasının kaydı
+    /// bulunmuş sayılmaz — yetkisiz erişim "yok" olarak cevaplanır.
+    /// </summary>
+    Task<TEntity?> GetByIdAsync(int id, int? userId = null);
     Task<TEntity> AddAsync(TEntity entity);
     Task<TEntity?> UpdateAsync(TEntity entity);
 

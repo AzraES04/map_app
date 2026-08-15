@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace StajProject.Business.DTOs;
 
@@ -28,7 +28,11 @@ public class GeometryDto
     /// <summary>Kullanıcının seçtiği renk (#RRGGBB).</summary>
     public string? Color { get; set; }
 
-    public DateTime CreatedAt { get; set; }
+    /// <summary>Kaydın oluşturulma anı (UTC).</summary>
+    public DateTime InsertedDate { get; set; }
+
+    /// <summary>Kaydı oluşturan kullanıcının id'si.</summary>
+    public int? InsertedUserId { get; set; }
     public DateTime? ModifiedDate { get; set; }
     public bool IsActive { get; set; }
 }

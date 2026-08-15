@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations.Schema;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 using NetTopologySuite.Geometries;
 
 namespace StajProject.Entities;
@@ -17,7 +17,8 @@ public interface IGeometryEntity : IAuditableEntity
     string? Description { get; set; }
     string? ImageUrl { get; set; }
     string? Color { get; set; }
-    DateTime CreatedAt { get; set; }
+    DateTime InsertedDate { get; set; }
+    int? InsertedUserId { get; set; }
 
     // Durum kolonları (is_deleted / is_active / modified_date) IAuditableEntity'den geliyor.
 }
@@ -49,7 +50,15 @@ public abstract class GeometryEntityBase : IGeometryEntity
     /// </summary>
     public string? Color { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>Kaydın oluşturulma anı (UTC). Ödev 5 — izleme kolonu.</summary>
+    public DateTime InsertedDate { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Kaydı oluşturan kullanıcının id'si (Ödev 5 — izleme kolonu).
+    /// Harita yalnızca giriş yapan kullanıcının çizimlerini listelerken
+    /// bu kolona göre süzüyor. Nullable: eski kayıtlarda sahip bilgisi yok.
+    /// </summary>
+    public int? InsertedUserId { get; set; }
 
     public bool IsDeleted { get; set; } = false;
 

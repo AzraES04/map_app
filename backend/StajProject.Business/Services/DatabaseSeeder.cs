@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using NetTopologySuite.Geometries;
 using StajProject.Business.Geo;
 using StajProject.DataAccess.Repositories;
@@ -91,7 +91,7 @@ public class DatabaseSeeder : IDatabaseSeeder
             entity.Name = ornek.Ad;
             entity.Description = ornek.Aciklama;
             entity.Color = ornek.Renk;
-            entity.CreatedAt = DateTime.UtcNow;
+            entity.InsertedDate = DateTime.UtcNow;
 
             await repository.AddAsync(entity);
         }

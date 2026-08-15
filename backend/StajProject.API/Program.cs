@@ -6,7 +6,9 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using StajProject.API.Middleware;
+using StajProject.API.Services;
 using StajProject.Business;
+using StajProject.Business.Services;
 using StajProject.Business.Auth;
 using StajProject.DataAccess;
 
@@ -28,6 +30,12 @@ var builder = WebApplication.CreateBuilder(args);
 // ---- Katman kayıtları ----
 builder.Services.AddDataAccessLayer(builder.Configuration);
 builder.Services.AddBusinessLayer(builder.Configuration);
+
+// Giriş yapan kullanıcıyı iş katmanına taşıyan servis (Ödev 5).
+// Arayüzü Business'ta, gerçeklemesi burada: HttpContext bir SUNUM ayrıntısıdır,
+// iş katmanının ondan haberi olmamalı.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 // ---- JWT kimlik doğrulama (sunum katmanının işi) ----
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtSettings>()!;

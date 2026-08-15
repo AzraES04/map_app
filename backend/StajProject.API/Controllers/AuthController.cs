@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using StajProject.Business.DTOs;
 using StajProject.Business.Services;
@@ -10,10 +10,12 @@ namespace StajProject.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, ILogger<AuthController> logger)
     {
         _authService = authService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -24,12 +26,25 @@ public class AuthController : ControllerBase
     [EnableRateLimiting("giris")]
     public async Task<ActionResult<LoginResponseDto>> Login([FromBody] LoginRequestDto request)
     {
-        var response = await _authService.LoginAsync(request);
-        if (response is null)
+        // Ödev 5 / Madde 1: standart hata yönetimi kalıbı
+        try
         {
-            return Unauthorized(new { message = "Kullanıcı adı veya şifre hatalı." });
-        }
+            var response = await _authService.LoginAsync(request);
+            if (response is null)
+            {
+                // Kullanıcı yok, şifre yanlış, hesap pasif veya silinmiş —
+                // hepsine AYNI cevap. Farklı mesaj vermek saldırgana
+                // "bu kullanıcı adı var" bilgisini doğrulardı.
+                return Unauthorized(new { message = "Kullanıcı adı veya şifre hatalı." });
+            }
 
-        return Ok(response);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Giriş sırasında beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "Giriş yapılamadı. Lütfen tekrar deneyin." });
+        }
     }
 }

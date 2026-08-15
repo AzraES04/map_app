@@ -241,6 +241,9 @@ export default function MapPage() {
   const [uzaySahnesi, setUzaySahnesi] = useState(() => (girisAnimasyonuOynasinMi() ? 'kure' : null))
   // Haritada tıklanan geometrinin popup içeriği: { dto, tip, ozet } | null
   const [secili, setSecili] = useState(null)
+  // Ödev 5 / Madde 4: detay popup'ında düzenleme modu
+  const [duzenleForm, setDuzenleForm] = useState(null)   // { name, color } | null
+  const [kaydediliyor, setKaydediliyor] = useState(false)
 
   // --- Yer arama ---
   const [arama, setArama] = useState('')
@@ -378,6 +381,7 @@ export default function MapPage() {
 
   const popupKapat = useCallback(() => {
     setSecili(null)
+    setDuzenleForm(null)      // düzenleme modu açıksa o da kapansın
     popupOverlayRef.current?.setPosition(undefined)   // undefined = popup'ı gizle
   }, [])
 
@@ -1101,6 +1105,16 @@ export default function MapPage() {
   }
 
   const handleDelete = async (type, dto) => {
+    // Ödev 5 / Madde 5: silmeden önce onay penceresi.
+    // Onaya rağmen "Geri al" bildirimini de bırakıyoruz — onay yanlışlıkla
+    // tıklamayı engeller, geri alma ise yanlış kaydı seçmeyi kurtarır.
+    const onay = window.confirm(
+      `"${dto.name}" kaydı silinecek.\n\n`
+      + 'Kayıt veritabanından tamamen silinmez; is_deleted = true yapılarak '
+      + 'gizlenir ve istenirse geri alınabilir.\n\nDevam edilsin mi?',
+    )
+    if (!onay) return
+
     try {
       await sil(DRAW_TYPES[type].endpoint, dto.id, goLogin)
       temizleVurgu()
@@ -1121,6 +1135,58 @@ export default function MapPage() {
       })
     } catch (err) {
       if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    }
+  }
+
+  // ------------------------------------------------------------------------
+  //  Ödev 5 / Madde 4 — detay popup'ından güncelleme
+  // ------------------------------------------------------------------------
+
+  /** Düzenleme moduna geç: mevcut değerlerle formu doldur. */
+  const duzenlemeyeBasla = () => {
+    if (!secili) return
+    setDuzenleForm({
+      name: secili.dto.name,
+      color: secili.dto.color || DRAW_TYPES[secili.tip].color,
+    })
+  }
+
+  const duzenlemeVazgec = () => setDuzenleForm(null)
+
+  /**
+   * Ad, renk ve GEOMETRİYİ kaydeder.
+   *
+   * Geometri, haritada o an duran feature'dan okunuyor: kullanıcı "Düzenle"
+   * dedikten sonra köşeleri sürükleyip şekli değiştirebiliyor ve kaydettiğinde
+   * güncel hâli gidiyor. Böylece tek ekrandan hem öznitelik hem konum
+   * güncellenebiliyor — ödevin istediği bu.
+   */
+  const duzenlemeKaydet = async (e) => {
+    e.preventDefault()
+    if (!secili || !duzenleForm) return
+
+    setKaydediliyor(true)
+    try {
+      const feature = featureBul(secili.tip, secili.dto)
+      const govde = {
+        name: duzenleForm.name.trim(),
+        description: secili.dto.description || null,
+        imageUrl: secili.dto.imageUrl || null,
+        color: duzenleForm.color,
+        // Haritadaki güncel geometri → 4326 WKT
+        wkt: feature ? geometryToWkt(feature.getGeometry()) : null,
+      }
+
+      await guncelle(DRAW_TYPES[secili.tip].endpoint, secili.dto.id, govde, goLogin)
+
+      setDuzenleForm(null)
+      popupKapat()
+      await yukle()
+      bildir('ok', `"${govde.name}" güncellendi.`)
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    } finally {
+      setKaydediliyor(false)
     }
   }
 
@@ -1368,35 +1434,90 @@ export default function MapPage() {
                   <dt>Konum</dt>
                   <dd>{secili.ozet}</dd>
                   <dt>Eklendi</dt>
-                  <dd>{new Date(secili.dto.createdAt).toLocaleString('tr-TR')}</dd>
+                  <dd>{new Date(secili.dto.insertedDate).toLocaleString('tr-TR')}</dd>
+                  {secili.dto.modifiedDate && (
+                    <>
+                      <dt>Güncellendi</dt>
+                      <dd>{new Date(secili.dto.modifiedDate).toLocaleString('tr-TR')}</dd>
+                    </>
+                  )}
                 </dl>
 
-                <div className="popup-eylemler">
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => odaklan(secili.tip, secili.dto)}
-                  >
-                    Yakınlaş
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    onClick={() => handleAktiflik(secili.tip, secili.dto)}
-                    title={secili.dto.isActive
-                      ? 'Kaydı askıya al (silinmez, listede pasif görünür)'
-                      : 'Kaydı yeniden aktif et'}
-                  >
-                    {secili.dto.isActive ? 'Askıya al' : 'Aktif et'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-ghost sil"
-                    onClick={() => handleDelete(secili.tip, secili.dto)}
-                  >
-                    <SilIkonu />
-                  </button>
-                </div>
+                {/* ---- Ödev 5 / Madde 4: düzenleme formu ---- */}
+                {duzenleForm ? (
+                  <form className="popup-duzenle" onSubmit={duzenlemeKaydet}>
+                    <label htmlFor="d-ad">İsim</label>
+                    <input
+                      id="d-ad"
+                      value={duzenleForm.name}
+                      onChange={(e) => setDuzenleForm({ ...duzenleForm, name: e.target.value })}
+                      maxLength={200}
+                      required
+                      autoFocus
+                    />
+
+                    <label>Renk</label>
+                    <div className="renk-secici">
+                      {RENK_SECENEKLERI.map((r) => (
+                        <button
+                          key={r.deger}
+                          type="button"
+                          className={`renk-nokta${duzenleForm.color === r.deger ? ' secili' : ''}`}
+                          style={{ background: r.deger }}
+                          title={r.ad}
+                          aria-label={r.ad}
+                          aria-pressed={duzenleForm.color === r.deger}
+                          onClick={() => setDuzenleForm({ ...duzenleForm, color: r.deger })}
+                        />
+                      ))}
+                      <input
+                        type="color"
+                        className="renk-ozel"
+                        value={duzenleForm.color}
+                        onChange={(e) => setDuzenleForm({ ...duzenleForm, color: e.target.value })}
+                        title="Özel renk seç"
+                      />
+                    </div>
+
+                    <p className="duzenle-ipucu">
+                      Konumu değiştirmek için <kbd>D</kbd> ile <strong>Düzenle</strong> aracını
+                      açıp köşeleri sürükleyin, sonra buradan kaydedin.
+                    </p>
+
+                    <div className="popup-eylemler">
+                      <button type="submit" className="btn-primary"
+                              disabled={kaydediliyor || !duzenleForm.name.trim()}>
+                        {kaydediliyor ? 'Kaydediliyor…' : 'Kaydet'}
+                      </button>
+                      <button type="button" className="btn-ghost" onClick={duzenlemeVazgec}
+                              disabled={kaydediliyor}>
+                        Vazgeç
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="popup-eylemler">
+                    <button type="button" className="btn-primary" onClick={duzenlemeyeBasla}>
+                      Düzenle
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => odaklan(secili.tip, secili.dto)}
+                      title="Haritada bu kayda yaklaş"
+                    >
+                      Yakınlaş
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost sil"
+                      onClick={() => handleDelete(secili.tip, secili.dto)}
+                      title="Sil (soft delete — geri alınabilir)"
+                    >
+                      <SilIkonu />
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

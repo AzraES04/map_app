@@ -1650,3 +1650,34 @@ kbd {
   .koordinat-gostergesi { font-size: 0.68rem; padding: 4px 8px; }
   .map-container .ol-scale-line { bottom: 56px; }
 }
+
+/* ---------- Detay popup'ında düzenleme (Ödev 5 / Madde 4) ---------- */
+
+.popup-duzenle { display: flex; flex-direction: column; }
+
+.popup-duzenle label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--kart-metin-soluk);
+  margin-bottom: 4px;
+}
+
+.popup-duzenle input[type='text'],
+.popup-duzenle input:not([type]) {
+  padding: 7px 9px;
+  margin-bottom: 9px;
+  border: 1px solid #cfd9e2;
+  border-radius: var(--radius);
+  font-size: 0.83rem;
+  font-family: inherit;
+}
+
+.duzenle-ipucu {
+  font-size: 0.74rem;
+  color: var(--kart-metin-soluk);
+  line-height: 1.45;
+  margin: 0 0 10px;
+  padding: 7px 9px;
+  background: var(--kart-2);
+  border-radius: var(--radius);
+}

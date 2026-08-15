@@ -27,19 +27,24 @@ public class GeometryRepository<TEntity> : IGeometryRepository<TEntity>
     /// </summary>
     private DbSet<TEntity> Table => _context.Set<TEntity>();
 
-    public async Task<List<TEntity>> GetAllAsync()
+    /// <summary>
+    /// Sahiplik süzgeci. userId null ise koşul eklenmez.
+    /// Tek yerde tanımlı: listeleme, tekil getirme ve güncelleme aynı kuralı kullansın.
+    /// </summary>
+    private static IQueryable<TEntity> SahibeGore(IQueryable<TEntity> sorgu, int? userId)
+        => userId is null ? sorgu : sorgu.Where(e => e.InsertedUserId == userId);
+
+    public async Task<List<TEntity>> GetAllAsync(int? userId = null)
     {
         // Global query filter (!IsDeleted) burada otomatik uygulanır: silinenler gelmez.
-        return await Table
-            .AsNoTracking()
-            .OrderByDescending(e => e.CreatedAt)
+        return await SahibeGore(Table.AsNoTracking(), userId)
+            .OrderByDescending(e => e.InsertedDate)
             .ToListAsync();
     }
 
-    public async Task<TEntity?> GetByIdAsync(int id)
+    public async Task<TEntity?> GetByIdAsync(int id, int? userId = null)
     {
-        return await Table
-            .AsNoTracking()
+        return await SahibeGore(Table.AsNoTracking(), userId)
             .FirstOrDefaultAsync(e => e.Id == id);
     }
 
@@ -53,6 +58,7 @@ public class GeometryRepository<TEntity> : IGeometryRepository<TEntity>
     public async Task<TEntity?> UpdateAsync(TEntity entity)
     {
         // AsNoTracking YOK: değiştirip kaydedeceğimiz için EF'in nesneyi takip etmesi gerekiyor.
+        // Sahiplik kontrolü serviste yapıldı; buraya gelen entity zaten doğrulanmış.
         var current = await Table.FirstOrDefaultAsync(e => e.Id == entity.Id);
         if (current is null)
         {

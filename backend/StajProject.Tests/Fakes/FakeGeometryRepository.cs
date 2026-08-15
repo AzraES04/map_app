@@ -13,13 +13,17 @@ public class FakeGeometryRepository<TEntity> : IGeometryRepository<TEntity>
     private readonly List<TEntity> _store = new();
     private int _nextId = 1;
 
-    public Task<List<TEntity>> GetAllAsync()
+    // Ödev 5: userId verilirse yalnızca o kullanıcının kayıtları döner.
+    public Task<List<TEntity>> GetAllAsync(int? userId = null)
         => Task.FromResult(_store.Where(e => !e.IsDeleted)
-                                 .OrderByDescending(e => e.CreatedAt)
+                                 .Where(e => userId == null || e.InsertedUserId == userId)
+                                 .OrderByDescending(e => e.InsertedDate)
                                  .ToList());
 
-    public Task<TEntity?> GetByIdAsync(int id)
-        => Task.FromResult(_store.FirstOrDefault(e => e.Id == id && !e.IsDeleted));
+    public Task<TEntity?> GetByIdAsync(int id, int? userId = null)
+        => Task.FromResult(_store.FirstOrDefault(e =>
+               e.Id == id && !e.IsDeleted &&
+               (userId == null || e.InsertedUserId == userId)));
 
     public Task<TEntity> AddAsync(TEntity entity)
     {

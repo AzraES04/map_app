@@ -1,6 +1,7 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StajProject.Business.DTOs;
+using StajProject.Business.Geo;
 using StajProject.Business.Services;
 
 namespace StajProject.API.Controllers;
@@ -15,10 +16,12 @@ namespace StajProject.API.Controllers;
 public class AnalysisController : ControllerBase
 {
     private readonly IAnalysisService _analysisService;
+    private readonly ILogger<AnalysisController> _logger;
 
-    public AnalysisController(IAnalysisService analysisService)
+    public AnalysisController(IAnalysisService analysisService, ILogger<AnalysisController> logger)
     {
         _analysisService = analysisService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -28,6 +31,21 @@ public class AnalysisController : ControllerBase
     [HttpPost("intersect")]
     public async Task<ActionResult<AnalysisResultDto>> Intersect([FromBody] AnalysisRequestDto request)
     {
-        return Ok(await _analysisService.KesisimAnaliziAsync(request));
+        // Ödev 5 / Madde 1: standart hata yönetimi kalıbı
+        try
+        {
+            return Ok(await _analysisService.KesisimAnaliziAsync(request));
+        }
+        catch (WktFormatException ex)
+        {
+            _logger.LogWarning(ex, "Geçersiz analiz alanı");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Analiz sırasında beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "Analiz yapılamadı. Lütfen tekrar deneyin." });
+        }
     }
 }

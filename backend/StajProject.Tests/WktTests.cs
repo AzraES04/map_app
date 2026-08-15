@@ -110,7 +110,7 @@ public class WktTests
     // ---------------- Servis katmanı ----------------
 
     private static GeometryService<PointEntity, Point> CreatePointService()
-        => new(new FakeGeometryRepository<PointEntity>());
+        => new(new FakeGeometryRepository<PointEntity>(), new FakeCurrentUserService(userId: 1));
 
     [Fact]
     public async Task CreateAsync_WktKaydeder_VeWktOlarakGeriDoner()

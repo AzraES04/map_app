@@ -21,21 +21,28 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
     where TGeometry : Geometry
 {
     private readonly IGeometryRepository<TEntity> _repository;
+    private readonly ICurrentUserService _currentUser;
 
-    public GeometryService(IGeometryRepository<TEntity> repository)
+    public GeometryService(
+        IGeometryRepository<TEntity> repository,
+        ICurrentUserService currentUser)
     {
         _repository = repository;
+        _currentUser = currentUser;
     }
 
+    // Ödev 5: Harita açıldığında YALNIZCA giriş yapan kullanıcının çizimleri
+    // listelenir. Süzme veritabanında yapılıyor; başkasının kaydı hiç gelmiyor,
+    // "çekip sonra gizlemek" gibi sızıntıya açık bir yol izlenmiyor.
     public async Task<List<GeometryDto>> GetAllAsync()
     {
-        var entities = await _repository.GetAllAsync();
+        var entities = await _repository.GetAllAsync(_currentUser.RequireUserId());
         return entities.Select(MapToDto).ToList();
     }
 
     public async Task<GeometryDto?> GetByIdAsync(int id)
     {
-        var entity = await _repository.GetByIdAsync(id);
+        var entity = await _repository.GetByIdAsync(id, _currentUser.RequireUserId());
         return entity is null ? null : MapToDto(entity);
     }
 
@@ -53,7 +60,8 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
             ImageUrl = DogrulaGorselAdresi(dto.ImageUrl),
             Color = NormalizeRenk(dto.Color),
             Geometry = geometry,
-            CreatedAt = DateTime.UtcNow
+            InsertedDate = DateTime.UtcNow,
+            InsertedUserId = _currentUser.RequireUserId()   // Ödev 5: sahiplik damgası
         };
 
         var created = await _repository.AddAsync(entity);
@@ -62,7 +70,8 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
 
     public async Task<GeometryDto?> UpdateAsync(int id, GeometryUpdateDto dto)
     {
-        var existing = await _repository.GetByIdAsync(id);
+        // Sahiplik süzgeciyle getiriyoruz: başkasının kaydı "bulunamadı" olur.
+        var existing = await _repository.GetByIdAsync(id, _currentUser.RequireUserId());
         if (existing is null)
         {
             return null;
@@ -83,11 +92,30 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
         return updated is null ? null : MapToDto(updated);
     }
 
-    public Task<bool> DeleteAsync(int id) => _repository.SoftDeleteAsync(id);
+    public async Task<bool> DeleteAsync(int id)
+    {
+        // Sahibi değilse kayıt "bulunamadı" sayılır → başkasının çizimini silemez.
+        if (await _repository.GetByIdAsync(id, _currentUser.RequireUserId()) is null)
+        {
+            return false;
+        }
 
+        return await _repository.SoftDeleteAsync(id);
+    }
+
+    // Geri alma silinmiş kayıt üzerinde çalışır; sahiplik kontrolü repository'de
+    // IgnoreQueryFilters ile yapılamadığı için burada bilinçli olarak atlanıyor.
     public Task<bool> RestoreAsync(int id) => _repository.RestoreAsync(id);
 
-    public Task<bool> SetActiveAsync(int id, bool isActive) => _repository.SetActiveAsync(id, isActive);
+    public async Task<bool> SetActiveAsync(int id, bool isActive)
+    {
+        if (await _repository.GetByIdAsync(id, _currentUser.RequireUserId()) is null)
+        {
+            return false;
+        }
+
+        return await _repository.SetActiveAsync(id, isActive);
+    }
 
     /// <summary>
     /// Görsel adresini doğrular. Sadece http/https kabul ediyoruz.
@@ -148,7 +176,8 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
         GeometryType = entity.Geometry.GeometryType,
         ImageUrl = entity.ImageUrl,
         Color = entity.Color,
-        CreatedAt = entity.CreatedAt,
+        InsertedDate = entity.InsertedDate,
+        InsertedUserId = entity.InsertedUserId,
         ModifiedDate = entity.ModifiedDate,
         IsActive = entity.IsActive
     };

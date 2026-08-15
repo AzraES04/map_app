@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StajProject.Business.DTOs;
+using StajProject.Business.Geo;
 using StajProject.Business.Services;
 using StajProject.Entities;
 
@@ -12,102 +13,144 @@ namespace StajProject.API.Controllers;
 /// abstract → ASP.NET Core bunu tek başına bir controller olarak keşfetmez;
 /// sadece PointsController / LinesController / PolygonsController'a gövde sağlar.
 /// [Route] ve [ApiController] öznitelikleri de bilerek burada değil, türeyen sınıflarda.
+///
+/// HATA YÖNETİMİ (Ödev 5 / Madde 1)
+/// Her uç try-catch ile sarılıdır ve hepsi AYNI kalıbı izler:
+///   WktFormatException → 400 (istemcinin gönderdiği veri hatalı)
+///   Exception          → 500 (sunucu hatası; ayrıntı log'a, istemciye genel mesaj)
+/// Kalıbın tek yerde durması için gövdeler <see cref="Calistir{T}"/> yardımcılarına
+/// verilir; böylece "standartlaştırma" gerçekten standart olur — 7 uçta 7 farklı
+/// catch bloğu yazılmaz. ExceptionHandlingMiddleware de son güvenlik ağı olarak durur.
 /// </summary>
 [Authorize]  // üç controller da JWT ister; token yoksa/süresi dolduysa 401
 public abstract class GeometryControllerBase<TEntity> : ControllerBase
     where TEntity : GeometryEntityBase
 {
     private readonly IGeometryService<TEntity> _service;
+    private readonly ILogger _logger;
 
-    protected GeometryControllerBase(IGeometryService<TEntity> service)
+    protected GeometryControllerBase(IGeometryService<TEntity> service, ILogger logger)
     {
         _service = service;
+        _logger = logger;
     }
 
-    /// <summary>Silinmemiş tüm kayıtları WKT formatında listeler.</summary>
+    /// <summary>Giriş yapan kullanıcının kayıtlarını WKT formatında listeler.</summary>
     [HttpGet]
-    public async Task<ActionResult<List<GeometryDto>>> GetAll()
-    {
-        return Ok(await _service.GetAllAsync());
-    }
+    public Task<ActionResult<List<GeometryDto>>> GetAll()
+        => Calistir<List<GeometryDto>>(async () => Ok(await _service.GetAllAsync()));
 
-    /// <summary>Id ile tek kayıt.</summary>
+    /// <summary>Id ile tek kayıt (yalnızca kaydın sahibi erişebilir).</summary>
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<GeometryDto>> GetById(int id)
-    {
-        var item = await _service.GetByIdAsync(id);
-        if (item is null)
+    public Task<ActionResult<GeometryDto>> GetById(int id)
+        => Calistir<GeometryDto>(async () =>
         {
-            return NotFound(new { message = $"Id={id} olan kayıt bulunamadı." });
-        }
+            var item = await _service.GetByIdAsync(id);
+            return item is null ? Bulunamadi(id) : Ok(item);
+        });
 
-        return Ok(item);
-    }
-
-    /// <summary>WKT metninden yeni geometri kaydeder.</summary>
+    /// <summary>WKT metninden yeni geometri kaydeder. Kayıt, giriş yapan kullanıcıya bağlanır.</summary>
     [HttpPost]
-    public async Task<ActionResult<GeometryDto>> Create([FromBody] GeometryCreateDto dto)
-    {
-        // try/catch YOK: doğrulama hatalarını ExceptionHandlingMiddleware 400'e çeviriyor.
-        var created = await _service.CreateAsync(dto);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
-    }
-
-    /// <summary>Ad/açıklama (ve istenirse geometri) günceller.</summary>
-    [HttpPut("{id:int}")]
-    public async Task<ActionResult<GeometryDto>> Update(int id, [FromBody] GeometryUpdateDto dto)
-    {
-        var updated = await _service.UpdateAsync(id, dto);
-        if (updated is null)
+    public Task<ActionResult<GeometryDto>> Create([FromBody] GeometryCreateDto dto)
+        => Calistir<GeometryDto>(async () =>
         {
-            return NotFound(new { message = $"Id={id} olan kayıt bulunamadı." });
-        }
+            var created = await _service.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        });
 
-        return Ok(updated);
-    }
+    /// <summary>Ad, renk, açıklama ve istenirse GEOMETRİ günceller (Ödev 5 / Madde 4).</summary>
+    [HttpPut("{id:int}")]
+    public Task<ActionResult<GeometryDto>> Update(int id, [FromBody] GeometryUpdateDto dto)
+        => Calistir<GeometryDto>(async () =>
+        {
+            var updated = await _service.UpdateAsync(id, dto);
+            return updated is null ? Bulunamadi(id) : Ok(updated);
+        });
 
     /// <summary>
     /// Silinen kaydı geri getirir. Soft delete kullandığımız için veri hâlâ
     /// tabloda duruyor; bu uç tek bir UPDATE ile silmeyi geri alıyor.
     /// </summary>
     [HttpPost("{id:int}/restore")]
-    public async Task<IActionResult> Restore(int id)
-    {
-        var geriAlindi = await _service.RestoreAsync(id);
-        if (!geriAlindi)
+    public Task<IActionResult> Restore(int id)
+        => Calistir(async () =>
         {
-            return NotFound(new { message = $"Id={id} için geri alınacak silinmiş kayıt bulunamadı." });
-        }
-
-        return NoContent();
-    }
+            var geriAlindi = await _service.RestoreAsync(id);
+            return geriAlindi
+                ? NoContent()
+                : NotFound(new { message = $"Id={id} için geri alınacak silinmiş kayıt bulunamadı." });
+        });
 
     /// <summary>
-    /// Kaydı askıya alır / yeniden aktif eder (Ödev 3 / Görev 1'deki is_active kolonu).
+    /// Kaydı askıya alır / yeniden aktif eder (is_active kolonu).
     /// Silmekten farkı: pasif kayıt listelerde görünmeye devam eder.
     /// </summary>
     [HttpPost("{id:int}/active")]
-    public async Task<IActionResult> SetActive(int id, [FromBody] SetActiveDto dto)
-    {
-        var degisti = await _service.SetActiveAsync(id, dto.IsActive);
-        if (!degisti)
+    public Task<IActionResult> SetActive(int id, [FromBody] SetActiveDto dto)
+        => Calistir(async () =>
         {
-            return NotFound(new { message = $"Id={id} olan kayıt bulunamadı." });
-        }
-
-        return NoContent();
-    }
+            var degisti = await _service.SetActiveAsync(id, dto.IsActive);
+            return degisti ? NoContent() : BulunamadiSonuc(id);
+        });
 
     /// <summary>Soft delete: kayıt fiziksel olarak silinmez, is_deleted işaretlenir.</summary>
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id)
-    {
-        var deleted = await _service.DeleteAsync(id);
-        if (!deleted)
+    public Task<IActionResult> Delete(int id)
+        => Calistir(async () =>
         {
-            return NotFound(new { message = $"Id={id} olan kayıt bulunamadı." });
-        }
+            var deleted = await _service.DeleteAsync(id);
+            return deleted ? NoContent() : BulunamadiSonuc(id);
+        });
 
-        return NoContent();
+    // ---------------------------------------------------------------------
+    //  Ortak hata yönetimi
+    // ---------------------------------------------------------------------
+
+    /// <summary>Değer döndüren uçlar için try-catch kalıbı.</summary>
+    private async Task<ActionResult<T>> Calistir<T>(Func<Task<ActionResult<T>>> govde)
+    {
+        try
+        {
+            return await govde();
+        }
+        catch (WktFormatException ex)
+        {
+            // İstemcinin gönderdiği veri hatalı → 4xx. Mesaj kullanıcıya gösterilebilir.
+            _logger.LogWarning(ex, "Geçersiz istek verisi");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            // Beklenmeyen hata → 5xx. Ayrıntı log'a yazılır, istemciye sızdırılmaz.
+            _logger.LogError(ex, "Beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "Beklenmeyen bir hata oluştu." });
+        }
     }
+
+    /// <summary>Gövdesiz (204/404) dönen uçlar için aynı kalıp.</summary>
+    private async Task<IActionResult> Calistir(Func<Task<IActionResult>> govde)
+    {
+        try
+        {
+            return await govde();
+        }
+        catch (WktFormatException ex)
+        {
+            _logger.LogWarning(ex, "Geçersiz istek verisi");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "Beklenmeyen bir hata oluştu." });
+        }
+    }
+
+    private ActionResult Bulunamadi(int id)
+        => NotFound(new { message = $"Id={id} olan kayıt bulunamadı." });
+
+    private IActionResult BulunamadiSonuc(int id)
+        => NotFound(new { message = $"Id={id} olan kayıt bulunamadı." });
 }

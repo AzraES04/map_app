@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using StajProject.Entities;
 
@@ -168,7 +168,11 @@ public class AppDbContext : DbContext
         entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(1000);
         entity.Property(e => e.ImageUrl).HasColumnName("image_url").HasMaxLength(500);
         entity.Property(e => e.Color).HasColumnName("color").HasMaxLength(7);   // "#RRGGBB"
-        entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+        entity.Property(e => e.InsertedDate).HasColumnName("inserted_date");
+        entity.Property(e => e.InsertedUserId).HasColumnName("inserted_user_id");
+
+        // Sahibe göre süzme sorgusu bu index'i kullanır (Ödev 5)
+        entity.HasIndex(e => e.InsertedUserId);
 
         // Durum takibi kolonları — users tablosundakiyle birebir aynı desen
         entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
