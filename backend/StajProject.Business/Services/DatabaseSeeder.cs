@@ -11,6 +11,12 @@ public class DatabaseSeeder : IDatabaseSeeder
     private const string DemoKullanici = "admin";
     private const string DemoSifre = "staj123";
 
+    // Ödev 5 / Madde 3'ü gösterebilmek için ikinci bir kullanıcı.
+    // Sahiplik süzgecini kanıtlamanın tek yolu, farklı bir kullanıcıyla
+    // giriş yapıp FARKLI bir harita görmektir.
+    private const string IkinciKullanici = "ayse";
+    private const string IkinciSifre = "staj123";
+
     private readonly IUserRepository _userRepository;
     private readonly IGeometryRepository<PointEntity> _noktaRepo;
     private readonly IGeometryRepository<LineEntity> _cizgiRepo;
@@ -33,21 +39,82 @@ public class DatabaseSeeder : IDatabaseSeeder
     {
         await KullaniciEkleAsync();
         await DemoEnvanteriEkleAsync();
+        await IkinciKullaniciVerisiAsync();
     }
 
     private async Task KullaniciEkleAsync()
     {
-        // AnyAsync() query filter'ı yok sayar: soft delete ile silinmiş bir admin
-        // varsa "hiç kullanıcı yok" sanıp yenisini yaratmayalım.
-        if (await _userRepository.AnyAsync())
+        // Kullanıcı bazında kontrol: biri varken diğeri eklenebilsin.
+        // (AnyAsync ile "hiç kullanıcı yok mu" diye bakmak, ikinci kullanıcıyı
+        //  sonradan eklememizi imkânsız kılardı.)
+        await KullaniciYoksaEkleAsync(DemoKullanici, DemoSifre);
+        await KullaniciYoksaEkleAsync(IkinciKullanici, IkinciSifre);
+    }
+
+    private async Task<User> KullaniciYoksaEkleAsync(string kullaniciAdi, string sifre)
+    {
+        var mevcut = await _userRepository.GetByUsernameAsync(kullaniciAdi);
+        if (mevcut is not null)
+        {
+            return mevcut;
+        }
+
+        var yeni = new User { Username = kullaniciAdi };
+        yeni.PasswordHash = _passwordHasher.HashPassword(yeni, sifre);
+
+        return await _userRepository.AddAsync(yeni);
+    }
+
+    /// <summary>
+    /// İkinci kullanıcıya KENDİ çizimlerini verir (Ödev 5 / Madde 3 gösterimi).
+    ///
+    /// Boş harita da süzgeci kanıtlardı, ama "başka kullanıcı = başka veri"
+    /// çok daha nettir: aynı uygulama, aynı ekran, tamamen farklı kayıtlar.
+    /// Bölgeyi de bilerek ayırdık (Ege/Akdeniz), admin'in kayıtlarıyla
+    /// karışmasın diye.
+    /// </summary>
+    private async Task IkinciKullaniciVerisiAsync()
+    {
+        var kullanici = await _userRepository.GetByUsernameAsync(IkinciKullanici);
+        if (kullanici is null)
         {
             return;
         }
 
-        var admin = new User { Username = DemoKullanici };
-        admin.PasswordHash = _passwordHasher.HashPassword(admin, DemoSifre);
+        // Bu kullanıcının HİÇ kaydı yoksa örnekleri yükle; varsa dokunma.
+        var mevcutNoktalari = await _noktaRepo.GetAllAsync(kullanici.Id);
+        if (mevcutNoktalari.Count > 0)
+        {
+            return;
+        }
 
-        await _userRepository.AddAsync(admin);
+        foreach (var ornek in DemoVerisi.IkinciKullaniciNoktalari)
+        {
+            var entity = new PointEntity
+            {
+                Name = ornek.Ad,
+                Description = ornek.Aciklama,
+                Color = ornek.Renk,
+                Geom = WktConverter.Read<Point>(ornek.Wkt),
+                InsertedDate = DateTime.UtcNow,
+                InsertedUserId = kullanici.Id,
+            };
+            await _noktaRepo.AddAsync(entity);
+        }
+
+        foreach (var ornek in DemoVerisi.IkinciKullaniciPoligonlari)
+        {
+            var entity = new PolygonEntity
+            {
+                Name = ornek.Ad,
+                Description = ornek.Aciklama,
+                Color = ornek.Renk,
+                Geom = WktConverter.Read<Polygon>(ornek.Wkt),
+                InsertedDate = DateTime.UtcNow,
+                InsertedUserId = kullanici.Id,
+            };
+            await _poligonRepo.AddAsync(entity);
+        }
     }
 
     /// <summary>

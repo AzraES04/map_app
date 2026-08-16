@@ -88,7 +88,7 @@ public class DatabaseSeederTests
     }
 
     [Fact]
-    public async Task KullanicininKendiVerisiVarsa_OTabloyaDokunulmaz()
+    public async Task KullanicininKendiVerisiVarsa_GenelDemoSetiEklenmez()
     {
         var (seeder, _, noktalar, cizgiler, _) = Kur();
 
@@ -102,8 +102,52 @@ public class DatabaseSeederTests
         await seeder.SeedAsync();
 
         var kalan = await noktalar.GetAllAsync();
-        Assert.Single(kalan);                                  // örnek nokta EKLENMEDİ
-        Assert.Equal("Kullanıcının noktası", kalan[0].Name);
-        Assert.NotEmpty(await cizgiler.GetAllAsync());          // boş olan tablo doldu
+
+        // Kullanıcının kaydı duruyor
+        Assert.Contains(kalan, k => k.Name == "Kullanıcının noktası");
+
+        // Genel demo seti (admin'in kayıtları) EKLENMEDİ — tablo boş değildi
+        Assert.DoesNotContain(kalan, k => k.Name == "Anıtkabir");
+        Assert.DoesNotContain(kalan, k => k.Name == "Ayasofya");
+
+        // Boş olan çizgi tablosu doldu
+        Assert.NotEmpty(await cizgiler.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task IkinciKullanici_KendiKayitlariylaOlusturulur()
+    {
+        // Ödev 5 / Madde 3'ün gösterilebilmesi için ikinci kullanıcı ve
+        // ona ait ayrı bir veri seti oluşturulmalı.
+        var (seeder, kullanicilar, noktalar, _, poligonlar) = Kur();
+
+        await seeder.SeedAsync();
+
+        var ayse = await kullanicilar.GetByUsernameAsync("ayse");
+        Assert.NotNull(ayse);
+
+        var ayseninNoktalari = await noktalar.GetAllAsync(ayse!.Id);
+        var ayseninAlanlari = await poligonlar.GetAllAsync(ayse.Id);
+
+        Assert.NotEmpty(ayseninNoktalari);
+        Assert.NotEmpty(ayseninAlanlari);
+        Assert.All(ayseninNoktalari, k => Assert.Equal(ayse.Id, k.InsertedUserId));
+
+        // İki kullanıcının verisi ayrışmalı: admin'in seti ayse'de görünmemeli
+        Assert.DoesNotContain(ayseninNoktalari, k => k.Name == "Anıtkabir");
+    }
+
+    [Fact]
+    public async Task IkinciCalistirma_IkinciKullanicininKayitlariniCogaltmaz()
+    {
+        var (seeder, kullanicilar, noktalar, _, _) = Kur();
+
+        await seeder.SeedAsync();
+        var ayse = (await kullanicilar.GetByUsernameAsync("ayse"))!;
+        var ilkSayi = (await noktalar.GetAllAsync(ayse.Id)).Count;
+
+        await seeder.SeedAsync();   // uygulama yeniden başlatıldı
+
+        Assert.Equal(ilkSayi, (await noktalar.GetAllAsync(ayse.Id)).Count);
     }
 }

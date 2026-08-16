@@ -46,6 +46,38 @@ internal static class DemoVerisi
             "LINESTRING (36.33 41.29, 37.94 40.96, 39.72 40.99, 40.52 41.02)"),
     };
 
+    // ---------------------------------------------------------------------
+    //  İKİNCİ KULLANICININ VERİSİ (Ödev 5 / Madde 3 gösterimi)
+    //
+    //  Bilerek başka bir coğrafyada: "ayse" ile giriş yapıldığında harita
+    //  Akdeniz kıyısını gösterir, admin'in Ankara/İstanbul kayıtları hiç
+    //  görünmez. Sahiplik süzgecinin en görünür kanıtı bu.
+    // ---------------------------------------------------------------------
+
+    /// <summary>ayse kullanıcısının noktaları</summary>
+    internal static readonly Ornek[] IkinciKullaniciNoktalari =
+    {
+        new("Ölüdeniz", "Muğla · Fethiye",
+            "#1f7a8c", "POINT (29.121944 36.550278)"),
+        new("Aspendos Tiyatrosu", "Antalya · Serik",
+            "#6a4c93", "POINT (31.171944 36.938889)"),
+        new("Kaputaş Plajı", "Antalya · Kaş",
+            "#57a05a", "POINT (29.474167 36.213889)"),
+        new("Marmaris Limanı", "Muğla",
+            "#d9553f", "POINT (28.271389 36.855278)"),
+    };
+
+    /// <summary>ayse kullanıcısının alanları</summary>
+    internal static readonly Ornek[] IkinciKullaniciPoligonlari =
+    {
+        new("Fethiye körfezi", "Turistik kıyı şeridi",
+            "#1f7a8c",
+            "POLYGON ((28.95 36.45, 29.35 36.45, 29.35 36.72, 28.95 36.72, 28.95 36.45))"),
+        new("Antalya sahil bandı", "Konyaaltı – Lara arası",
+            "#e07b39",
+            "POLYGON ((30.60 36.80, 31.00 36.80, 31.00 36.95, 30.60 36.95, 30.60 36.80))"),
+    };
+
     /// <summary>Poligonlar (alanlar) → tbl_polygon</summary>
     internal static readonly Ornek[] Poligonlar =
     {

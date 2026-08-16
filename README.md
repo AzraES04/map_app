@@ -8,7 +8,7 @@ kayıtlar WKT formatında veritabanına yazılır ve alanlar üzerinde kesişim 
 
 | | |
 |---|---|
-| **Giriş** | `admin` / `staj123` (ilk açılışta otomatik oluşturulur) |
+| **Giriş** | `admin` / `staj123` · `ayse` / `staj123` (ilk açılışta oluşturulur) |
 | **API** | `http://localhost:5000` · Swagger: `/swagger` |
 | **Arayüz** | `http://localhost:5173` |
 | **Test** | 44 birim testi |
