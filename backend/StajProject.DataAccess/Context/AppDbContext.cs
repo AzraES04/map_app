@@ -25,6 +25,9 @@ public class AppDbContext : DbContext
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
 
+    // Ödev 7 / Madde 2: coğrafi yetki (kullanıcı/rol bazlı çizim alanı)
+    public DbSet<GeoPermission> GeoPermissions => Set<GeoPermission>();
+
     // ---------- Ödev 3 / Görev 1: ModifiedDate otomatik güncelleme ----------
     // Her kayıt işleminden ÖNCE devreye girer. Böylece "modified_date yazmayı unuttum"
     // diye bir durum kalmaz; kural tek yerde, merkezî olarak uygulanır.
@@ -219,6 +222,51 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.PermissionId);
 
             entity.HasQueryFilter(e => !e.Role!.IsDeleted && !e.Permission!.IsDeleted);
+        });
+
+        modelBuilder.Entity<GeoPermission>(entity =>
+        {
+            entity.ToTable("geo_permissions");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.RoleId).HasColumnName("role_id");
+            entity.Property(e => e.InsertedDate).HasColumnName("inserted_date");
+            entity.Property(e => e.InsertedUserId).HasColumnName("inserted_user_id");
+
+            entity.Property(e => e.Geom)
+                  .HasColumnName("geom")
+                  .HasColumnType("geometry(Polygon, 4326)")
+                  .IsRequired();
+
+            // Alan sorguları "bu nokta içeride mi?" diye soracak — mekânsal index şart.
+            entity.HasIndex(e => e.Geom).HasMethod("gist");
+
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+            entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+            // Sahip silinirse kuralı da götür: sahipsiz bir "izinli alan" satırı
+            // kimseye uygulanmaz, sadece tabloda çöp olarak durur.
+            entity.HasOne(e => e.User).WithMany()
+                  .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Role).WithMany()
+                  .HasForeignKey(e => e.RoleId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.RoleId);
+
+            // YA kullanıcı YA rol — ikisi birden ya da ikisi de boş olamaz.
+            // Kuralı veritabanına yazıyoruz: servis katmanı da kontrol ediyor ama
+            // tek savunma hattına güvenmek, ileride başka bir yoldan (script, elle
+            // INSERT) tutarsız satır girmesine kapı bırakırdı.
+            entity.ToTable(t => t.HasCheckConstraint(
+                "CK_geo_permissions_tek_sahip",
+                "(user_id IS NOT NULL AND role_id IS NULL) OR (user_id IS NULL AND role_id IS NOT NULL)"));
+
+            entity.HasQueryFilter(e => !e.IsDeleted);
         });
 
         modelBuilder.Entity<UserPermission>(entity =>

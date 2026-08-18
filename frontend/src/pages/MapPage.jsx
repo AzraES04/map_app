@@ -32,7 +32,7 @@ import {
   RENK_SECENEKLERI, ANALIZ_RENGI,
 } from '../geo'
 import { listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir, kesisimAnalizi } from '../api'
-import { kendiYetkilerim } from '../adminApi'
+import { kendiYetkilerim, calismaAlanim } from '../adminApi'
 import { YETKILER, EKLEME_YETKISI } from '../yetkiler'
 import {
   TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu, AnalizIkonu, SaatIkonu, KullaniciIkonu, RolIkonu,
@@ -176,6 +176,17 @@ const analizStili = new Style({
   fill: new Fill({ color: 'rgba(255, 77, 125, 0.13)' }),
 })
 
+/**
+ * COĞRAFİ YETKİ ALANI (Ödev 7 / Madde 2) — kullanıcının çizim yapabildiği bölge.
+ *
+ * Dolgu YOK, yalnızca kalın kenar: alanın içi haritanın kendi içeriğidir,
+ * üzerine renk basmak kayıtları okunmaz hâle getirirdi. Kesikli kenar
+ * "bu bir sınır, bir kayıt değil" mesajını veriyor.
+ */
+const izinliAlanStili = new Style({
+  stroke: new Stroke({ color: '#52b3c7', width: 3, lineDash: [12, 6] }),
+})
+
 /** Henüz kaydedilmemiş çizim: kesikli turuncu — "bu geçici" mesajını verir. */
 const taslakStili = new Style({
   image: new Circle({
@@ -216,6 +227,7 @@ export default function MapPage() {
   const aracGrubuRef = useRef(null)    // kaydettikten sonra odağı geri vermek için
   const analizSourceRef = useRef(null) // geçici analiz poligonu (veritabanına gitmez)
   const analizBulunanRef = useRef(null) // analizde bulunan envanterlerin vurgu katmanı
+  const izinliAlanRef = useRef(null)    // coğrafi yetki sınırı (Ödev 7)
   const aramaGirdiRef = useRef(null)    // "/" kısayolunun odaklanacağı arama kutusu
   // Klavye dinleyicisi, aşağıda TANIMLANAN aracSec'i çağırmak zorunda. Doğrudan
   // referans versek "temporal dead zone" hatası alırdık (bu projede bir kez yaşandı).
@@ -264,6 +276,10 @@ export default function MapPage() {
   // Amaç, kullanıcıyı yapamayacağı bir işe kalkıştırıp sonunda hata göstermemek.
   const [yetkilerim, setYetkilerim] = useState([])
 
+  // Ödev 7: kullanıcının çalışma alanı — { kisitli, alanlar: [{ id, name, wkt, kaynak }] }
+  // Haritada sınır olarak çiziliyor ve panelde özetleniyor.
+  const [calismaAlani, setCalismaAlani] = useState({ kisitli: false, alanlar: [] })
+
   // --- Yer arama ---
   const [arama, setArama] = useState('')
   const [sonuclar, setSonuclar] = useState([])
@@ -308,6 +324,11 @@ export default function MapPage() {
         setYetkilerim(matris.permissions.filter((y) => y.granted).map((y) => y.name))
       })
       .catch(() => { /* yetki okunamadı → bağlantı gizli kalır */ })
+
+    // Ödev 7: çizim yapabileceğim alan. Kısıt yoksa kisitli=false gelir.
+    calismaAlanim(goLogin)
+      .then((alan) => { if (!iptalEdildi) setCalismaAlani(alan) })
+      .catch(() => { /* okunamadıysa sınır çizilmez; sunucu yine de kuralı uygular */ })
 
     // Temizlik: bileşen sökülmüşken setState çağırmayalım (React uyarısı verir).
     return () => { iptalEdildi = true }
@@ -598,6 +619,17 @@ export default function MapPage() {
     }
   }, [goLogin, bildir, hatayiGoster])
 
+  // Çalışma alanı sınırını haritaya çiz (Ödev 7).
+  // Kullanıcı sınırı ÖNCEDEN görsün: alan dışına çizip hata almak,
+  // sınırı deneme yanılmayla keşfetmek demek olurdu.
+  useEffect(() => {
+    const kaynak = izinliAlanRef.current
+    if (!kaynak) return
+
+    kaynak.clear()
+    calismaAlani.alanlar.forEach((alan) => kaynak.addFeature(wktToFeature(alan.wkt)))
+  }, [calismaAlani])
+
   // ------------------------------------------------------------------------
   //  Harita kurulumu — sadece bir kez
   // ------------------------------------------------------------------------
@@ -633,6 +665,11 @@ export default function MapPage() {
     const analizBulunanSource = new VectorSource()
     analizBulunanRef.current = analizBulunanSource
 
+    // Coğrafi yetki sınırı (Ödev 7). Ayrı kaynak: kullanıcının kayıtlarıyla
+    // karışmasın, tıklama/analiz mantığına hiç girmesin — bu bir VERİ değil KURAL.
+    const izinliAlanSource = new VectorSource()
+    izinliAlanRef.current = izinliAlanSource
+
     // Açılış sahnesi oynatılsın mı? Karar auth.js'te (login ekranı da aynı
     // bayrağı kullanıyor: giriş yapılınca sıfırlanıyor ki sahne mutlaka oynasın).
     const girisOynat = girisAnimasyonuOynasinMi()
@@ -658,6 +695,8 @@ export default function MapPage() {
         new VectorLayer({ source: analizBulunanSource, style: analizBulunanStili }),
         new VectorLayer({ source: analizSource, style: analizStili }),
         new VectorLayer({ source: highlightSource, style: vurguStili }),
+        // Sınır EN ÜSTTE: altındaki kayıtlar onu kapatmasın.
+        new VectorLayer({ source: izinliAlanSource, style: izinliAlanStili }),
       ],
       view,
       controls: varsayilanKontroller().extend([
@@ -1684,57 +1723,55 @@ export default function MapPage() {
             <h2>Çizim Araçları</h2>
 
             <div className="tool-group" ref={aracGrubuRef}>
-              {DRAW_TYPE_KEYS.map((key) => {
-                // Ödev 6: "Point Ekleme" yetkisi olmayan kullanıcı nokta aracını açamaz.
-                const izinli = aracKullanilabilir(key)
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`tool-btn${activeTool === key ? ' active' : ''}`}
-                    onClick={() => aracSec(key)}
-                    aria-pressed={activeTool === key}
-                    disabled={!izinli}
-                    title={izinli
-                      ? `${DRAW_TYPES[key].label} çiz`
-                      : `"${ARAC_YETKISI[key]}" yetkiniz yok`}
-                  >
-                    <span className="tool-icon"><TipIkonu tip={key} /></span>
-                    {DRAW_TYPES[key].label}
-                  </button>
-                )
-              })}
+              {/*
+                Ödev 7 / ek madde: yetkisi olmayan araç KİLİTLİ değil, HİÇ YOK.
+                Önce soluklaştırıp kilitliyorduk; "yetkisi yoksa butonları hiç
+                gösterme" istendiği için filtreye çevrildi. Kullanıcı artık
+                kullanamayacağı bir düğmeyle hiç karşılaşmıyor; hangi araçların
+                gizlendiği aşağıdaki not satırında yazıyor.
+              */}
+              {DRAW_TYPE_KEYS.filter(aracKullanilabilir).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`tool-btn${activeTool === key ? ' active' : ''}`}
+                  onClick={() => aracSec(key)}
+                  aria-pressed={activeTool === key}
+                  title={`${DRAW_TYPES[key].label} çiz`}
+                >
+                  <span className="tool-icon"><TipIkonu tip={key} /></span>
+                  {DRAW_TYPES[key].label}
+                </button>
+              ))}
             </div>
 
             {/* Düzenleme aracı ayrı bir satırda: çizim yapmıyor, var olanı değiştiriyor */}
-            <button
-              type="button"
-              className={`tool-btn genis${activeTool === DUZENLE ? ' active' : ''}`}
-              onClick={() => aracSec(DUZENLE)}
-              aria-pressed={activeTool === DUZENLE}
-              disabled={!guncelleyebilir}
-              title={guncelleyebilir
-                ? 'Kaydedilmiş geometrileri sürükleyerek düzenle'
-                : `"${YETKILER.kayitGuncelleme}" yetkiniz yok`}
-            >
-              <span className="tool-icon"><DuzenleIkonu /></span>
-              Düzenle
-            </button>
+            {guncelleyebilir && (
+              <button
+                type="button"
+                className={`tool-btn genis${activeTool === DUZENLE ? ' active' : ''}`}
+                onClick={() => aracSec(DUZENLE)}
+                aria-pressed={activeTool === DUZENLE}
+                title="Kaydedilmiş geometrileri sürükleyerek düzenle"
+              >
+                <span className="tool-icon"><DuzenleIkonu /></span>
+                Düzenle
+              </button>
+            )}
 
             {/* Envanter Analizi (Ödev 4 / Görev 3) — çizer, saymaya yarar, KAYDETMEZ */}
-            <button
-              type="button"
-              className={`tool-btn genis analiz${activeTool === ANALIZ ? ' active' : ''}`}
-              onClick={() => aracSec(ANALIZ)}
-              aria-pressed={activeTool === ANALIZ}
-              disabled={!yetkiVar(YETKILER.analizCalistirma)}
-              title={yetkiVar(YETKILER.analizCalistirma)
-                ? 'Geçici poligon çizip altında kalan envanteri say'
-                : `"${YETKILER.analizCalistirma}" yetkiniz yok`}
-            >
-              <span className="tool-icon"><AnalizIkonu /></span>
-              Envanter Analizi
-            </button>
+            {yetkiVar(YETKILER.analizCalistirma) && (
+              <button
+                type="button"
+                className={`tool-btn genis analiz${activeTool === ANALIZ ? ' active' : ''}`}
+                onClick={() => aracSec(ANALIZ)}
+                aria-pressed={activeTool === ANALIZ}
+                title="Geçici poligon çizip altında kalan envanteri say"
+              >
+                <span className="tool-icon"><AnalizIkonu /></span>
+                Envanter Analizi
+              </button>
+            )}
 
             {activeTool === ANALIZ ? (
               <p className="tool-hint">
@@ -1768,14 +1805,28 @@ export default function MapPage() {
               </p>
             )}
 
-            {/* Ödev 6: kapalı araç varsa sebebini söyle. Sessizce kilitlemek
-                kullanıcıya "uygulama bozuk" hissi verirdi. */}
+            {/* Araçlar gizlendi ama sebebi yazılı: aksi hâlde eksik menü
+                "uygulama bozuk" gibi görünürdü. */}
             {kilitliAraclar.length > 0 && (
               <p className="tool-hint yetki-notu">
-                Yetkiniz olmadığı için kapalı: <strong>{kilitliAraclar.join(', ')}</strong>.
+                Yetkiniz olmadığı için gizlendi: <strong>{kilitliAraclar.join(', ')}</strong>.
                 <br />
                 Yetkiler yönetim panelinden rolünüze veya hesabınıza eklenebilir.
               </p>
+            )}
+
+            {/* Ödev 7 / Madde 2: coğrafi sınır varsa kullanıcı bunu bilmeli.
+                Haritadaki kesikli mavi çerçeve nerede çizebileceğini gösteriyor. */}
+            {calismaAlani.kisitli && (
+              <div className="calisma-alani">
+                <strong>Çizim alanınız sınırlı.</strong> Haritadaki kesikli mavi
+                çerçevenin dışına çizim yapamazsınız.
+                <ul>
+                  {calismaAlani.alanlar.map((alan) => (
+                    <li key={alan.id}>{alan.name} · {alan.kaynak}</li>
+                  ))}
+                </ul>
+              </div>
             )}
           </section>
 

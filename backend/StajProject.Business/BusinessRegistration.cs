@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NetTopologySuite.Geometries;
 using StajProject.Business.Auth;
@@ -30,6 +30,9 @@ public static class BusinessRegistration
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IUserAdminService, UserAdminService>();
+
+        // Ödev 7: coğrafi yetki — hem yönetim hem çizim sırasındaki alan kontrolü
+        services.AddScoped<IGeoPermissionService, GeoPermissionService>();
 
         // Geometri servisleri: aynı generic sınıf, üç farklı tip çifti.
         // Controller "IGeometryService<PointEntity>" isteyince konteyner

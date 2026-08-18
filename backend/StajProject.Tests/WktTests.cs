@@ -1,4 +1,4 @@
-using NetTopologySuite.Geometries;
+﻿using NetTopologySuite.Geometries;
 using StajProject.Business.DTOs;
 using StajProject.Business.Geo;
 using StajProject.Business.Services;
@@ -110,7 +110,9 @@ public class WktTests
     // ---------------- Servis katmanı ----------------
 
     private static GeometryService<PointEntity, Point> CreatePointService()
-        => new(new FakeGeometryRepository<PointEntity>(), new FakeCurrentUserService(userId: 1));
+        => new(new FakeGeometryRepository<PointEntity>(),
+               new FakeCurrentUserService(userId: 1),
+               new FakeGeoPermissionService());   // coğrafi kısıt yok
 
     [Fact]
     public async Task CreateAsync_WktKaydeder_VeWktOlarakGeriDoner()

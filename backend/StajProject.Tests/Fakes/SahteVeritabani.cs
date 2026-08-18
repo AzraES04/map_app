@@ -1,4 +1,4 @@
-using StajProject.Entities;
+﻿using StajProject.Entities;
 
 namespace StajProject.Tests.Fakes;
 
@@ -19,13 +19,18 @@ public class SahteVeritabani
     public List<RolePermission> RolYetkileri { get; } = new();
     public List<UserPermission> KullaniciYetkileri { get; } = new();
 
+    /// <summary>Ödev 7: kullanıcı/rol bazlı izinli çizim alanları.</summary>
+    public List<GeoPermission> CografiYetkiler { get; } = new();
+
     private int _sonrakiKullaniciId = 1;
     private int _sonrakiRolId = 1;
     private int _sonrakiYetkiId = 1;
+    private int _sonrakiCografiYetkiId = 1;
 
     public int SonrakiKullaniciId() => _sonrakiKullaniciId++;
     public int SonrakiRolId() => _sonrakiRolId++;
     public int SonrakiYetkiId() => _sonrakiYetkiId++;
+    public int SonrakiCografiYetkiId() => _sonrakiCografiYetkiId++;
 
     /// <summary>Testleri kısaltmak için: yetkiyi ekler ve nesnesini döner.</summary>
     public Permission YetkiEkle(string ad, string? aciklama = null)

@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using StajProject.Business.DTOs;
 using StajProject.Business.Services;
@@ -18,17 +18,33 @@ namespace StajProject.API.Controllers;
 public class PermissionsController : YonetimControllerBase
 {
     private readonly IPermissionService _service;
+    private readonly IGeoPermissionService _geoPermissionService;
 
-    public PermissionsController(IPermissionService service, ILogger<PermissionsController> logger)
+    public PermissionsController(
+        IPermissionService service,
+        IGeoPermissionService geoPermissionService,
+        ILogger<PermissionsController> logger)
         : base(logger)
     {
         _service = service;
+        _geoPermissionService = geoPermissionService;
     }
 
     /// <summary>Sistemdeki tüm yetkiler — rol ve kullanıcı ekranlarındaki liste bundan doldurulur.</summary>
     [HttpGet]
     public Task<ActionResult<List<PermissionDto>>> GetAll()
         => Calistir<List<PermissionDto>>(async () => Ok(await _service.GetAllAsync()));
+
+    /// <summary>
+    /// GİRİŞ YAPMIŞ kullanıcının ÇALIŞMA ALANI (Ödev 7 / Madde 2).
+    ///
+    /// Harita ekranı bu alanı ekranda çizer: kullanıcı nereye çizebileceğini
+    /// önceden görür, sınırı deneme yanılmayla keşfetmek zorunda kalmaz.
+    /// Hiç tanım yoksa <c>kisitli: false</c> döner — kısıt konmamış demektir.
+    /// </summary>
+    [HttpGet("me/geo")]
+    public Task<ActionResult<CalismaAlaniDto>> GetCalismaAlanim()
+        => Calistir<CalismaAlaniDto>(async () => Ok(await _geoPermissionService.GetCalismaAlanimAsync()));
 
     /// <summary>
     /// GİRİŞ YAPMIŞ kullanıcının kendi yetki matrisi.

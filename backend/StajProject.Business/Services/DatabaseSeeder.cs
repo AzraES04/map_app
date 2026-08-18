@@ -32,6 +32,7 @@ public class DatabaseSeeder : IDatabaseSeeder
             Auth.Yetkiler.NoktaEkleme, Auth.Yetkiler.CizgiEkleme, Auth.Yetkiler.PoligonEkleme,
             Auth.Yetkiler.KayitGuncelleme, Auth.Yetkiler.KayitSilme, Auth.Yetkiler.AnalizCalistirma,
             Auth.Yetkiler.KullaniciYonetimi, Auth.Yetkiler.RolYonetimi,
+            Auth.Yetkiler.CografiYetkiTanimlama,
         }),
         (EditorRolu, "Harita üzerinde çizim yapar, kendi kayıtlarını düzenler ve siler.", new[]
         {
@@ -76,6 +77,7 @@ public class DatabaseSeeder : IDatabaseSeeder
         // Sıra önemli: rol yetkilerini bağlayabilmek için yetkilerin id'si gerekiyor.
         await YetkileriEkleAsync();
         await RolleriEkleAsync();
+        await YoneticiRolunuTamamlaAsync();
         await RolAtamalariniYapAsync();
 
         await DemoEnvanteriEkleAsync();
@@ -141,6 +143,39 @@ public class DatabaseSeeder : IDatabaseSeeder
 
             await _roleRepository.SetPermissionsAsync(rol.Id, yetkiIdleri);
         }
+    }
+
+    /// <summary>
+    /// Yönetici rolüne, sistemde tanımlı AMA rolde eksik olan yetkileri ekler.
+    ///
+    /// Bu, "var olan role dokunma" kuralının BİLİNÇLİ tek istisnası. Sebebi şu:
+    /// projeye yeni bir yetki eklendiğinde (Ödev 7'deki "Coğrafi Yetki Tanımlama"
+    /// gibi) Yönetici rolü zaten var olduğu için seed ona dokunmaz; sonuç olarak
+    /// yeni özelliğe sistemdeki HİÇ KİMSE erişemez ve düzeltmenin tek yolu
+    /// veritabanına elle müdahale olurdu.
+    ///
+    /// Yalnızca EKLER, hiçbir zaman kaldırmaz. Editör ve Görüntüleyici rollerine
+    /// dokunulmaz — onların kapsamı bilinçli olarak dardır.
+    /// </summary>
+    private async Task YoneticiRolunuTamamlaAsync()
+    {
+        var rol = await _roleRepository.GetByNameAsync(YoneticiRolu);
+        if (rol is null)
+        {
+            return;   // az önce oluşturulduysa zaten tam yetkili
+        }
+
+        var tumYetkiIdleri = (await _permissionRepository.GetAllAsync())
+            .Select(y => y.Id)
+            .ToList();
+
+        var mevcutIdler = rol.RolePermissions.Select(rp => rp.PermissionId).ToHashSet();
+        if (tumYetkiIdleri.All(mevcutIdler.Contains))
+        {
+            return;   // eksik yok, gereksiz yazma yapma
+        }
+
+        await _roleRepository.SetPermissionsAsync(rol.Id, tumYetkiIdleri);
     }
 
     /// <summary>

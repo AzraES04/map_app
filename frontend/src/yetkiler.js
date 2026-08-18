@@ -19,6 +19,7 @@ export const YETKILER = {
   analizCalistirma: 'Analiz Çalıştırma',
   kullaniciYonetimi: 'Kullanıcı Yönetimi',
   rolYonetimi: 'Rol Yönetimi',
+  cografiYetkiTanimlama: 'Coğrafi Yetki Tanımlama',
 }
 
 /**

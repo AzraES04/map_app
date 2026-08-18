@@ -106,3 +106,31 @@ export const rolGuncelle = (id, veri, onUnauthorized) =>
 
 export const rolSil = (id, onUnauthorized) =>
   istek(`/api/admin/roles/${id}`, { method: 'DELETE' }, onUnauthorized)
+
+// ---------------------------------------------------------------------------
+//  Coğrafi yetki (Ödev 7 / Madde 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bir kullanıcının veya rolün tanımlı alanları.
+ * İki parametreden yalnızca biri verilir; ikisi de boşsa tüm tanımlar döner.
+ */
+export const cografiYetkileriListele = ({ userId, roleId } = {}, onUnauthorized) => {
+  const sorgu = userId ? `?userId=${userId}` : roleId ? `?roleId=${roleId}` : ''
+  return istek(`/api/admin/geo-permissions${sorgu}`, {}, onUnauthorized)
+}
+
+/** Yeni alan tanımlar. Gövde: { name, userId|roleId, wkt } */
+export const cografiYetkiEkle = (veri, onUnauthorized) =>
+  istek('/api/admin/geo-permissions', jsonGovde('POST', veri), onUnauthorized)
+
+/** Alan tanımını kaldırır (soft delete). */
+export const cografiYetkiSil = (id, onUnauthorized) =>
+  istek(`/api/admin/geo-permissions/${id}`, { method: 'DELETE' }, onUnauthorized)
+
+/**
+ * Giriş yapan kullanıcının ÇALIŞMA ALANI.
+ * { kisitli: bool, alanlar: [{ id, name, wkt, kaynak }] }
+ */
+export const calismaAlanim = (onUnauthorized) =>
+  istek('/api/permissions/me/geo', {}, onUnauthorized)

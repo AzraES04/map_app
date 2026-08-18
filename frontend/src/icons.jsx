@@ -195,6 +195,18 @@ export function EkleIkonu({ size = 15 }) {
   )
 }
 
+/** Katlanmış harita — coğrafi yetki tanımlama düğmesi (Ödev 7). */
+export function HaritaIkonu({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"
+         strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 4 3 6.5v14L9 18l6 2.5 6-2.5v-14L15 6 9 4Z" />
+      <path d="M9 4v14M15 6.5v14" />
+    </svg>
+  )
+}
+
 /** Çöp kutusu. */
 export function SilIkonu({ size = 15 }) {
   return (

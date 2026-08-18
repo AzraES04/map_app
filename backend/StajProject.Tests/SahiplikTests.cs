@@ -1,4 +1,4 @@
-using NetTopologySuite.Geometries;
+﻿using NetTopologySuite.Geometries;
 using StajProject.Business.DTOs;
 using StajProject.Business.Geo;
 using StajProject.Business.Services;
@@ -26,7 +26,9 @@ public class SahiplikTests
         Kur(FakeGeometryRepository<PointEntity> repo, int userId)
     {
         var kullanici = new FakeCurrentUserService(userId);
-        return (new GeometryService<PointEntity, Point>(repo, kullanici), kullanici);
+        // Coğrafi yetki testlerin konusu değil; sahte servis kısıt uygulamıyor.
+        return (new GeometryService<PointEntity, Point>(repo, kullanici, new FakeGeoPermissionService()),
+                kullanici);
     }
 
     private static GeometryCreateDto Nokta(string ad, double x = 32.85, double y = 39.93)
@@ -121,7 +123,7 @@ public class SahiplikTests
     {
         var repo = new FakeGeometryRepository<PointEntity>();
         var servis = new GeometryService<PointEntity, Point>(
-            repo, new FakeCurrentUserService(userId: null));
+            repo, new FakeCurrentUserService(userId: null), new FakeGeoPermissionService());
 
         await Assert.ThrowsAsync<WktFormatException>(() => servis.GetAllAsync());
         await Assert.ThrowsAsync<WktFormatException>(() => servis.CreateAsync(Nokta("Sahipsiz")));

@@ -2195,3 +2195,218 @@ kbd {
   .admin-icerik { padding: 18px 14px 32px; }
   .admin-tablo { display: block; overflow-x: auto; }
 }
+
+/* ============================================================================
+   COĞRAFİ YETKİ MODALI (Ödev 7 / Madde 2)
+
+   Neden modal, ayrı sayfa değil? Yönetici "hangi kullanıcıya alan tanımlıyorum"
+   bağlamını kaybetmemeli. Ayrı sayfaya gitseydi listeye dönüp yeniden bulmak
+   gerekirdi; modal, listenin üstünde açılıp kapanıyor.
+   ========================================================================= */
+
+.modal-perde {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  /* Arkadaki panel görünür ama geri planda kalsın: karartma + hafif bulanıklık */
+  background: rgba(4, 10, 13, 0.72);
+  backdrop-filter: blur(2px);
+  animation: modal-belir 0.18s ease-out;
+}
+
+@keyframes modal-belir {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal-kutu {
+  width: min(1100px, 100%);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px 20px;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar-guclu);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--isik-ust), var(--shadow-lg);
+  animation: modal-yuksel 0.22s cubic-bezier(0.32, 0.72, 0.35, 1);
+}
+
+@keyframes modal-yuksel {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+.modal-baslik {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.modal-baslik h2 { font-size: var(--yazi-lg); letter-spacing: -0.01em; margin-bottom: 3px; }
+.modal-baslik .muted { font-size: var(--yazi-sm); max-width: 70ch; }
+
+.modal-kapat {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  font-size: 1.3rem;
+  line-height: 1;
+  background: var(--yuzey-2);
+  color: var(--metin-orta);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--gecis), color var(--gecis);
+}
+
+.modal-kapat:hover { background: var(--yuzey-3); color: var(--metin); }
+
+/* Harita solda geniş, form/liste sağda dar — çizim alanı öncelikli */
+.modal-govde {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 14px;
+  min-height: 0;   /* grid çocuğunun taşmasını engeller */
+}
+
+.geo-harita {
+  height: 62vh;
+  min-height: 320px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--kenar);
+  background: var(--murekkep-900);
+}
+
+/* Çizim modunda olduğu belli olsun */
+.geo-harita .ol-viewport { cursor: crosshair; }
+
+.geo-yan {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.geo-form { display: flex; flex-direction: column; gap: 7px; }
+
+.geo-form label {
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  color: var(--metin-soluk);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.geo-form input {
+  width: 100%;
+  padding: 9px 11px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  color: var(--metin);
+  font-size: var(--yazi-sm);
+  font-family: inherit;
+}
+
+.geo-form input::placeholder { color: var(--metin-soluk); }
+
+.geo-form input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--marka-300) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--marka-300) 18%, transparent);
+}
+
+/* Yönerge satırı: alan çizilince yeşile döner — "artık kaydedebilirsin" */
+.geo-durum {
+  font-size: var(--yazi-xs);
+  line-height: 1.45;
+  color: var(--metin-soluk);
+  padding: 8px 10px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-left: 3px solid var(--uyari);
+  border-radius: var(--radius);
+}
+
+.geo-durum.hazir {
+  border-left-color: var(--ok);
+  color: var(--metin-orta);
+}
+
+.geo-yan h3 {
+  font-size: var(--yazi-sm);
+  font-weight: 650;
+  color: var(--metin-soluk);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-top: 10px;
+  border-top: 1px solid var(--kenar);
+}
+
+.geo-liste { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+
+.geo-liste li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-left: 3px solid var(--marka-300);
+  border-radius: var(--radius);
+}
+
+.geo-liste-bilgi { min-width: 0; }
+.geo-liste-bilgi strong { display: block; font-size: var(--yazi-sm); }
+.geo-liste-bilgi small { display: block; font-size: var(--yazi-xs); color: var(--metin-soluk); }
+
+.geo-liste .btn-ghost.sil { padding: 6px 8px; flex-shrink: 0; }
+
+/* Modal içindeki düğmeler de koyu bağlam kurallarını kullansın
+   (.admin-layout altında olduğu için oradaki kurallar zaten geçerli) */
+
+@media (max-width: 900px) {
+  .modal-govde { grid-template-columns: 1fr; }
+  .geo-harita { height: 44vh; }
+}
+
+/* ---------- Harita ekranındaki izinli alan göstergesi (Ödev 7) ---------- */
+
+/*
+  Kullanıcının çalışma alanı sağ panelde bir bilgi kutusu olarak da özetleniyor:
+  haritadaki tarama deseni "burada bir sınır var" der, bu kutu "sınır neden
+  var ve nereden geliyor" sorusunu cevaplar.
+*/
+.calisma-alani {
+  font-size: var(--yazi-xs);
+  line-height: 1.5;
+  color: var(--metin-orta);
+  padding: 9px 11px;
+  background: color-mix(in oklab, var(--marka-300) 10%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--marka-300) 30%, transparent);
+  border-radius: var(--radius);
+  margin-top: 10px;
+}
+
+.calisma-alani strong { color: var(--metin); }
+
+.calisma-alani ul { list-style: none; margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
+
+.calisma-alani li {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  font-size: var(--yazi-xs);
+  white-space: nowrap;
+}

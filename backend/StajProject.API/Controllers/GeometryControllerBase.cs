@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using StajProject.API.Authorization;
 using StajProject.Business.Auth;
 using StajProject.Business.DTOs;
+using StajProject.Business.Validation;
 using StajProject.Business.Geo;
 using StajProject.Business.Services;
 using StajProject.Entities;
@@ -136,6 +137,13 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase, IEklemeY
             _logger.LogWarning(ex, "Geçersiz istek verisi");
             return BadRequest(new { message = ex.Message });
         }
+        catch (IsKuraliException ex)
+        {
+            // İş kuralı ihlali — Ödev 7'de "çizim izinli alanın dışında" bu yoldan gelir.
+            // 403 değil 400: kullanıcının yetkisi var, gönderdiği VERİ kurala uymuyor.
+            _logger.LogWarning(ex, "İş kuralı ihlali");
+            return BadRequest(new { message = ex.Message });
+        }
         catch (Exception ex)
         {
             // Beklenmeyen hata → 5xx. Ayrıntı log'a yazılır, istemciye sızdırılmaz.
@@ -155,6 +163,11 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase, IEklemeY
         catch (WktFormatException ex)
         {
             _logger.LogWarning(ex, "Geçersiz istek verisi");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (IsKuraliException ex)
+        {
+            _logger.LogWarning(ex, "İş kuralı ihlali");
             return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)

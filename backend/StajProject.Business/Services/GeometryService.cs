@@ -22,13 +22,16 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
 {
     private readonly IGeometryRepository<TEntity> _repository;
     private readonly ICurrentUserService _currentUser;
+    private readonly IGeoPermissionService _geoPermission;
 
     public GeometryService(
         IGeometryRepository<TEntity> repository,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IGeoPermissionService geoPermission)
     {
         _repository = repository;
         _currentUser = currentUser;
+        _geoPermission = geoPermission;
     }
 
     // Ödev 5: Harita açıldığında YALNIZCA giriş yapan kullanıcının çizimleri
@@ -51,6 +54,11 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
         // 1) WKT metnini geometriye çevir + tipini doğrula + SRID'sini 4326 yap.
         //    Hatalıysa WktFormatException fırlar, controller onu 400'e çevirir.
         var geometry = WktConverter.Read<TGeometry>(dto.Wkt);
+
+        // 1.5) COĞRAFİ YETKİ (Ödev 7 / Madde 2): çizim, kullanıcıya tanımlı alanın
+        //      içinde mi? Kontrol SUNUCUDA yapılıyor — arayüzdeki uyarı yalnızca
+        //      nezaket, isteği elle atan kullanıcı da bu kapıdan geçmek zorunda.
+        await _geoPermission.DogrulaAsync(_currentUser.RequireUserId(), geometry);
 
         // 2) Entity'yi kur. new() kısıtı sayesinde generic tipten nesne üretebiliyoruz.
         var entity = new TEntity
@@ -85,7 +93,13 @@ public class GeometryService<TEntity, TGeometry> : IGeometryService<TEntity>
         // Wkt boş gönderildiyse geometriye dokunmuyoruz — sadece ad/açıklama güncellenir.
         if (!string.IsNullOrWhiteSpace(dto.Wkt))
         {
-            existing.Geometry = WktConverter.Read<TGeometry>(dto.Wkt);
+            var yeniGeometri = WktConverter.Read<TGeometry>(dto.Wkt);
+
+            // Güncellemede de aynı kontrol: aksi hâlde kullanıcı alan içine çizip
+            // sonra kaydı sürükleyerek alan dışına taşıyabilirdi (Ödev 7 / Madde 2).
+            await _geoPermission.DogrulaAsync(_currentUser.RequireUserId(), yeniGeometri);
+
+            existing.Geometry = yeniGeometri;
         }
 
         var updated = await _repository.UpdateAsync(existing);

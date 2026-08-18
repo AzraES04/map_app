@@ -12,7 +12,7 @@ Ayrı bir yönetim paneli kullanıcıları, rolleri ve yetkileri yönetir.
 | **Giriş** | `admin` / `staj123` (Yönetici) · `ayse` / `staj123` (Editör) |
 | **API** | `http://localhost:5000` · Swagger: `/swagger` |
 | **Arayüz** | `http://localhost:5173` · Yönetim paneli: `/admin` |
-| **Test** | 66 birim testi |
+| **Test** | 84 birim testi |
 
 ---
 
@@ -27,6 +27,7 @@ Ayrı bir yönetim paneli kullanıcıları, rolleri ve yetkileri yönetir.
 - [5) Öznitelik giriş pop-up'ı](#5-öznitelik-giriş-pop-upı)
 - [6) Kesişim ve envanter analizi](#6-kesişim-ve-envanter-analizi)
 - [7) Yönetim paneli ve dinamik yetkilendirme](#7-yönetim-paneli-ve-dinamik-yetkilendirme)
+- [8) Coğrafi yetki tanımlama](#8-coğrafi-yetki-tanımlama)
 - [Kurulum](#kurulum)
 - [API uçları](#api-uçları)
 - [Doğrulama sorguları](#veritabanı-doğrulama-sorguları)
@@ -78,6 +79,9 @@ Entities hiçbir katmana bağımlı değildir; katman atlama ve döngüsel bağ�
 | 6 | Permission tablosu, rol/kullanıcı yetki atamaları | `roles` · `permissions` · `user_roles` · `role_permissions` · `user_permissions` |
 | 6 | Rolden gelen yetki kullanıcıda tekrar seçtirilmez | `PermissionService.Birlestir`, `UserAdminService.SetPermissionsAsync` |
 | 6 | Yetkiler çizim/analiz uçlarında da zorunlu | `[YetkiGerekli]`, `[EklemeYetkisiGerekli]`, `yetkiler.js` |
+| 7 | Kullanıcı/rol bazlı coğrafi yetki, Türkiye'ye zoomlu harita | `CografiYetkiModal.jsx`, `geo_permissions` |
+| 7 | Tanımlı alanın dışına çizim engelleniyor | `GeoPermissionService.DogrulaAsync` |
+| 7 | Yetkisi olmayana buton hiç gösterilmiyor | `MapPage.jsx`, `AdminUsers.jsx`, `AdminRoles.jsx` |
 
 ---
 
@@ -439,6 +443,120 @@ başka bir yönetici aynı işlemi yapabilir.
 
 ---
 
+## 8) Coğrafi Yetki Tanımlama
+
+Ödev 7 / Madde 2: *"Kullanıcı/Rol için haritada bir poligon alan çizildikten sonra,
+ilgili kullanıcı sistemde bu tanımlı alanın dışına çizim yapamasın."*
+
+### Arayüz
+
+Kullanıcı Listesi ve Rol Listesi ekranlarındaki her satırda **Coğrafi Yetki** düğmesi
+vardır. Düğme, **Türkiye sınırlarına zoomlanmış** bir harita modalı açar
+(`CografiYetkiModal.jsx`); poligon çizim aracı sürekli açıktır, köşeler tıklanıp çift
+tıklamayla alan kapatılır, ad verilip kaydedilir.
+
+Aynı bileşen iki ekranda da kullanılır; tek fark sahibin prop olarak gelmesi
+(`{ tur: 'kullanici' | 'rol', id, ad }`). İki kopya yazsaydık haritayla ilgili her
+düzeltmeyi iki yerde yapmak gerekirdi.
+
+Modal içinde: kaydedilmiş alanlar **düz mavi**, henüz kaydedilmemiş taslak **kesikli
+turuncu** çizilir — projedeki "kesikli = geçici" dili burada da geçerlidir.
+
+### Veri modeli
+
+Tek tablo yetiyor: `geo_permissions`
+
+| Kolon | Anlamı |
+|---|---|
+| `name` | "Ankara ve çevresi" gibi etiket |
+| `user_id` / `role_id` | Sahip — **yalnızca biri** dolu (CHECK kısıtı) |
+| `geom` | `geometry(Polygon, 4326)` + GIST index |
+| `inserted_user_id` | Kuralı kim koydu izi |
+| `is_deleted` / `is_active` / `modified_date` | Projedeki ortak durum deseni |
+
+```sql
+CONSTRAINT "CK_geo_permissions_tek_sahip"
+  CHECK ((user_id IS NOT NULL AND role_id IS NULL)
+      OR (user_id IS NULL AND role_id IS NOT NULL))
+```
+
+Kural veritabanına da yazıldı: servis zaten kontrol ediyor, ama tek savunma hattına
+güvenmek ileride başka bir yoldan (script, elle INSERT) tutarsız satır girmesine kapı
+bırakırdı.
+
+**Neden `tbl_polygon` kullanılmadı?** Oradaki poligonlar kullanıcının ürettiği
+**veri**; buradaki ise o veriyi sınırlayan **kural**. Aynı tabloya koysaydık izinli
+alan haritada envanter olarak listelenir, kesişim analizinde sayılır ve kullanıcı
+tarafından silinebilirdi.
+
+### Kural nasıl uygulanıyor?
+
+```
+izinli alan = kendi alanlarım ∪ AKTİF rollerimin alanları
+```
+
+`GeoPermissionService.DogrulaAsync` çizim ve güncelleme yolunda çağrılır:
+
+```csharp
+// GeometryService.CreateAsync
+var geometry = WktConverter.Read<TGeometry>(dto.Wkt);
+await _geoPermission.DogrulaAsync(_currentUser.RequireUserId(), geometry);
+```
+
+Üç ayrıntı:
+
+- **Tanım yoksa kısıt da yok.** Tersini seçseydik modül eklendiği anda bütün mevcut
+  kullanıcılar çizim yapamaz hâle gelirdi. Kısıtlama, *konması gereken* bir kuraldır.
+- **Alanlar birleştirilir** (`Union`), tek tek bakılmaz: iki bitişik alan tanımlıysa
+  tam sınırlarından geçen bir çizgi de kabul edilmelidir.
+- **`Covers` kullanılır, `Contains` değil.** Fark sınırdadır: `Contains` alanın tam
+  kenarına konan noktayı reddeder. Bunu kullanıcıya açıklamak imkânsızdır.
+
+Güncelleme yolunda da aynı kontrol var — yoksa kullanıcı alan içine çizip kaydı
+sürükleyerek dışarı taşıyabilirdi.
+
+### Kullanıcı ne görüyor?
+
+Harita ekranı açılışta `GET /api/permissions/me/geo` çağırır ve izinli alanı **kesikli
+mavi çerçeve** olarak çizer; sağ panelde de "Çizim alanınız sınırlı" kutusu, alanın
+adını ve kaynağını (rol / doğrudan) yazar. Sınırı deneme yanılmayla keşfetmek
+zorunda kalmaz.
+
+Alan dışına çizim yine de denenirse sunucu **400** ve şu mesajı döner:
+
+> Çizim, size tanımlı alanın dışında kalıyor. Yalnızca "Ankara çevresi" alanı içine
+> çizim yapabilirsiniz.
+
+### Yetkisi olmayana buton gösterilmiyor
+
+Ödevin ek maddesi. Önceki adımda yetkisiz araçlar *soluk ve kilitli* çiziliyordu;
+artık **hiç render edilmiyor**:
+
+| Yetki | Gizlenen |
+|---|---|
+| Point / Line / Polygon Ekleme | ilgili çizim aracı düğmesi |
+| Kayıt Güncelleme | "Düzenle" aracı, popup'taki "Düzenle" |
+| Kayıt Silme | listedeki ve popup'taki silme düğmeleri |
+| Analiz Çalıştırma | "Envanter Analizi" aracı |
+| Coğrafi Yetki Tanımlama | Kullanıcı/Rol listelerindeki "Coğrafi Yetki" düğmesi |
+| Kullanıcı/Rol Yönetimi | üst bardaki "Yönetim" bağlantısı |
+
+Klavye kısayolları da kapalıdır (`aracSec` içinde kontrol var) — düğmeyi gizleyip
+kısayolu açık bırakmak, kullanıcıyı çizim yapıp kaydederken 403 yemeye götürürdü.
+Panelde tek satırlık bir not hangi araçların gizlendiğini söyler; aksi hâlde eksik
+menü "uygulama bozuk" gibi görünürdü.
+
+### Yeni yetki: Coğrafi Yetki Tanımlama
+
+Modül kendi yetkisiyle korunuyor (`[YetkiGerekli(Yetkiler.CografiYetkiTanimlama)]`).
+
+Yeni bir yetki eklendiğinde Yönetici rolü **zaten var olduğu için** seed ona
+dokunmaz — sonuç: yeni özelliğe kimse erişemez. Bunun için seed'e tek bir istisna
+eklendi: `YoneticiRolunuTamamlaAsync()` Yönetici rolüne eksik yetkileri **ekler**
+(hiçbir zaman kaldırmaz). Editör ve Görüntüleyici rollerine dokunulmaz.
+
+---
+
 ## Kurulum
 
 ### Gereksinimler
@@ -511,10 +629,10 @@ npm install --prefix frontend && npm run dev --prefix frontend
 dotnet test backend/StajProject.sln
 ```
 
-66 test: durum kolonlarının davranışı (EF InMemory ile gerçek `DbContext` üzerinde),
+84 test: durum kolonlarının davranışı (EF InMemory ile gerçek `DbContext` üzerinde),
 WKT çözümleme / tip doğrulama / SRID yönetimi, görsel adresi güvenliği, geri alma,
 başlangıç verisi kuralları, sahiplik süzgeci, `LocationService` ve — Ödev 6 —
-yetki birleştirme kuralları (`YetkiTests.cs`).
+yetki birleştirme kuralları (`YetkiTests.cs`) ve coğrafi alan kısıtı (`CografiYetkiTests.cs`).
 
 ---
 
@@ -542,6 +660,9 @@ yetki birleştirme kuralları (`YetkiTests.cs`).
 | GET/POST | `/api/admin/users` | Kullanıcı Yönetimi |
 | GET/PUT/DELETE | `/api/admin/users/{id}` | Kullanıcı Yönetimi |
 | GET/PUT | `/api/admin/users/{id}/permissions` | Kullanıcı Yönetimi |
+| GET | `/api/permissions/me/geo` | giriş yeterli — kendi çizim alanı |
+| GET/POST | `/api/admin/geo-permissions` | Coğrafi Yetki Tanımlama |
+| DELETE | `/api/admin/geo-permissions/{id}` | Coğrafi Yetki Tanımlama |
 | GET/POST | `/api/admin/roles` | Rol Yönetimi |
 | GET/PUT/DELETE | `/api/admin/roles/{id}` | Rol Yönetimi |
 
@@ -580,6 +701,18 @@ JOIN user_permissions up ON up.user_id = u.id
 JOIN permissions p       ON p.id = up.permission_id
 ORDER BY 1, 2;
 
+-- Ödev 7: kimin nerede çizim yapabildiği
+SELECT COALESCE(u.username, 'rol: ' || r.name) AS sahip,
+       g.name AS alan, g.is_active, ST_AsText(g.geom) AS sinir
+FROM geo_permissions g
+LEFT JOIN users u ON u.id = g.user_id
+LEFT JOIN roles r ON r.id = g.role_id
+WHERE g.is_deleted = false;
+
+-- Bir nokta izinli alanın içinde mi? (servisin yaptığı kontrolün SQL karşılığı)
+SELECT ST_Covers(g.geom, ST_SetSRID(ST_MakePoint(32.85, 39.93), 4326)) AS icerideMi
+FROM geo_permissions g WHERE g.is_deleted = false;
+
 -- Kesişim analizinin SQL karşılığı
 SELECT COUNT(*) FROM tbl_point
 WHERE ST_Intersects(geom, ST_GeomFromText('POLYGON((32.6 39.8,33.1 39.8,33.1 40.1,32.6 40.1,32.6 39.8))', 4326));
@@ -598,7 +731,7 @@ StajProject/
 │   │   ├── Auth/Yetkiler.cs      → Yetki adları (tek kaynak) + seed tanımları
 │   │   └── Validation/           → IsKuraliException (iş kuralı ihlali → 400)
 │   ├── StajProject.DataAccess/   → DbContext, Repositories (+arayüzler), Migrations
-│   ├── StajProject.Entities/     → Entity tanımları, IAuditableEntity, Role/Permission
+│   ├── StajProject.Entities/     → Entity tanımları, IAuditableEntity, Role/Permission, GeoPermission
 │   ├── StajProject.Tests/        → 66 birim testi (xUnit)
 │   └── db/setup.sql              → Rol + veritabanı + PostGIS kurulumu
 └── frontend/src/
@@ -613,6 +746,7 @@ StajProject/
     ├── index.css                 → Tasarım sistemi (koyu krom / aydınlık içerik)
     └── pages/                    → Login.jsx · MapPage.jsx
                                     AdminLayout.jsx · AdminUsers.jsx · AdminRoles.jsx
+                                    CografiYetkiModal.jsx (Türkiye haritalı alan çizimi)
 ```
 
 ---

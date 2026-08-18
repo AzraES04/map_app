@@ -8,8 +8,11 @@ import {
   kullaniciYetkileri,
   kullaniciYetkileriniKaydet,
   rolleriListele,
+  kendiYetkilerim,
 } from '../adminApi'
-import { EkleIkonu, KilitIkonu, SilIkonu, YetkiIkonu } from '../icons'
+import { EkleIkonu, KilitIkonu, SilIkonu, YetkiIkonu, HaritaIkonu } from '../icons'
+import { YETKILER } from '../yetkiler'
+import CografiYetkiModal from './CografiYetkiModal.jsx'
 
 // ============================================================================
 //  Kullanıcı Listesi ekranı (Ödev 6 / Madde 1)
@@ -41,6 +44,12 @@ export default function AdminUsers() {
   const [yetkiPaneli, setYetkiPaneli] = useState(null)
   const [seciliYetkiler, setSeciliYetkiler] = useState([])
 
+  // Ödev 7: coğrafi yetki modalı — açıksa hangi kullanıcı için açık?
+  const [cografiSahip, setCografiSahip] = useState(null)
+
+  // "Coğrafi Yetki" düğmesi, yetkisi olmayana HİÇ gösterilmiyor (ödevin ek maddesi).
+  const [cografiYetkim, setCografiYetkim] = useState(false)
+
   // Token düştüğünde login'e dön. useCallback: aşağıdaki useEffect'in
   // bağımlılık listesinde duruyor, her render'da yeniden üretilirse
   // veri sonsuz döngüyle yeniden çekilirdi.
@@ -68,6 +77,20 @@ export default function AdminUsers() {
   }, [oturumBitti])
 
   useEffect(() => { yukle() }, [yukle])
+
+  // Kendi yetkilerimi bir kez oku: düğmeyi gösterip göstermeyeceğimize karar ver.
+  useEffect(() => {
+    let iptal = false
+    kendiYetkilerim(oturumBitti)
+      .then((matris) => {
+        if (iptal) return
+        setCografiYetkim(matris.permissions.some(
+          (y) => y.granted && y.name === YETKILER.cografiYetkiTanimlama,
+        ))
+      })
+      .catch(() => { /* okunamadıysa düğme gizli kalır */ })
+    return () => { iptal = true }
+  }, [oturumBitti])
 
   // ------------------------------------------------------------------
   //  Form
@@ -356,6 +379,19 @@ export default function AdminUsers() {
                     <button type="button" className="btn-ghost" onClick={() => yetkileriAc(kullanici)}>
                       <YetkiIkonu /> Yetkiler
                     </button>
+                    {/* Ödev 7 / Madde 2: kullanıcı bazlı coğrafi yetki */}
+                    {cografiYetkim && (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => setCografiSahip({
+                          tur: 'kullanici', id: kullanici.id, ad: kullanici.username,
+                        })}
+                        title="Bu kullanıcının çizim yapabileceği alanı haritadan tanımla"
+                      >
+                        <HaritaIkonu /> Coğrafi Yetki
+                      </button>
+                    )}
                     <button type="button" className="btn-ghost" onClick={() => duzenle(kullanici)}>
                       Düzenle
                     </button>
@@ -369,6 +405,15 @@ export default function AdminUsers() {
           </table>
         )}
       </div>
+
+      {/* ---------------- Coğrafi yetki haritası ---------------- */}
+      {cografiSahip && (
+        <CografiYetkiModal
+          sahip={cografiSahip}
+          onKapat={() => setCografiSahip(null)}
+          onOturumBitti={oturumBitti}
+        />
+      )}
 
       {/* ---------------- Yetki matrisi ---------------- */}
       {yetkiPaneli && (

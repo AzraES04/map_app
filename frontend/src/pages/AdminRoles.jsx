@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { rolleriListele, rolEkle, rolGuncelle, rolSil, yetkileriListele } from '../adminApi'
-import { EkleIkonu, SilIkonu, RolIkonu } from '../icons'
+import {
+  rolleriListele, rolEkle, rolGuncelle, rolSil, yetkileriListele, kendiYetkilerim,
+} from '../adminApi'
+import { EkleIkonu, SilIkonu, RolIkonu, HaritaIkonu } from '../icons'
+import { YETKILER } from '../yetkiler'
+import CografiYetkiModal from './CografiYetkiModal.jsx'
 
 // ============================================================================
 //  Rol Listesi ekranı (Ödev 6 / Madde 1)
@@ -24,6 +28,10 @@ export default function AdminRoles() {
 
   const [form, setForm] = useState(null)
   const [kaydediliyor, setKaydediliyor] = useState(false)
+
+  // Ödev 7: coğrafi yetki modalı + düğmeyi göstermeye yetkim var mı?
+  const [cografiSahip, setCografiSahip] = useState(null)
+  const [cografiYetkim, setCografiYetkim] = useState(false)
 
   const oturumBitti = useCallback(
     () => navigate('/login', { replace: true, state: { expired: true } }),
@@ -48,6 +56,20 @@ export default function AdminRoles() {
   }, [oturumBitti])
 
   useEffect(() => { yukle() }, [yukle])
+
+  // Yetkisi olmayana "Coğrafi Yetki" düğmesi HİÇ gösterilmiyor (ödevin ek maddesi).
+  useEffect(() => {
+    let iptal = false
+    kendiYetkilerim(oturumBitti)
+      .then((matris) => {
+        if (iptal) return
+        setCografiYetkim(matris.permissions.some(
+          (y) => y.granted && y.name === YETKILER.cografiYetkiTanimlama,
+        ))
+      })
+      .catch(() => { /* okunamadıysa düğme gizli kalır */ })
+    return () => { iptal = true }
+  }, [oturumBitti])
 
   // ------------------------------------------------------------------
 
@@ -205,6 +227,15 @@ export default function AdminRoles() {
         </form>
       )}
 
+      {/* ---------------- Coğrafi yetki haritası ---------------- */}
+      {cografiSahip && (
+        <CografiYetkiModal
+          sahip={cografiSahip}
+          onKapat={() => setCografiSahip(null)}
+          onOturumBitti={oturumBitti}
+        />
+      )}
+
       {/* ---------------- Liste ---------------- */}
       <div className="admin-kart">
         {yukleniyor ? (
@@ -250,6 +281,18 @@ export default function AdminRoles() {
                     </span>
                   </td>
                   <td className="sag">
+                    {/* Ödev 7 / Madde 2: rol bazlı coğrafi yetki —
+                        alan role verilince o roldeki HERKESE uygulanır. */}
+                    {cografiYetkim && (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => setCografiSahip({ tur: 'rol', id: rol.id, ad: rol.name })}
+                        title="Bu roldeki kullanıcıların çizim yapabileceği alanı tanımla"
+                      >
+                        <HaritaIkonu /> Coğrafi Yetki
+                      </button>
+                    )}
                     <button type="button" className="btn-ghost" onClick={() => duzenle(rol)}>
                       Düzenle
                     </button>

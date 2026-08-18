@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using StajProject.DataAccess.Context;
@@ -33,6 +33,9 @@ public static class DataAccessRegistration
         // Ödev 6: dinamik yetkilendirme tabloları
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IPermissionRepository, PermissionRepository>();
+
+        // Ödev 7: coğrafi yetki (kullanıcı/rol bazlı çizim alanı)
+        services.AddScoped<IGeoPermissionRepository, GeoPermissionRepository>();
 
         // Geometri repository'leri: tek generic sınıf, üç tip argümanı
         services.AddScoped<IGeometryRepository<PointEntity>, GeometryRepository<PointEntity>>();

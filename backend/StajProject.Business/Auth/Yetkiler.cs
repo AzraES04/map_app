@@ -1,4 +1,4 @@
-namespace StajProject.Business.Auth;
+﻿namespace StajProject.Business.Auth;
 
 /// <summary>
 /// Sistemin tanıdığı yetki ADLARI (Ödev 6 / Madde 2).
@@ -23,6 +23,9 @@ public static class Yetkiler
     public const string KullaniciYonetimi = "Kullanıcı Yönetimi";
     public const string RolYonetimi = "Rol Yönetimi";
 
+    /// <summary>Ödev 7 / Madde 2: kullanıcı ve rollere çizim alanı tanımlama.</summary>
+    public const string CografiYetkiTanimlama = "Coğrafi Yetki Tanımlama";
+
     /// <summary>Seed'in kullandığı tanım listesi: ad + açıklama.</summary>
     public static readonly (string Ad, string Aciklama)[] Tumu =
     {
@@ -34,5 +37,6 @@ public static class Yetkiler
         (AnalizCalistirma, "Kesişim analizi çalıştırabilir."),
         (KullaniciYonetimi,"Yönetim panelinden kullanıcı ekleyebilir, güncelleyebilir, silebilir."),
         (RolYonetimi,      "Yönetim panelinden rol ve rol yetkilerini düzenleyebilir."),
+        (CografiYetkiTanimlama, "Kullanıcı ve rollere haritadan çizim alanı tanımlayabilir."),
     };
 }
