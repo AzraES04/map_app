@@ -33,6 +33,7 @@ import {
 } from '../geo'
 import { listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir, kesisimAnalizi } from '../api'
 import { kendiYetkilerim } from '../adminApi'
+import { YETKILER, EKLEME_YETKISI } from '../yetkiler'
 import {
   TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu, AnalizIkonu, SaatIkonu, KullaniciIkonu, RolIkonu,
 } from '../icons'
@@ -49,6 +50,16 @@ const DUZENLE = 'Duzenle'
 // Envanter analizi aracı (Ödev 4 / Görev 3). Poligon çizdirir ama kaydetmez;
 // çizilen alanla kesişen envanterleri sayar.
 const ANALIZ = 'Analiz'
+
+// Ödev 6: hangi araç hangi yetkiyi ister?
+// Üç çizim tipi zaten EKLEME_YETKISI'nde eşlenmiş; düzenleme ve analiz araçları
+// da kendi yetkilerine bağlanıyor. Tek sözlük olması, hem düğmeyi kilitleyen
+// hem klavye kısayolunu engelleyen kodun AYNI kaynağa bakmasını sağlıyor.
+const ARAC_YETKISI = {
+  ...EKLEME_YETKISI,
+  [DUZENLE]: YETKILER.kayitGuncelleme,
+  [ANALIZ]: YETKILER.analizCalistirma,
+}
 
 // --- Açılış sahnesi: "uzaydan Türkiye'ye iniş" ---
 //
@@ -246,11 +257,12 @@ export default function MapPage() {
   const [duzenleForm, setDuzenleForm] = useState(null)   // { name, color } | null
   const [kaydediliyor, setKaydediliyor] = useState(false)
 
-  // Ödev 6: giriş yapan kullanıcının yönetim paneline girme yetkisi var mı?
-  // Yoksa üst bardaki bağlantı hiç çizilmiyor. Bu SADECE nezaket: asıl kontrol
-  // sunucuda, [YetkiGerekli] özniteliğinde. Bağlantıyı gizlemek güvenlik değildir,
-  // adresi elle yazan yetkisiz kullanıcı yine 403 alır.
-  const [yonetimYetkisi, setYonetimYetkisi] = useState(false)
+  // Ödev 6: giriş yapan kullanıcının SAHİP OLDUĞU yetkilerin adları.
+  // Araç düğmeleri, silme düğmeleri ve yönetim bağlantısı buna göre açılıp kapanıyor.
+  // Bu SADECE nezaket: asıl kontrol sunucuda, [YetkiGerekli] özniteliğinde.
+  // Düğmeyi gizlemek güvenlik değildir — isteği elle atan yetkisiz kullanıcı yine 403 alır.
+  // Amaç, kullanıcıyı yapamayacağı bir işe kalkıştırıp sonunda hata göstermemek.
+  const [yetkilerim, setYetkilerim] = useState([])
 
   // --- Yer arama ---
   const [arama, setArama] = useState('')
@@ -292,10 +304,8 @@ export default function MapPage() {
     kendiYetkilerim(goLogin)
       .then((matris) => {
         if (iptalEdildi) return
-        const yetkili = matris.permissions.some(
-          (y) => y.granted && (y.name === 'Kullanıcı Yönetimi' || y.name === 'Rol Yönetimi'),
-        )
-        setYonetimYetkisi(yetkili)
+        // granted = rolden VEYA doğrudan geliyor; ikisinin birleşimi.
+        setYetkilerim(matris.permissions.filter((y) => y.granted).map((y) => y.name))
       })
       .catch(() => { /* yetki okunamadı → bağlantı gizli kalır */ })
 
@@ -1068,7 +1078,21 @@ export default function MapPage() {
     setAramaHatasi(null)
   }
 
+  /** Giriş yapan kullanıcının bu yetkisi var mı? (rolden veya doğrudan) */
+  const yetkiVar = (ad) => yetkilerim.includes(ad)
+
+  /** Araç kullanılabilir mi? Sözlükte karşılığı yoksa yetki aranmaz. */
+  const aracKullanilabilir = (key) => !ARAC_YETKISI[key] || yetkiVar(ARAC_YETKISI[key])
+
   const aracSec = (key) => {
+    // Yetki kontrolü BURADA da yapılıyor, sadece düğmede değil: araçlar klavye
+    // kısayoluyla da (1/2/3/D/A) açılabiliyor. Düğmeyi kilitleyip kısayolu açık
+    // bırakmak, kullanıcıyı çizim yapıp kaydederken 403 yemeye götürürdü.
+    if (!aracKullanilabilir(key)) {
+      bildir('hata', `Bu araç için "${ARAC_YETKISI[key]}" yetkiniz yok.`)
+      return
+    }
+
     // Aynı butona tekrar basmak aracı kapatır (toggle davranışı).
     setActiveTool((onceki) => (onceki === key ? null : key))
     drawSourceRef.current?.clear()
@@ -1287,6 +1311,18 @@ export default function MapPage() {
     clearSession()
     navigate('/login', { replace: true })
   }
+
+  // ---- Ödev 6: yetkiye göre arayüz ----
+  const yonetimYetkisi = yetkiVar(YETKILER.kullaniciYonetimi) || yetkiVar(YETKILER.rolYonetimi)
+  const guncelleyebilir = yetkiVar(YETKILER.kayitGuncelleme)
+  const silebilir = yetkiVar(YETKILER.kayitSilme)
+
+  // Kapalı araçların insan okuyabilir adları — panelde tek satırlık açıklama için.
+  const kilitliAraclar = [
+    ...DRAW_TYPE_KEYS.filter((k) => !aracKullanilabilir(k)).map((k) => DRAW_TYPES[k].label),
+    ...(guncelleyebilir ? [] : ['Düzenle']),
+    ...(yetkiVar(YETKILER.analizCalistirma) ? [] : ['Envanter Analizi']),
+  ]
 
   const toplamKayit = DRAW_TYPE_KEYS.reduce((t, k) => t + records[k].length, 0)
   const sureAzaldi = remaining !== '' && Number(remaining.split(':')[0]) < 1
@@ -1560,9 +1596,14 @@ export default function MapPage() {
                   </form>
                 ) : (
                   <div className="popup-eylemler">
-                    <button type="button" className="btn-primary" onClick={duzenlemeyeBasla}>
-                      Düzenle
-                    </button>
+                    {/* Ödev 6: yetkisi olmayana düğme HİÇ gösterilmiyor.
+                        Kilitli göstermek yerine gizlemek, dar popup'ta
+                        kullanılamayacak düğmeyle yer kaplamamak için. */}
+                    {guncelleyebilir && (
+                      <button type="button" className="btn-primary" onClick={duzenlemeyeBasla}>
+                        Düzenle
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn-ghost"
@@ -1571,14 +1612,16 @@ export default function MapPage() {
                     >
                       Yakınlaş
                     </button>
-                    <button
-                      type="button"
-                      className="btn-ghost sil"
-                      onClick={() => handleDelete(secili.tip, secili.dto)}
-                      title="Sil (soft delete — geri alınabilir)"
-                    >
-                      <SilIkonu />
-                    </button>
+                    {silebilir && (
+                      <button
+                        type="button"
+                        className="btn-ghost sil"
+                        onClick={() => handleDelete(secili.tip, secili.dto)}
+                        title="Sil (soft delete — geri alınabilir)"
+                      >
+                        <SilIkonu />
+                      </button>
+                    )}
                   </div>
                 )}
               </>
@@ -1641,19 +1684,26 @@ export default function MapPage() {
             <h2>Çizim Araçları</h2>
 
             <div className="tool-group" ref={aracGrubuRef}>
-              {DRAW_TYPE_KEYS.map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`tool-btn${activeTool === key ? ' active' : ''}`}
-                  onClick={() => aracSec(key)}
-                  aria-pressed={activeTool === key}
-                  title={`${DRAW_TYPES[key].label} çiz`}
-                >
-                  <span className="tool-icon"><TipIkonu tip={key} /></span>
-                  {DRAW_TYPES[key].label}
-                </button>
-              ))}
+              {DRAW_TYPE_KEYS.map((key) => {
+                // Ödev 6: "Point Ekleme" yetkisi olmayan kullanıcı nokta aracını açamaz.
+                const izinli = aracKullanilabilir(key)
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`tool-btn${activeTool === key ? ' active' : ''}`}
+                    onClick={() => aracSec(key)}
+                    aria-pressed={activeTool === key}
+                    disabled={!izinli}
+                    title={izinli
+                      ? `${DRAW_TYPES[key].label} çiz`
+                      : `"${ARAC_YETKISI[key]}" yetkiniz yok`}
+                  >
+                    <span className="tool-icon"><TipIkonu tip={key} /></span>
+                    {DRAW_TYPES[key].label}
+                  </button>
+                )
+              })}
             </div>
 
             {/* Düzenleme aracı ayrı bir satırda: çizim yapmıyor, var olanı değiştiriyor */}
@@ -1662,7 +1712,10 @@ export default function MapPage() {
               className={`tool-btn genis${activeTool === DUZENLE ? ' active' : ''}`}
               onClick={() => aracSec(DUZENLE)}
               aria-pressed={activeTool === DUZENLE}
-              title="Kaydedilmiş geometrileri sürükleyerek düzenle"
+              disabled={!guncelleyebilir}
+              title={guncelleyebilir
+                ? 'Kaydedilmiş geometrileri sürükleyerek düzenle'
+                : `"${YETKILER.kayitGuncelleme}" yetkiniz yok`}
             >
               <span className="tool-icon"><DuzenleIkonu /></span>
               Düzenle
@@ -1674,7 +1727,10 @@ export default function MapPage() {
               className={`tool-btn genis analiz${activeTool === ANALIZ ? ' active' : ''}`}
               onClick={() => aracSec(ANALIZ)}
               aria-pressed={activeTool === ANALIZ}
-              title="Geçici poligon çizip altında kalan envanteri say"
+              disabled={!yetkiVar(YETKILER.analizCalistirma)}
+              title={yetkiVar(YETKILER.analizCalistirma)
+                ? 'Geçici poligon çizip altında kalan envanteri say'
+                : `"${YETKILER.analizCalistirma}" yetkiniz yok`}
             >
               <span className="tool-icon"><AnalizIkonu /></span>
               Envanter Analizi
@@ -1709,6 +1765,16 @@ export default function MapPage() {
               <p className="kisayol-kunye">
                 <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> araçlar ·
                 <kbd>D</kbd> düzenle · <kbd>A</kbd> analiz · <kbd>/</kbd> ara
+              </p>
+            )}
+
+            {/* Ödev 6: kapalı araç varsa sebebini söyle. Sessizce kilitlemek
+                kullanıcıya "uygulama bozuk" hissi verirdi. */}
+            {kilitliAraclar.length > 0 && (
+              <p className="tool-hint yetki-notu">
+                Yetkiniz olmadığı için kapalı: <strong>{kilitliAraclar.join(', ')}</strong>.
+                <br />
+                Yetkiler yönetim panelinden rolünüze veya hesabınıza eklenebilir.
               </p>
             )}
           </section>
@@ -1840,14 +1906,16 @@ export default function MapPage() {
                       {dto.description && <span className="muted"> — {dto.description}</span>}
                       <code className="wkt-onizleme">{dto.wkt}</code>
                     </div>
-                    <button
-                      type="button"
-                      className="sil-btn"
-                      title="Sil"
-                      onClick={(e) => { e.stopPropagation(); handleDelete(activeTab, dto) }}
-                    >
-                      <SilIkonu />
-                    </button>
+                    {silebilir && (
+                      <button
+                        type="button"
+                        className="sil-btn"
+                        title="Sil"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(activeTab, dto) }}
+                      >
+                        <SilIkonu />
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

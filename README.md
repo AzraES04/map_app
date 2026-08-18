@@ -77,6 +77,7 @@ Entities hiçbir katmana bağımlı değildir; katman atlama ve döngüsel bağ�
 | 6 | Admin paneli: sol dikey navbar, Kullanıcı ve Rol listesi | `AdminLayout.jsx`, `AdminUsers.jsx`, `AdminRoles.jsx` |
 | 6 | Permission tablosu, rol/kullanıcı yetki atamaları | `roles` · `permissions` · `user_roles` · `role_permissions` · `user_permissions` |
 | 6 | Rolden gelen yetki kullanıcıda tekrar seçtirilmez | `PermissionService.Birlestir`, `UserAdminService.SetPermissionsAsync` |
+| 6 | Yetkiler çizim/analiz uçlarında da zorunlu | `[YetkiGerekli]`, `[EklemeYetkisiGerekli]`, `yetkiler.js` |
 
 ---
 
@@ -380,6 +381,31 @@ durumu çıkardı.
 rol değiştiğinde bu kopya arkada kalır ve "yetkiyi rolden almıştı ama rolü aldım, hâlâ
 yetkili" durumu doğardı.
 
+### Yetki hangi işlemde aranıyor?
+
+Yetkiler yalnızca yönetim ekranlarında değil, **haritadaki her yazma işleminde** aranır:
+
+| İşlem | Uç | Gereken yetki |
+|---|---|---|
+| Listeleme / tek kayıt | `GET /api/points` … | — (giriş yeterli) |
+| Nokta ekleme | `POST /api/points` | **Point Ekleme** |
+| Çizgi ekleme | `POST /api/lines` | **Line Ekleme** |
+| Alan ekleme | `POST /api/polygons` | **Polygon Ekleme** |
+| Ad / renk / geometri güncelleme | `PUT /api/{tip}/{id}` | Kayıt Güncelleme |
+| Askıya alma / aktif etme | `POST /api/{tip}/{id}/active` | Kayıt Güncelleme |
+| Silme | `DELETE /api/{tip}/{id}` | Kayıt Silme |
+| Silmeyi geri alma | `POST /api/{tip}/{id}/restore` | Kayıt Silme |
+| Kesişim analizi | `POST /api/analysis/intersect` | Analiz Çalıştırma |
+
+Okuma uçları bilerek yetkisiz bırakıldı: kullanıcı zaten **yalnızca kendi**
+kayıtlarını görüyor (Ödev 5 sahiplik süzgeci), ayrıca bir yetki aramak
+"haritayı hiç açamayan kullanıcı" demek olurdu.
+
+Arayüz tarafı da aynı listeye göre kısılır (`frontend/src/yetkiler.js`): yetkisi
+olmayan araç düğmesi **soluk ve kilitli** çizilir, silme düğmeleri hiç
+görünmez, klavye kısayolu da çalışmaz. Amaç kullanıcıyı yapamayacağı bir işe
+kalkıştırıp sonunda hata göstermemek — güvenliği sağlayan yine sunucudur.
+
 ### Erişim kontrolü: `[YetkiGerekli]`
 
 ```csharp
@@ -391,7 +417,14 @@ public class AdminUsersController : YonetimControllerBase
 ASP.NET'in hazır `[Authorize(Roles = "...")]` mekanizması rolleri **token'a** yazar; token
 10 dakika geçerli olduğu için panelden verilen yetki ancak yeniden girişte etkili olurdu.
 `YetkiGerekliAttribute` her istekte veritabanındaki güncel duruma bakar — dinamik
-yetkilendirmenin anlamı budur.
+yetkilendirmenin anlamı budur. Canlı kanıt: `ayse` bir alan çizerken (**201**), yönetici
+Editör rolünden "Polygon Ekleme"yi kaldırır; **aynı token** ile atılan bir sonraki istek
+**403** alır, yetki geri verilince yine **201** olur — arada yeniden giriş yok.
+
+Üç geometri controller'ı gövdesini tek taban sınıftan aldığı için "Create" ucu üçünde de
+aynı metottur; ama gereken yetki farklıdır. Öznitelik parametresi derleme zamanı sabiti
+olmak zorunda olduğundan, `[EklemeYetkisiGerekli]` yetki adını çalışma anında
+controller'dan sorar (`IEklemeYetkisiTasiyan.EklemeYetkisi`).
 
 Arayüzdeki gizleme yalnızca nezakettir: `ayse` ile `/admin/users` adresi elle yazıldığında
 sunucu **403** döner ve panel "Bu işlem için … yetkisine sahip olmanız gerekiyor." mesajını
@@ -492,12 +525,12 @@ yetki birleştirme kuralları (`YetkiTests.cs`).
 | POST | `/api/auth/login` | JWT alır (10 dk geçerli, IP başına **5 deneme/dk**) |
 | GET | `/api/points` · `/api/lines` · `/api/polygons` | Kayıtları WKT olarak listeler |
 | GET | `/api/points/{id}` | Tek kayıt |
-| POST | `/api/points` | `{ name, color, description?, imageUrl?, wkt }` |
-| PUT | `/api/points/{id}` | Öznitelik (+ opsiyonel geometri) günceller |
-| DELETE | `/api/points/{id}` | Soft delete |
-| POST | `/api/points/{id}/restore` | Silmeyi geri alır |
-| POST | `/api/points/{id}/active` | Aktif/pasif değiştirir |
-| **POST** | **`/api/analysis/intersect`** | `{ wkt, haricTutulanPolygonId? }` → kesişen envanter |
+| POST | `/api/points` | `{ name, color, description?, imageUrl?, wkt }` — **Point Ekleme** yetkisi |
+| PUT | `/api/points/{id}` | Öznitelik (+ opsiyonel geometri) günceller — **Kayıt Güncelleme** |
+| DELETE | `/api/points/{id}` | Soft delete — **Kayıt Silme** |
+| POST | `/api/points/{id}/restore` | Silmeyi geri alır — **Kayıt Silme** |
+| POST | `/api/points/{id}/active` | Aktif/pasif değiştirir — **Kayıt Güncelleme** |
+| **POST** | **`/api/analysis/intersect`** | `{ wkt, haricTutulanPolygonId? }` → kesişen envanter — **Analiz Çalıştırma** |
 | GET/POST/DELETE | `/api/locations` | 2. ödevden kalan tablo (geriye dönük uyumluluk) |
 
 **Yönetim paneli uçları (Ödev 6)**
@@ -572,6 +605,7 @@ StajProject/
     ├── geo.js                    → Projeksiyon + WKT dönüşümleri (tek merkez)
     ├── api.js                    → Geometri API çağrıları
     ├── adminApi.js               → Yönetim paneli API çağrıları
+    ├── yetkiler.js               → Yetki adları (backend Yetkiler.cs ile aynı)
     ├── auth.js                   → Token yönetimi, otomatik çıkış
     ├── geocode.js                → Nominatim yer arama
     ├── icons.jsx                 → Inline SVG ikonlar
@@ -588,6 +622,10 @@ StajProject/
 - **Renk senkronu:** Çizim tipi renkleri iki yerde tanımlıdır ve aynı tutulmalıdır —
   `frontend/src/geo.js` (`DRAW_TYPES[*].color`) ve `frontend/src/index.css`
   (`--nokta`, `--cizgi`, `--poligon`, `--analiz`).
+- **Yetki adı senkronu:** Yetki adları da iki yerdedir —
+  `backend/StajProject.Business/Auth/Yetkiler.cs` ve `frontend/src/yetkiler.js`.
+  Frontend'deki kopya yalnızca düğme gizlemek içindir; adlar birebir aynı olmalıdır,
+  aksi hâlde arayüz yetkiyi göremez (sunucu yine doğru davranır, düğme boşuna kilitli kalır).
 - **`describeGeometry`** içindeki uzunluk/alan değerleri Mercator düzleminde hesaplanır;
   Türkiye enlemlerinde gerçek değerden yaklaşık %30 sapar. Yalnızca bilgi amaçlıdır.
 - **Tasarım sistemi:** Üst bar ve panel koyu ("krom"), harita ve üzerindeki kartlar

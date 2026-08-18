@@ -1080,6 +1080,24 @@ body {
               color var(--gecis), transform var(--gecis);
 }
 
+/*
+  Ödev 6 — YETKİSİ OLMAYAN araç.
+  Soluklaştırıp imleci "yasak" yapıyoruz; düğmeyi tamamen gizlemiyoruz ki
+  kullanıcı özelliğin var olduğunu ama kendisine kapalı olduğunu görsün
+  (title'da hangi yetkinin gerektiği yazıyor).
+*/
+.tool-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+
+.tool-btn:disabled:hover {
+  background: var(--yuzey-2);
+  border-color: var(--kenar);
+  transform: none;
+}
+
 .tool-btn:hover {
   background: var(--yuzey-3);
   border-color: var(--kenar-guclu);

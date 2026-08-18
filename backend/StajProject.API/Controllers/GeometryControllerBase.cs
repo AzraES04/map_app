@@ -1,5 +1,7 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StajProject.API.Authorization;
+using StajProject.Business.Auth;
 using StajProject.Business.DTOs;
 using StajProject.Business.Geo;
 using StajProject.Business.Services;
@@ -23,9 +25,16 @@ namespace StajProject.API.Controllers;
 /// catch bloğu yazılmaz. ExceptionHandlingMiddleware de son güvenlik ağı olarak durur.
 /// </summary>
 [Authorize]  // üç controller da JWT ister; token yoksa/süresi dolduysa 401
-public abstract class GeometryControllerBase<TEntity> : ControllerBase
+public abstract class GeometryControllerBase<TEntity> : ControllerBase, IEklemeYetkisiTasiyan
     where TEntity : GeometryEntityBase
 {
+    /// <summary>
+    /// Bu controller'da kayıt EKLEMEK hangi yetkiyi gerektirir?
+    /// Üçünde farklı olduğu için (Point/Line/Polygon Ekleme) türeyen sınıf söyler;
+    /// <see cref="EklemeYetkisiGerekliAttribute"/> bu değeri çalışma anında okur.
+    /// </summary>
+    public abstract string EklemeYetkisi { get; }
+
     private readonly IGeometryService<TEntity> _service;
     private readonly ILogger _logger;
 
@@ -49,8 +58,12 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase
             return item is null ? Bulunamadi(id) : Ok(item);
         });
 
-    /// <summary>WKT metninden yeni geometri kaydeder. Kayıt, giriş yapan kullanıcıya bağlanır.</summary>
+    /// <summary>
+    /// WKT metninden yeni geometri kaydeder. Kayıt, giriş yapan kullanıcıya bağlanır.
+    /// Tipe göre "Point/Line/Polygon Ekleme" yetkisi gerektirir.
+    /// </summary>
     [HttpPost]
+    [EklemeYetkisiGerekli]
     public Task<ActionResult<GeometryDto>> Create([FromBody] GeometryCreateDto dto)
         => Calistir<GeometryDto>(async () =>
         {
@@ -60,6 +73,7 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase
 
     /// <summary>Ad, renk, açıklama ve istenirse GEOMETRİ günceller (Ödev 5 / Madde 4).</summary>
     [HttpPut("{id:int}")]
+    [YetkiGerekli(Yetkiler.KayitGuncelleme)]
     public Task<ActionResult<GeometryDto>> Update(int id, [FromBody] GeometryUpdateDto dto)
         => Calistir<GeometryDto>(async () =>
         {
@@ -72,6 +86,7 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase
     /// tabloda duruyor; bu uç tek bir UPDATE ile silmeyi geri alıyor.
     /// </summary>
     [HttpPost("{id:int}/restore")]
+    [YetkiGerekli(Yetkiler.KayitSilme)]   // geri alma, silme yetkisinin parçasıdır
     public Task<IActionResult> Restore(int id)
         => Calistir(async () =>
         {
@@ -86,6 +101,7 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase
     /// Silmekten farkı: pasif kayıt listelerde görünmeye devam eder.
     /// </summary>
     [HttpPost("{id:int}/active")]
+    [YetkiGerekli(Yetkiler.KayitGuncelleme)]
     public Task<IActionResult> SetActive(int id, [FromBody] SetActiveDto dto)
         => Calistir(async () =>
         {
@@ -95,6 +111,7 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase
 
     /// <summary>Soft delete: kayıt fiziksel olarak silinmez, is_deleted işaretlenir.</summary>
     [HttpDelete("{id:int}")]
+    [YetkiGerekli(Yetkiler.KayitSilme)]
     public Task<IActionResult> Delete(int id)
         => Calistir(async () =>
         {

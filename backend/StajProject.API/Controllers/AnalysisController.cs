@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using StajProject.API.Authorization;
+using StajProject.Business.Auth;
 using StajProject.Business.DTOs;
 using StajProject.Business.Geo;
 using StajProject.Business.Services;
@@ -29,6 +31,7 @@ public class AnalysisController : ControllerBase
     /// Poligon veritabanına KAYDEDİLMEZ; sadece analiz için kullanılır.
     /// </summary>
     [HttpPost("intersect")]
+    [YetkiGerekli(Yetkiler.AnalizCalistirma)]
     public async Task<ActionResult<AnalysisResultDto>> Intersect([FromBody] AnalysisRequestDto request)
     {
         // Ödev 5 / Madde 1: standart hata yönetimi kalıbı

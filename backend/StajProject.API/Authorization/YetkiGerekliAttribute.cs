@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
-using StajProject.Business.Services;
+﻿using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace StajProject.API.Authorization;
 
@@ -18,6 +16,11 @@ namespace StajProject.API.Authorization;
 ///
 /// Kimlik doğrulama işi bu filtrenin değil: uçlar ayrıca [Authorize] taşır,
 /// token yoksa istek buraya gelmeden 401 ile döner.
+///
+/// Sınıfa yazılırsa o controller'ın TÜM uçlarına, metoda yazılırsa yalnızca
+/// o uca uygulanır. Taban sınıftaki bir metoda yazıldığında ondan türeyen
+/// bütün controller'lar için geçerli olur — üç geometri controller'ında
+/// bunu böyle kullanıyoruz.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
 public class YetkiGerekliAttribute : Attribute, IAsyncAuthorizationFilter
@@ -31,30 +34,8 @@ public class YetkiGerekliAttribute : Attribute, IAsyncAuthorizationFilter
 
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
-        // Filtreler DI konteynerinden nesne alamaz (öznitelikler derleme zamanı
-        // sabitleridir), bu yüzden servisi istek kapsamından çözüyoruz.
-        var currentUser = context.HttpContext.RequestServices.GetRequiredService<ICurrentUserService>();
-        var permissionService = context.HttpContext.RequestServices.GetRequiredService<IPermissionService>();
-
-        var kullaniciId = currentUser.UserId;
-        if (kullaniciId is null)
-        {
-            // [Authorize] normalde bunu zaten yakalar; yine de tek başına güvenli olsun.
-            context.Result = new UnauthorizedObjectResult(
-                new { message = "Bu işlem için giriş yapmış olmanız gerekiyor." });
-            return;
-        }
-
-        if (!await permissionService.HasPermissionAsync(kullaniciId.Value, _yetkiAdi))
-        {
-            // 403: "kim olduğunu biliyoruz ama bu iş senin yetkinde değil".
-            // 404 döndürüp varlığı gizlemek burada gereksiz — yönetim uçlarının
-            // var olduğu zaten sır değil, eksik olan yalnızca yetki.
-            context.Result = new ObjectResult(
-                new { message = $"Bu işlem için \"{_yetkiAdi}\" yetkisine sahip olmanız gerekiyor." })
-            {
-                StatusCode = StatusCodes.Status403Forbidden,
-            };
-        }
+        // Sonuç doldurulursa boru hattı burada kesilir, controller hiç çalışmaz.
+        context.Result = await YetkiKontrolu.DogrulaAsync(context.HttpContext, _yetkiAdi)
+                         ?? context.Result;
     }
 }
