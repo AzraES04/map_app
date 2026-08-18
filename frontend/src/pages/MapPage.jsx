@@ -32,8 +32,9 @@ import {
   RENK_SECENEKLERI, ANALIZ_RENGI,
 } from '../geo'
 import { listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir, kesisimAnalizi } from '../api'
+import { kendiYetkilerim } from '../adminApi'
 import {
-  TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu, AnalizIkonu, SaatIkonu, KullaniciIkonu,
+  TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu, AnalizIkonu, SaatIkonu, KullaniciIkonu, RolIkonu,
 } from '../icons'
 
 // Türkiye'nin yaklaşık merkezi (boylam, enlem) — 4326 cinsinden yazıp
@@ -245,6 +246,12 @@ export default function MapPage() {
   const [duzenleForm, setDuzenleForm] = useState(null)   // { name, color } | null
   const [kaydediliyor, setKaydediliyor] = useState(false)
 
+  // Ödev 6: giriş yapan kullanıcının yönetim paneline girme yetkisi var mı?
+  // Yoksa üst bardaki bağlantı hiç çizilmiyor. Bu SADECE nezaket: asıl kontrol
+  // sunucuda, [YetkiGerekli] özniteliğinde. Bağlantıyı gizlemek güvenlik değildir,
+  // adresi elle yazan yetkisiz kullanıcı yine 403 alır.
+  const [yonetimYetkisi, setYonetimYetkisi] = useState(false)
+
   // --- Yer arama ---
   const [arama, setArama] = useState('')
   const [sonuclar, setSonuclar] = useState([])
@@ -275,6 +282,26 @@ export default function MapPage() {
     if (toastZamanlayiciRef.current) clearTimeout(toastZamanlayiciRef.current)
     setToast(null)
   }, [])
+
+  // Yetki matrisini bir kez çekip "Yönetim" bağlantısını göstereceğimize karar veriyoruz.
+  // Hata durumunda sessiz kalıyoruz: yetki okunamadıysa bağlantıyı göstermemek
+  // doğru davranış — kullanıcıya "yetkini öğrenemedim" uyarısı vermenin faydası yok.
+  useEffect(() => {
+    let iptalEdildi = false
+
+    kendiYetkilerim(goLogin)
+      .then((matris) => {
+        if (iptalEdildi) return
+        const yetkili = matris.permissions.some(
+          (y) => y.granted && (y.name === 'Kullanıcı Yönetimi' || y.name === 'Rol Yönetimi'),
+        )
+        setYonetimYetkisi(yetkili)
+      })
+      .catch(() => { /* yetki okunamadı → bağlantı gizli kalır */ })
+
+    // Temizlik: bileşen sökülmüşken setState çağırmayalım (React uyarısı verir).
+    return () => { iptalEdildi = true }
+  }, [goLogin])
 
   // ------------------------------------------------------------------------
   //  Harita yardımcıları
@@ -465,39 +492,6 @@ export default function MapPage() {
     }
   }, [popupKapat])
 
-  /**
-   * Sürüklenerek değiştirilen bir geometriyi sunucuya yazar.
-   * Ad/açıklama/görsel aynı kalır; sadece WKT yenilenir.
-   */
-  const geometriGuncelle = useCallback(async (feature) => {
-    const dto = feature.get('dto')
-    const tip = feature.get('tip')
-    if (!dto) return
-
-    try {
-      const yeni = await guncelle(
-        DRAW_TYPES[tip].endpoint,
-        dto.id,
-        {
-          name: dto.name,
-          description: dto.description,
-          imageUrl: dto.imageUrl,
-          wkt: geometryToWkt(feature.getGeometry()),   // 3857 → 4326
-        },
-        goLogin,
-      )
-      // Feature'a iliştirdiğimiz kaydı da tazele ki popup güncel WKT'yi göstersin.
-      feature.set('dto', yeni)
-      setRecords((onceki) => ({
-        ...onceki,
-        [tip]: onceki[tip].map((k) => (k.id === yeni.id ? yeni : k)),
-      }))
-      bildir('ok', `"${dto.name}" güncellendi.`)
-    } catch (err) {
-      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
-    }
-  }, [goLogin, bildir])
-
   const yukle = useCallback(async () => {
     setKayitlarYukleniyor(true)
     try {
@@ -534,6 +528,65 @@ export default function MapPage() {
       setKayitlarYukleniyor(false)
     }
   }, [goLogin, bildir])
+
+  /**
+   * Kayıt üzerinde işlem yapan uçların (güncelle / sil / aktiflik) ortak hata yolu.
+   *
+   * 404'ü ayrı ele alıyoruz. Bu ekran açıldığında kayıtları BİR KEZ çekiyor ve
+   * her feature'a o anki dto'yu iliştiriyor. Sekme açık dururken veritabanı
+   * değişirse (kayıt başka bir yerden silinirse, veritabanı sıfırlanıp yeniden
+   * seed edilirse) elimizdeki id'ler artık karşılıksızdır; sunucu haklı olarak
+   * "Id=… olan kayıt bulunamadı" der. Kullanıcı için bu mesaj tek başına
+   * anlamsızdır — hangi id? neden yok? O yüzden burada:
+   *   1) ne olduğunu düz Türkçe söylüyoruz,
+   *   2) listeyi tazeleyip ekranı veritabanıyla yeniden aynı hizaya getiriyoruz.
+   * Böylece ekran "sayfayı yenile" demeye gerek kalmadan kendini toparlıyor.
+   */
+  const hatayiGoster = useCallback(async (err) => {
+    if (err.message === 'Oturum süresi doldu') return   // authFetch zaten login'e attı
+
+    if (err.status === 404) {
+      popupKapat()
+      await yukle()
+      bildir('hata', 'Bu kayıt sunucuda bulunamadı. Ekrandaki liste eskimişti, yenilendi.')
+      return
+    }
+
+    bildir('hata', err.message)
+  }, [bildir, popupKapat, yukle])
+
+  /**
+   * Sürüklenerek değiştirilen bir geometriyi sunucuya yazar.
+   * Ad/açıklama/görsel aynı kalır; sadece WKT yenilenir.
+   */
+  const geometriGuncelle = useCallback(async (feature) => {
+    const dto = feature.get('dto')
+    const tip = feature.get('tip')
+    if (!dto) return
+
+    try {
+      const yeni = await guncelle(
+        DRAW_TYPES[tip].endpoint,
+        dto.id,
+        {
+          name: dto.name,
+          description: dto.description,
+          imageUrl: dto.imageUrl,
+          wkt: geometryToWkt(feature.getGeometry()),   // 3857 → 4326
+        },
+        goLogin,
+      )
+      // Feature'a iliştirdiğimiz kaydı da tazele ki popup güncel WKT'yi göstersin.
+      feature.set('dto', yeni)
+      setRecords((onceki) => ({
+        ...onceki,
+        [tip]: onceki[tip].map((k) => (k.id === yeni.id ? yeni : k)),
+      }))
+      bildir('ok', `"${dto.name}" güncellendi.`)
+    } catch (err) {
+      await hatayiGoster(err)
+    }
+  }, [goLogin, bildir, hatayiGoster])
 
   // ------------------------------------------------------------------------
   //  Harita kurulumu — sadece bir kez
@@ -1100,7 +1153,7 @@ export default function MapPage() {
       await yukle()
       bildir('ok', dto.isActive ? `"${dto.name}" askıya alındı.` : `"${dto.name}" aktif edildi.`)
     } catch (err) {
-      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+      await hatayiGoster(err)
     }
   }
 
@@ -1129,12 +1182,12 @@ export default function MapPage() {
             await yukle()
             bildir('ok', `"${dto.name}" geri alındı.`)
           } catch (err) {
-            if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+            await hatayiGoster(err)
           }
         },
       })
     } catch (err) {
-      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+      await hatayiGoster(err)
     }
   }
 
@@ -1184,7 +1237,7 @@ export default function MapPage() {
       await yukle()
       bildir('ok', `"${govde.name}" güncellendi.`)
     } catch (err) {
-      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+      await hatayiGoster(err)
     } finally {
       setKaydediliyor(false)
     }
@@ -1252,6 +1305,16 @@ export default function MapPage() {
             <SaatIkonu /> {remaining}
           </span>
           <span className="badge user"><KullaniciIkonu /> {getUsername()}</span>
+          {/* Ödev 6: yalnızca yönetim yetkisi olan kullanıcıya gösterilir */}
+          {yonetimYetkisi && (
+            <button
+              type="button"
+              className="logout-btn yonetim"
+              onClick={() => navigate('/admin/users')}
+            >
+              <RolIkonu size={13} /> Yönetim
+            </button>
+          )}
           <button className="logout-btn" onClick={handleLogout}>Çıkış</button>
         </span>
       </header>

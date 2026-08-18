@@ -30,6 +30,10 @@ public static class DataAccessRegistration
         services.AddScoped<ILocationRepository, LocationRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
 
+        // Ödev 6: dinamik yetkilendirme tabloları
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IPermissionRepository, PermissionRepository>();
+
         // Geometri repository'leri: tek generic sınıf, üç tip argümanı
         services.AddScoped<IGeometryRepository<PointEntity>, GeometryRepository<PointEntity>>();
         services.AddScoped<IGeometryRepository<LineEntity>, GeometryRepository<LineEntity>>();

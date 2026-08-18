@@ -18,6 +18,13 @@ public class AppDbContext : DbContext
     public DbSet<LineEntity> Lines => Set<LineEntity>();
     public DbSet<PolygonEntity> Polygons => Set<PolygonEntity>();
 
+    // Ödev 6 / Madde 2: dinamik yetkilendirme
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
+
     // ---------- Ödev 3 / Görev 1: ModifiedDate otomatik güncelleme ----------
     // Her kayıt işleminden ÖNCE devreye girer. Böylece "modified_date yazmayı unuttum"
     // diye bir durum kalmaz; kural tek yerde, merkezî olarak uygulanır.
@@ -151,6 +158,113 @@ public class AppDbContext : DbContext
                   .IsRequired();
             entity.HasIndex(e => e.Geom).HasMethod("gist");
         });
+
+        ConfigureAuthorization(modelBuilder);
+    }
+
+    // ---------- Ödev 6 / Madde 2: rol / yetki tabloları ----------
+    //
+    // Beş tablo: roles, permissions ve aralarındaki üç bağlantı tablosu.
+    // Bağlantı tablolarında BİLEŞİK anahtar kullanıyoruz (örn. user_id + role_id):
+    // aynı çiftin iki kez eklenmesi böylece veritabanı seviyesinde imkânsız olur.
+    private static void ConfigureAuthorization(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Role>(entity =>
+        {
+            ConfigureLookupTable(entity, "roles");
+        });
+
+        modelBuilder.Entity<Permission>(entity =>
+        {
+            ConfigureLookupTable(entity, "permissions");
+        });
+
+        modelBuilder.Entity<UserRole>(entity =>
+        {
+            entity.ToTable("user_roles");
+            entity.HasKey(e => new { e.UserId, e.RoleId });
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.RoleId).HasColumnName("role_id");
+            entity.Property(e => e.InsertedDate).HasColumnName("inserted_date");
+
+            // Cascade: kullanıcı/rol satırı FİZİKSEL olarak silinirse atama da gitsin.
+            // Uygulamada soft delete kullanıyoruz, yani bu yol normalde çalışmaz;
+            // yine de veritabanını tutarsız satırlarla baş başa bırakmıyoruz.
+            entity.HasOne(e => e.User).WithMany(u => u.UserRoles)
+                  .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Role).WithMany(r => r.UserRoles)
+                  .HasForeignKey(e => e.RoleId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.RoleId);   // "bu rolde kaç kullanıcı var?" sorgusu için
+
+            // Sahibi (kullanıcı veya rol) soft delete edilmişse atama da görünmesin.
+            // Bu filtre olmasaydı silinmiş bir rol, kullanıcının yetkilerini
+            // beslemeye devam ederdi.
+            entity.HasQueryFilter(e => !e.User!.IsDeleted && !e.Role!.IsDeleted);
+        });
+
+        modelBuilder.Entity<RolePermission>(entity =>
+        {
+            entity.ToTable("role_permissions");
+            entity.HasKey(e => new { e.RoleId, e.PermissionId });
+            entity.Property(e => e.RoleId).HasColumnName("role_id");
+            entity.Property(e => e.PermissionId).HasColumnName("permission_id");
+            entity.Property(e => e.InsertedDate).HasColumnName("inserted_date");
+
+            entity.HasOne(e => e.Role).WithMany(r => r.RolePermissions)
+                  .HasForeignKey(e => e.RoleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Permission).WithMany(p => p.RolePermissions)
+                  .HasForeignKey(e => e.PermissionId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.PermissionId);
+
+            entity.HasQueryFilter(e => !e.Role!.IsDeleted && !e.Permission!.IsDeleted);
+        });
+
+        modelBuilder.Entity<UserPermission>(entity =>
+        {
+            entity.ToTable("user_permissions");
+            entity.HasKey(e => new { e.UserId, e.PermissionId });
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.PermissionId).HasColumnName("permission_id");
+            entity.Property(e => e.InsertedDate).HasColumnName("inserted_date");
+
+            entity.HasOne(e => e.User).WithMany(u => u.UserPermissions)
+                  .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Permission).WithMany(p => p.UserPermissions)
+                  .HasForeignKey(e => e.PermissionId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.PermissionId);
+
+            entity.HasQueryFilter(e => !e.User!.IsDeleted && !e.Permission!.IsDeleted);
+        });
+    }
+
+    /// <summary>
+    /// roles ve permissions tabloları birebir aynı iskelete sahip
+    /// (id / name / description + durum kolonları), o yüzden tek yerden kuruluyor.
+    /// users tablosundaki desenin aynısı: kısmi benzersiz index + soft delete filtresi.
+    /// </summary>
+    private static void ConfigureLookupTable<TEntity>(EntityTypeBuilder<TEntity> entity, string tableName)
+        where TEntity : AuthorizationEntityBase
+    {
+        entity.ToTable(tableName);
+        entity.HasKey(e => e.Id);
+
+        entity.Property(e => e.Id).HasColumnName("id");
+        entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+        entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(500);
+        entity.Property(e => e.InsertedDate).HasColumnName("inserted_date");
+
+        entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+        entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+        entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+        // users tablosundaki mantığın aynısı: silinen "Editör" rolünün adı
+        // yeniden kullanılabilsin diye benzersizlik yalnızca yaşayan satırlarda.
+        entity.HasIndex(e => e.Name).IsUnique().HasFilter("is_deleted = false");
+
+        entity.HasQueryFilter(e => !e.IsDeleted);
     }
 
     /// <summary>

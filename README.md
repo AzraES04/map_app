@@ -5,13 +5,14 @@
 Katmanlı mimariye sahip bir Web API, PostGIS destekli mekânsal veritabanı ve OpenLayers
 tabanlı harita arayüzü. Kullanıcı haritada nokta/çizgi/poligon çizer, öznitelik girer,
 kayıtlar WKT formatında veritabanına yazılır ve alanlar üzerinde kesişim analizi yapılır.
+Ayrı bir yönetim paneli kullanıcıları, rolleri ve yetkileri yönetir.
 
 | | |
 |---|---|
-| **Giriş** | `admin` / `staj123` · `ayse` / `staj123` (ilk açılışta oluşturulur) |
+| **Giriş** | `admin` / `staj123` (Yönetici) · `ayse` / `staj123` (Editör) |
 | **API** | `http://localhost:5000` · Swagger: `/swagger` |
-| **Arayüz** | `http://localhost:5173` |
-| **Test** | 44 birim testi |
+| **Arayüz** | `http://localhost:5173` · Yönetim paneli: `/admin` |
+| **Test** | 66 birim testi |
 
 ---
 
@@ -25,6 +26,7 @@ kayıtlar WKT formatında veritabanına yazılır ve alanlar üzerinde kesişim 
 - [4) WKT ve projeksiyon yönetimi](#4-wkt-ve-projeksiyon-yönetimi)
 - [5) Öznitelik giriş pop-up'ı](#5-öznitelik-giriş-pop-upı)
 - [6) Kesişim ve envanter analizi](#6-kesişim-ve-envanter-analizi)
+- [7) Yönetim paneli ve dinamik yetkilendirme](#7-yönetim-paneli-ve-dinamik-yetkilendirme)
 - [Kurulum](#kurulum)
 - [API uçları](#api-uçları)
 - [Doğrulama sorguları](#veritabanı-doğrulama-sorguları)
@@ -71,6 +73,10 @@ Entities hiçbir katmana bağımlı değildir; katman atlama ve döngüsel bağ�
 | 4 | Katmanlı mimari revizyonu, servisler arayüz arkasında | `BusinessRegistration`, `DataAccessRegistration` |
 | 4 | drawend pop-up'ı: isim + renk | `MapPage.jsx` → `popup-form` |
 | 4 | Kesişim ve envanter analizi | `AnalysisService`, `AnalysisRepository` |
+| 5 | Standart hata yönetimi, izleme kolonları, sahiplik süzgeci | `GeometryControllerBase.Calistir`, `ICurrentUserService` |
+| 6 | Admin paneli: sol dikey navbar, Kullanıcı ve Rol listesi | `AdminLayout.jsx`, `AdminUsers.jsx`, `AdminRoles.jsx` |
+| 6 | Permission tablosu, rol/kullanıcı yetki atamaları | `roles` · `permissions` · `user_roles` · `role_permissions` · `user_permissions` |
+| 6 | Rolden gelen yetki kullanıcıda tekrar seçtirilmez | `PermissionService.Birlestir`, `UserAdminService.SetPermissionsAsync` |
 
 ---
 
@@ -290,6 +296,116 @@ döngüyle karşılaştırmak — her iki avantajı da kaybettirirdi.
 
 ---
 
+## 7) Yönetim Paneli ve Dinamik Yetkilendirme
+
+### Arayüz: sol dikey navbar
+
+`/admin` altındaki ekranlar `AdminLayout` çerçevesinde açılır: solda ekran boyu dikey
+navbar, sağda değişen içerik (`<Outlet />`). Menü iki ekran içerir — **Kullanıcı Listesi**
+(Ekle / Güncelle / Çıkar) ve **Rol Listesi** (Ekle / Güncelle / Sil).
+
+Menü maddeleri `AdminLayout.jsx` içindeki tek bir `MENU` dizisinden üretilir; yeni ekran
+eklemek bir satır yazmak demektir. Panel bağlantısı harita ekranının üst barında yalnızca
+yetkili kullanıcıya görünür.
+
+### Veri modeli
+
+```mermaid
+erDiagram
+    users ||--o{ user_roles : ""
+    roles ||--o{ user_roles : ""
+    roles ||--o{ role_permissions : ""
+    permissions ||--o{ role_permissions : ""
+    users ||--o{ user_permissions : ""
+    permissions ||--o{ user_permissions : ""
+```
+
+`roles` ve `permissions` aynı iskeleti paylaşır (`id`, `name`, `description` + durum
+kolonları), bu yüzden ortak bir `AuthorizationEntityBase` sınıfından türer ve DbContext'te
+tek bir generic metotla yapılandırılır.
+
+Üç bağlantı tablosunun tamamı **bileşik anahtar** kullanır (`user_id + role_id` gibi):
+aynı atamanın iki kez eklenmesi veritabanı seviyesinde imkânsız olur, kod tarafında
+tekrar kontrolü gerekmez.
+
+### Yetkiler VERİdir, koda gömülü değildir
+
+Klasik çözüm rolü kullanıcının üstüne metin olarak yazar (`user.Role == "admin"`); o
+zaman yeni bir yetki eklemek kod değişikliği ister. Burada yetkiler `permissions`
+tablosunda satır olarak durur, dağıtımı panelden yapılır.
+
+Başlangıçta tanımlı sekiz yetki (`Business/Auth/Yetkiler.cs` → seed):
+
+| Yetki | Açıklama |
+|---|---|
+| **Point Ekleme** | Haritaya nokta çizebilir |
+| Line Ekleme / Polygon Ekleme | Çizgi / alan çizebilir |
+| Kayıt Güncelleme · Kayıt Silme | Var olan çizimleri düzenler / siler |
+| Analiz Çalıştırma | Kesişim analizi yapar |
+| Kullanıcı Yönetimi · Rol Yönetimi | Yönetim panelini açar |
+
+Başlangıç rolleri: **Yönetici** (8 yetki), **Editör** (5), **Görüntüleyici** (1).
+`admin` → Yönetici, `ayse` → Editör olarak bağlanır. Rol ve atamalar yalnızca **ilk kez**
+oluşturulur; panelden yapılan düzenlemeler yeniden başlatmada geri alınmaz.
+
+### Yetki iki yoldan gelir — ve birleştirilir
+
+```
+etkin yetki  =  aktif rollerin yetkileri  ∪  doğrudan verilen yetkiler
+```
+
+Birleştirme tek bir yerde, `PermissionService.Birlestir` içinde yapılır; hem yönetim
+ekranı hem erişim kontrolü aynı hesabı kullanır. İki ayrı yerde hesaplansaydı biri
+güncellenip diğeri unutulduğunda "ekranda yetkili görünüyor ama işlem reddediliyor"
+durumu çıkardı.
+
+`GET /api/admin/users/{id}/permissions` her yetki için kaynağını da döner:
+
+```json
+{ "permissionId": 1, "name": "Point Ekleme",
+  "fromRole": true, "roleNames": ["Editör"], "direct": false, "granted": true }
+```
+
+### Rolde olan yetki kullanıcıda tekrar seçtirilmez
+
+Ödevin şartı buydu. İki katmanda birden uygulanır:
+
+- **Arayüz:** rolden gelen yetkinin kutusu **işaretli ve kilitli** çizilir, yanında
+  turuncu `🔒 Editör rolünden` rozeti durur.
+- **Servis:** `UserAdminService.SetPermissionsAsync`, gelen listeden rolden gelenleri
+  **eler**; `user_permissions` tablosuna yalnızca rolde olmayanlar yazılır. Servis
+  kendisini çağıran arayüze güvenmez.
+
+İkinci kural yalnızca titizlik değil: rolden gelen yetki kullanıcıya da kopyalansaydı,
+rol değiştiğinde bu kopya arkada kalır ve "yetkiyi rolden almıştı ama rolü aldım, hâlâ
+yetkili" durumu doğardı.
+
+### Erişim kontrolü: `[YetkiGerekli]`
+
+```csharp
+[Authorize]                                 // token yoksa 401
+[YetkiGerekli(Yetkiler.KullaniciYonetimi)]  // yetki yoksa 403
+public class AdminUsersController : YonetimControllerBase
+```
+
+ASP.NET'in hazır `[Authorize(Roles = "...")]` mekanizması rolleri **token'a** yazar; token
+10 dakika geçerli olduğu için panelden verilen yetki ancak yeniden girişte etkili olurdu.
+`YetkiGerekliAttribute` her istekte veritabanındaki güncel duruma bakar — dinamik
+yetkilendirmenin anlamı budur.
+
+Arayüzdeki gizleme yalnızca nezakettir: `ayse` ile `/admin/users` adresi elle yazıldığında
+sunucu **403** döner ve panel "Bu işlem için … yetkisine sahip olmanız gerekiyor." mesajını
+gösterir.
+
+### Kendi ayağına sıkma korumaları
+
+Tek yöneticili bir kurulumda yanlış bir tık paneli kimsenin açamayacağı hâle getirebilir.
+Bu yüzden giriş yapmış kullanıcı **kendi** hesabını silemez, pasife alamaz ve **kendi**
+"Kullanıcı Yönetimi" yetkisini kaldıramaz. Kural yalnızca kişinin kendisi için geçerlidir;
+başka bir yönetici aynı işlemi yapabilir.
+
+---
+
 ## Kurulum
 
 ### Gereksinimler
@@ -337,9 +453,10 @@ otomatik uygular. Yeni değişiklik için:
 dotnet ef migrations add MigrationAdi -p StajProject.DataAccess -s StajProject.API
 ```
 
-**Başlangıç verisi:** İlk açılışta `admin` kullanıcısı ve — ilgili tablo **boşsa** —
-Türkiye geneline dağılmış 14 örnek envanter (7 nokta, 3 güzergâh, 4 alan) yüklenir.
-Dolu tabloya dokunulmaz, yani kendi çizimleriniz korunur.
+**Başlangıç verisi:** İlk açılışta `admin` ve `ayse` kullanıcıları, sekiz yetki, üç rol
+(Yönetici / Editör / Görüntüleyici) ve — ilgili tablo **boşsa** — Türkiye geneline
+dağılmış 14 örnek envanter (7 nokta, 3 güzergâh, 4 alan) yüklenir. Dolu tabloya
+dokunulmaz, yani kendi çizimleriniz ve panelden yaptığınız rol düzenlemeleri korunur.
 
 Örnek veriyi yeniden yüklemek için tabloları boşaltıp uygulamayı yeniden başlatın:
 
@@ -361,9 +478,10 @@ npm install --prefix frontend && npm run dev --prefix frontend
 dotnet test backend/StajProject.sln
 ```
 
-44 test: durum kolonlarının davranışı (EF InMemory ile gerçek `DbContext` üzerinde),
+66 test: durum kolonlarının davranışı (EF InMemory ile gerçek `DbContext` üzerinde),
 WKT çözümleme / tip doğrulama / SRID yönetimi, görsel adresi güvenliği, geri alma,
-başlangıç verisi kuralları ve `LocationService`.
+başlangıç verisi kuralları, sahiplik süzgeci, `LocationService` ve — Ödev 6 —
+yetki birleştirme kuralları (`YetkiTests.cs`).
 
 ---
 
@@ -382,8 +500,22 @@ başlangıç verisi kuralları ve `LocationService`.
 | **POST** | **`/api/analysis/intersect`** | `{ wkt, haricTutulanPolygonId? }` → kesişen envanter |
 | GET/POST/DELETE | `/api/locations` | 2. ödevden kalan tablo (geriye dönük uyumluluk) |
 
-Geometri ve analiz uçlarının tamamı `[Authorize]` ile korunur — token yoksa veya süresi
-dolduysa **401**. Geçersiz WKT/renk/görsel adresi → **400** ve açıklayıcı mesaj.
+**Yönetim paneli uçları (Ödev 6)**
+
+| Metot | Yol | Gerekli yetki |
+|---|---|---|
+| GET | `/api/permissions` | giriş yeterli |
+| GET | `/api/permissions/me` | giriş yeterli — kendi yetki matrisi |
+| GET/POST | `/api/admin/users` | Kullanıcı Yönetimi |
+| GET/PUT/DELETE | `/api/admin/users/{id}` | Kullanıcı Yönetimi |
+| GET/PUT | `/api/admin/users/{id}/permissions` | Kullanıcı Yönetimi |
+| GET/POST | `/api/admin/roles` | Rol Yönetimi |
+| GET/PUT/DELETE | `/api/admin/roles/{id}` | Rol Yönetimi |
+
+Geometri, analiz ve yönetim uçlarının tamamı `[Authorize]` ile korunur — token yoksa veya
+süresi dolduysa **401**. Yetki eksikse **403**. Geçersiz WKT/renk/görsel adresi ve iş
+kuralı ihlalleri (yinelenen kullanıcı adı, kendi hesabını silme…) → **400** ve
+açıklayıcı mesaj.
 
 Swagger arayüzünde tüm uçlar koddaki `/// <summary>` açıklamalarıyla belgelenmiştir.
 
@@ -401,6 +533,20 @@ SELECT id, name, color, ST_SRID(geom), ST_AsText(geom) FROM tbl_point;
 -- Durum kolonları
 SELECT id, name, is_deleted, is_active, modified_date FROM tbl_polygon;
 
+-- Ödev 6: kullanıcının yetkileri nereden geliyor?
+SELECT u.username, p.name AS yetki, 'rol: ' || r.name AS kaynak
+FROM users u
+JOIN user_roles ur       ON ur.user_id = u.id
+JOIN roles r             ON r.id = ur.role_id AND r.is_deleted = false AND r.is_active
+JOIN role_permissions rp ON rp.role_id = r.id
+JOIN permissions p       ON p.id = rp.permission_id
+UNION ALL
+SELECT u.username, p.name, 'doğrudan'
+FROM users u
+JOIN user_permissions up ON up.user_id = u.id
+JOIN permissions p       ON p.id = up.permission_id
+ORDER BY 1, 2;
+
 -- Kesişim analizinin SQL karşılığı
 SELECT COUNT(*) FROM tbl_point
 WHERE ST_Intersects(geom, ST_GeomFromText('POLYGON((32.6 39.8,33.1 39.8,33.1 40.1,32.6 40.1,32.6 39.8))', 4326));
@@ -414,20 +560,25 @@ WHERE ST_Intersects(geom, ST_GeomFromText('POLYGON((32.6 39.8,33.1 39.8,33.1 40.
 StajProject/
 ├── backend/
 │   ├── StajProject.API/          → Controllers, Program.cs, Middleware, Swagger, CORS
+│   │   └── Authorization/        → YetkiGerekliAttribute (yetki bazlı erişim)
 │   ├── StajProject.Business/     → Services (+arayüzler), DTOs, Geo/WktConverter
+│   │   ├── Auth/Yetkiler.cs      → Yetki adları (tek kaynak) + seed tanımları
+│   │   └── Validation/           → IsKuraliException (iş kuralı ihlali → 400)
 │   ├── StajProject.DataAccess/   → DbContext, Repositories (+arayüzler), Migrations
-│   ├── StajProject.Entities/     → Entity tanımları, IAuditableEntity
-│   ├── StajProject.Tests/        → 44 birim testi (xUnit)
+│   ├── StajProject.Entities/     → Entity tanımları, IAuditableEntity, Role/Permission
+│   ├── StajProject.Tests/        → 66 birim testi (xUnit)
 │   └── db/setup.sql              → Rol + veritabanı + PostGIS kurulumu
 └── frontend/src/
     ├── geo.js                    → Projeksiyon + WKT dönüşümleri (tek merkez)
-    ├── api.js                    → API çağrıları
+    ├── api.js                    → Geometri API çağrıları
+    ├── adminApi.js               → Yönetim paneli API çağrıları
     ├── auth.js                   → Token yönetimi, otomatik çıkış
     ├── geocode.js                → Nominatim yer arama
     ├── icons.jsx                 → Inline SVG ikonlar
     ├── ErrorBoundary.jsx         → Beyaz ekran yerine hata kartı
     ├── index.css                 → Tasarım sistemi (koyu krom / aydınlık içerik)
     └── pages/                    → Login.jsx · MapPage.jsx
+                                    AdminLayout.jsx · AdminUsers.jsx · AdminRoles.jsx
 ```
 
 ---

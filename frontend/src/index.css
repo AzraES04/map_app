@@ -1681,3 +1681,499 @@ kbd {
   background: var(--kart-2);
   border-radius: var(--radius);
 }
+
+/* ============================================================================
+   YÖNETİM PANELİ (Ödev 6)
+
+   Tasarım kararı: panel bir İÇERİK ekranı değil, KROM. Harita ekranında
+   aydınlık kartlar haritayı öne çıkarıyordu; burada öne çıkacak bir harita yok,
+   ekranın tamamı araç. Bu yüzden panel baştan sona koyu krom tonunda kalıyor
+   ve üst bar ile aynı görsel evrende duruyor.
+   ========================================================================= */
+
+.admin-layout {
+  height: 100vh;
+  display: flex;              /* sol navbar + sağ içerik */
+  background: var(--yuzey-0);
+  color: var(--metin);
+}
+
+/* ---------- Sol dikey navbar ---------- */
+
+.admin-navbar {
+  position: relative;
+  width: 246px;
+  flex-shrink: 0;             /* içerik genişlese de menü daralmasın */
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  background: var(--yuzey-1);
+  border-right: 1px solid var(--kenar);
+  /* Üst bardaki gölge mantığının aynısı, yatay hâli: menü içeriğe gölge düşürür */
+  box-shadow: var(--isik-ust), 14px 0 30px -20px rgba(0, 0, 0, 0.9);
+  z-index: 5;
+}
+
+/* Grain dokusu — .topbar / .side-panel ile aynı numara */
+.admin-navbar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--grain);
+  opacity: 0.028;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+
+.admin-marka {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 18px;
+}
+
+.admin-marka strong { display: block; font-size: var(--yazi-md); letter-spacing: -0.01em; }
+.admin-marka small { display: block; font-size: var(--yazi-xs); color: var(--metin-soluk); }
+
+/* Üst bardaki marka noktasının aynısı — iki ekran akraba görünsün */
+.admin-marka-nokta {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--marka-300);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--marka-300) 70%, transparent);
+  flex-shrink: 0;
+}
+
+.admin-menu { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+
+.admin-menu-link {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 11px;
+  border-radius: var(--radius);
+  color: var(--metin-orta);
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: background var(--gecis), color var(--gecis), border-color var(--gecis);
+}
+
+.admin-menu-link:hover { background: var(--yuzey-2); color: var(--metin); }
+
+/*
+  Seçili madde: sol kenarında marka renginde ışık şeridi.
+  Yalnızca arka planı değiştirmek yetmezdi — koyu üstüne koyu, hover ile
+  seçili hâli karışırdı. Şerit, "buradasın" bilgisini tek bakışta veriyor.
+*/
+.admin-menu-link.active {
+  background: color-mix(in oklab, var(--marka-300) 14%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--marka-300) 35%, transparent);
+  color: var(--metin);
+  box-shadow: inset 3px 0 0 var(--marka-300);
+}
+
+.admin-menu-link.active .admin-menu-ikon { color: var(--marka-300); }
+
+.admin-menu-ikon { display: flex; color: var(--metin-soluk); flex-shrink: 0; }
+.admin-menu-metin strong { display: block; font-size: var(--yazi-sm); font-weight: 650; }
+.admin-menu-metin small { display: block; font-size: var(--yazi-xs); color: var(--metin-soluk); }
+
+/* Menünün dibi: haritaya dönüş + oturum. margin-top:auto onu aşağı iter. */
+.admin-navbar-alt {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--kenar);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-menu-link.ikincil { padding: 8px 11px; }
+
+.admin-oturum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.admin-oturum .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-oturum .logout-btn { padding: 5px 11px; flex-shrink: 0; }
+
+/* Üst bardaki "Yönetim" düğmesi — marka tonuyla ayrışsın */
+.logout-btn.yonetim {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--marka-300);
+  border-color: color-mix(in oklab, var(--marka-300) 40%, transparent);
+}
+
+/* ---------- İçerik alanı ---------- */
+
+.admin-icerik {
+  flex: 1;
+  min-width: 0;               /* geniş tablo taşırmasın diye şart */
+  overflow-y: auto;
+  padding: 26px 30px 44px;
+}
+
+.admin-sayfa { max-width: 1080px; display: flex; flex-direction: column; gap: 16px; }
+
+.admin-baslik {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-baslik h1 { font-size: 1.3rem; letter-spacing: -0.02em; margin-bottom: 3px; }
+.admin-baslik .muted { font-size: var(--yazi-sm); }
+
+.admin-kart {
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--isik-ust), var(--shadow-md);
+  padding: 16px 18px;
+}
+
+.admin-kart h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--yazi-md);
+  font-weight: 650;
+  margin-bottom: 12px;
+}
+
+.admin-aciklama { font-size: var(--yazi-sm); line-height: 1.5; margin-bottom: 12px; }
+
+/* ---------- Tablo ---------- */
+
+.admin-tablo { width: 100%; border-collapse: collapse; font-size: var(--yazi-sm); }
+
+.admin-tablo th {
+  text-align: left;
+  font-size: var(--yazi-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--metin-soluk);
+  font-weight: 650;
+  padding: 0 10px 9px;
+  border-bottom: 1px solid var(--kenar);
+}
+
+.admin-tablo td {
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--kenar);
+  vertical-align: middle;
+}
+
+.admin-tablo tr:last-child td { border-bottom: none; }
+.admin-tablo tbody tr { transition: background var(--gecis); }
+.admin-tablo tbody tr:hover { background: var(--yuzey-2); }
+
+/* Yetki paneli açık olan satır işaretli kalsın */
+.admin-tablo tr.secili { background: color-mix(in oklab, var(--marka-300) 10%, var(--yuzey-2)); }
+
+.admin-tablo td strong { display: flex; align-items: center; gap: 6px; font-weight: 650; }
+.admin-tablo .sag { text-align: right; white-space: nowrap; }
+.admin-tablo .sag button { margin-left: 6px; }
+
+.admin-alt-metin { display: block; font-size: var(--yazi-xs); color: var(--metin-soluk); margin-top: 2px; }
+
+/* Uzun yetki listesi hücreyi şişirmesin */
+.admin-rozet-hucre { max-width: 380px; }
+
+.admin-rozet {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 4px 2px 0;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  font-size: var(--yazi-xs);
+  /* "8 etkin" iki satıra bölünmesin: rozet tek parça okunmalı */
+  white-space: nowrap;
+  background: color-mix(in oklab, var(--marka-300) 16%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--marka-300) 30%, transparent);
+  color: #dff2f7;
+}
+
+.admin-rozet.notr {
+  background: var(--yuzey-2);
+  border-color: var(--kenar);
+  color: var(--metin-orta);
+}
+
+/* "Rolden geliyor" rozeti: yetkinin kaynağını anlatır, işlem değildir */
+.admin-rozet.rol {
+  background: color-mix(in oklab, var(--uyari) 16%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--uyari) 35%, transparent);
+  color: #f4dfae;
+  white-space: nowrap;
+}
+
+.admin-durum {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  background: color-mix(in oklab, var(--ok) 18%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--ok) 40%, transparent);
+  color: #c9f2e0;
+}
+
+.admin-durum.pasif {
+  background: var(--yuzey-2);
+  border-color: var(--kenar-guclu);
+  color: var(--metin-soluk);
+}
+
+/* ---------- Form ---------- */
+
+.admin-form { display: flex; flex-direction: column; gap: 14px; }
+
+.admin-form-satir { display: flex; gap: 14px; flex-wrap: wrap; }
+.admin-form-satir label { flex: 1 1 240px; display: flex; flex-direction: column; gap: 5px; }
+
+.admin-form label {
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  color: var(--metin-soluk);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-form input[type='text'],
+.admin-form input[type='password'],
+.admin-form input:not([type]) {
+  width: 100%;
+  padding: 9px 11px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  color: var(--metin);
+  font-size: var(--yazi-sm);
+  font-family: inherit;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.admin-form input::placeholder { color: var(--metin-soluk); }
+
+.admin-form input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--marka-300) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--marka-300) 18%, transparent);
+}
+
+/* Onay kutulu satırlar: etiket büyük harfe çevrilmesin, cümle gibi okunsun */
+.admin-onay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--yazi-sm) !important;
+  font-weight: 400 !important;
+  color: var(--metin-orta) !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  cursor: pointer;
+}
+
+.admin-onay input,
+.admin-secim-oge input,
+.admin-yetki input { accent-color: var(--marka-300); cursor: pointer; }
+
+.admin-secim { border: none; }
+
+.admin-secim legend {
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  color: var(--metin-soluk);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.admin-secim-liste { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/*
+  ÖZGÜLLÜK NOTU: yukarıdaki ".admin-form label" kuralı etiketleri BÜYÜK HARFE
+  çeviriyor — alan başlıkları için doğru, ama işaret kutusu satırları da birer
+  <label>. Onları normal cümle gibi göstermek için kuralı aynı özgüllükte
+  (sınıf + sınıf) geri alıyoruz; sadece ".admin-secim-oge" yazmak yetmezdi,
+  ".admin-form label" (sınıf + eleman) daha güçlü kalırdı.
+*/
+.admin-form .admin-secim-oge,
+.admin-form .admin-yetki {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  color: var(--metin-orta);
+}
+
+.admin-secim-oge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  transition: border-color var(--gecis), background var(--gecis);
+}
+
+.admin-secim-oge:hover { border-color: var(--kenar-guclu); }
+.admin-secim-oge strong { display: block; font-size: var(--yazi-sm); color: var(--metin); }
+.admin-secim-oge small { display: block; font-size: var(--yazi-xs); color: var(--metin-soluk); }
+
+.admin-eylemler { display: flex; gap: 9px; }
+
+/* ---------- Yetki matrisi ---------- */
+
+/*
+  auto-fill + minmax: kaç sütun olacağına tarayıcı karar veriyor. Sabit sütun
+  sayısı verseydik dar ekranda kutular ezilir, geniş ekranda boşluk kalırdı.
+*/
+.admin-yetki-liste {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 8px;
+}
+
+.admin-yetki {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  transition: border-color var(--gecis), background var(--gecis);
+}
+
+.admin-yetki:hover { border-color: var(--kenar-guclu); }
+
+/* Sahip olunan yetki: marka renginde ince çerçeve */
+.admin-yetki.verili {
+  background: color-mix(in oklab, var(--marka-300) 10%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--marka-300) 32%, transparent);
+}
+
+/*
+  ROLDEN GELEN yetki: kutu kilitli. Kilidi hem imleçle (not-allowed) hem de
+  uyarı tonundaki rozetle anlatıyoruz — sadece "disabled" bırakmak kullanıcıya
+  NEDEN tıklayamadığını söylemezdi.
+*/
+.admin-yetki.rolden {
+  cursor: not-allowed;
+  background: color-mix(in oklab, var(--uyari) 8%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--uyari) 28%, transparent);
+}
+
+.admin-yetki.rolden input { cursor: not-allowed; }
+
+.admin-yetki input { margin-top: 2px; flex-shrink: 0; }
+.admin-yetki-govde { flex: 1; min-width: 0; }
+.admin-yetki-govde strong { display: block; font-size: var(--yazi-sm); color: var(--metin); }
+.admin-yetki-govde small {
+  display: block;
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* ---------- Koyu bağlamda düğmeler ----------
+   Yan paneldeki uyarlamanın aynısı; ek olarak flex:1 iptal ediliyor,
+   çünkü buradaki düğmeler satırı doldurmak yerine içeriği kadar durmalı. */
+
+.admin-layout .btn-primary,
+.admin-layout .btn-ghost {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+}
+
+.admin-layout .btn-primary {
+  background: color-mix(in oklab, var(--marka-300) 22%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--marka-300) 55%, transparent);
+  color: #eafaff;
+  box-shadow: var(--isik-ust);
+}
+
+.admin-layout .btn-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--marka-300) 32%, var(--yuzey-2));
+}
+
+.admin-layout .btn-ghost {
+  background: var(--yuzey-2);
+  border-color: var(--kenar);
+  color: var(--metin-orta);
+}
+
+.admin-layout .btn-ghost:hover:not(:disabled) { background: var(--yuzey-3); color: var(--metin); }
+
+.admin-layout .btn-ghost.sil {
+  color: var(--error);
+  border-color: color-mix(in oklab, var(--error) 35%, transparent);
+}
+
+.admin-layout .btn-ghost.sil:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--error) 18%, var(--yuzey-2));
+  color: #ffd9d3;
+}
+
+/* Bildirim şeritleri panelde de okunur olsun */
+.admin-sayfa .info-banner,
+.admin-sayfa .error-banner { margin: 0; font-size: var(--yazi-sm); }
+
+/* ---------- Dar ekran ---------- */
+
+@media (max-width: 860px) {
+  /* Menü dikey yaslanmayı bırakıp üstte yatay şeride dönüşür:
+     246px'lik sabit sütun, telefon ekranının üçte birini yerdi. */
+  .admin-layout { flex-direction: column; height: auto; min-height: 100vh; }
+
+  .admin-navbar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--kenar);
+  }
+
+  .admin-menu { flex-direction: row; flex-wrap: wrap; }
+  .admin-menu-metin small { display: none; }
+  .admin-navbar-alt { margin-top: 0; padding-top: 0; border-top: none; flex-direction: row; }
+  .admin-icerik { padding: 18px 14px 32px; }
+  .admin-tablo { display: block; overflow-x: auto; }
+}

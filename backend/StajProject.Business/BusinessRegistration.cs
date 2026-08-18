@@ -26,6 +26,11 @@ public static class BusinessRegistration
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
         services.AddScoped<IAnalysisService, AnalysisService>();
 
+        // Ödev 6: yönetim paneli ve dinamik yetkilendirme
+        services.AddScoped<IPermissionService, PermissionService>();
+        services.AddScoped<IRoleService, RoleService>();
+        services.AddScoped<IUserAdminService, UserAdminService>();
+
         // Geometri servisleri: aynı generic sınıf, üç farklı tip çifti.
         // Controller "IGeometryService<PointEntity>" isteyince konteyner
         // GeometryService<PointEntity, Point> üretir.

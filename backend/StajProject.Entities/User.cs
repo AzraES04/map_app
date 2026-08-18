@@ -31,4 +31,16 @@ public class User : IAuditableEntity
     /// Kaydın en son güncellendiği an (UTC). Kayıt hiç güncellenmediyse null kalır.
     /// </summary>
     public DateTime? ModifiedDate { get; set; }
+
+    // ---------- Ödev 6 / Madde 2: dinamik yetkilendirme ----------
+
+    /// <summary>Kullanıcının rolleri (user_roles). Yetkilerin ASIL kaynağı budur.</summary>
+    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+
+    /// <summary>
+    /// Rolden bağımsız, DOĞRUDAN verilmiş yetkiler (user_permissions).
+    /// Rolde zaten olan bir yetki buraya yazılmaz; ayrıntı için
+    /// <see cref="UserPermission"/> açıklamasına bak.
+    /// </summary>
+    public ICollection<UserPermission> UserPermissions { get; set; } = new List<UserPermission>();
 }

@@ -21,14 +21,31 @@ public class DatabaseSeederTests
                     FakeGeometryRepository<PointEntity> noktalar,
                     FakeGeometryRepository<LineEntity> cizgiler,
                     FakeGeometryRepository<PolygonEntity> poligonlar) Kur()
+        => Kur(new SahteVeritabani());
+
+    /// <summary>
+    /// Ödev 6 ile birlikte seed, kullanıcıların yanında rol ve yetki de kuruyor.
+    /// Bu yüzden üç repository de AYNI sahte veritabanını paylaşmalı; rol/yetki
+    /// tarafını inceleyen testler bu aşırı yükleme ile kendi veritabanını verir.
+    /// </summary>
+    private static (DatabaseSeeder seeder,
+                    FakeUserRepository kullanicilar,
+                    FakeGeometryRepository<PointEntity> noktalar,
+                    FakeGeometryRepository<LineEntity> cizgiler,
+                    FakeGeometryRepository<PolygonEntity> poligonlar) Kur(SahteVeritabani db)
     {
-        var kullanicilar = new FakeUserRepository();
+        var kullanicilar = new FakeUserRepository(db);
         var noktalar = new FakeGeometryRepository<PointEntity>();
         var cizgiler = new FakeGeometryRepository<LineEntity>();
         var poligonlar = new FakeGeometryRepository<PolygonEntity>();
 
-        return (new DatabaseSeeder(kullanicilar, noktalar, cizgiler, poligonlar),
-                kullanicilar, noktalar, cizgiler, poligonlar);
+        var seeder = new DatabaseSeeder(
+            kullanicilar,
+            new FakeRoleRepository(db),
+            new FakePermissionRepository(db),
+            noktalar, cizgiler, poligonlar);
+
+        return (seeder, kullanicilar, noktalar, cizgiler, poligonlar);
     }
 
     [Fact]

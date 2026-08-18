@@ -124,6 +124,77 @@ export function KullaniciIkonu({ size = 13 }) {
   )
 }
 
+/** Kullanıcı topluluğu — yönetim panelindeki "Kullanıcı Listesi" menüsü. */
+export function KullanicilarIkonu({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"
+         strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="8" r="3.4" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M16 5.3a3.4 3.4 0 0 1 0 5.4M17.5 14.2A6.5 6.5 0 0 1 21.5 20" />
+    </svg>
+  )
+}
+
+/** Kalkan — "Rol Listesi" menüsü ve yetki rozetleri. */
+export function RolIkonu({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"
+         strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6Z" />
+      <path d="m9 12 2.2 2.2L15.2 10" />
+    </svg>
+  )
+}
+
+/** Anahtar — yetki matrisi başlığı. */
+export function YetkiIkonu({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"
+         strokeLinejoin="round" aria-hidden="true">
+      <circle cx="8" cy="14" r="4" />
+      <path d="m11 11 8-8M17 5l2 2M15 7l2 2" />
+    </svg>
+  )
+}
+
+/** Kilit — rolden gelen, değiştirilemeyen yetkiyi işaretler. */
+export function KilitIkonu({ size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"
+         strokeLinejoin="round" aria-hidden="true">
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2" />
+      <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+    </svg>
+  )
+}
+
+/** Sola ok — haritaya dönüş bağlantısı. */
+export function GeriIkonu({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"
+         strokeLinejoin="round" aria-hidden="true">
+      <path d="M19 12H5M11 6l-6 6 6 6" />
+    </svg>
+  )
+}
+
+/** Artı — "yeni kayıt" düğmeleri. */
+export function EkleIkonu({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"
+         aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+
 /** Çöp kutusu. */
 export function SilIkonu({ size = 15 }) {
   return (

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using StajProject.Business.Geo;
+using StajProject.Business.Validation;
 
 namespace StajProject.API.Middleware;
 
@@ -33,6 +34,13 @@ public class ExceptionHandlingMiddleware
         {
             // Geometri/görsel doğrulama hatası → gönderilen VERİ hatalı, sunucu değil.
             _logger.LogWarning(ex, "Geçersiz istek verisi");
+            await YazAsync(context, StatusCodes.Status400BadRequest, ex.Message);
+        }
+        catch (IsKuraliException ex)
+        {
+            // İş kuralı ihlali (Ödev 6): "bu kullanıcı adı zaten var" gibi.
+            // Controller'lar bunu zaten yakalıyor; buradaki catch son güvenlik ağı.
+            _logger.LogWarning(ex, "İş kuralı ihlali");
             await YazAsync(context, StatusCodes.Status400BadRequest, ex.Message);
         }
         catch (Exception ex)

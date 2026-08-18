@@ -6,6 +6,19 @@
 
 import { authFetch } from './auth'
 
+/**
+ * Sunucu hatasını Error nesnesine çevirir.
+ *
+ * Mesajın yanında HTTP durum kodunu da (err.status) taşıyoruz: çağıran taraf
+ * "404 → bu kayıt artık yok" gibi durumları metne bakarak değil, koda bakarak
+ * ayırt edebilsin. Hata mesajının metnine dayanmak kırılgan bir yol olurdu.
+ */
+async function apiHatasi(response) {
+  const hata = new Error(await hataMesaji(response))
+  hata.status = response.status
+  return hata
+}
+
 /** Sunucudan gelen hata gövdesini okuyup anlamlı bir mesaj üretir. */
 async function hataMesaji(response) {
   try {
@@ -23,7 +36,7 @@ async function hataMesaji(response) {
 /** GET — bir tipin tüm kayıtlarını getirir. */
 export async function listele(endpoint, onUnauthorized) {
   const res = await authFetch(endpoint, {}, onUnauthorized)
-  if (!res.ok) throw new Error(await hataMesaji(res))
+  if (!res.ok) throw await apiHatasi(res)
   return res.json()
 }
 
@@ -38,14 +51,14 @@ export async function kaydet(endpoint, veri, onUnauthorized) {
     },
     onUnauthorized,
   )
-  if (!res.ok) throw new Error(await hataMesaji(res))
+  if (!res.ok) throw await apiHatasi(res)
   return res.json()
 }
 
 /** DELETE — soft delete (kayıt veritabanında kalır, is_deleted işaretlenir). */
 export async function sil(endpoint, id, onUnauthorized) {
   const res = await authFetch(`${endpoint}/${id}`, { method: 'DELETE' }, onUnauthorized)
-  if (!res.ok) throw new Error(await hataMesaji(res))
+  if (!res.ok) throw await apiHatasi(res)
 }
 
 /**
@@ -55,7 +68,7 @@ export async function sil(endpoint, id, onUnauthorized) {
  */
 export async function geriAl(endpoint, id, onUnauthorized) {
   const res = await authFetch(`${endpoint}/${id}/restore`, { method: 'POST' }, onUnauthorized)
-  if (!res.ok) throw new Error(await hataMesaji(res))
+  if (!res.ok) throw await apiHatasi(res)
 }
 
 /**
@@ -75,7 +88,7 @@ export async function kesisimAnalizi(wkt, haricTutulanPolygonId, onUnauthorized)
     },
     onUnauthorized,
   )
-  if (!res.ok) throw new Error(await hataMesaji(res))
+  if (!res.ok) throw await apiHatasi(res)
   return res.json()
 }
 
@@ -90,7 +103,7 @@ export async function guncelle(endpoint, id, veri, onUnauthorized) {
     },
     onUnauthorized,
   )
-  if (!res.ok) throw new Error(await hataMesaji(res))
+  if (!res.ok) throw await apiHatasi(res)
   return res.json()
 }
 
@@ -105,5 +118,5 @@ export async function aktiflikDegistir(endpoint, id, isActive, onUnauthorized) {
     },
     onUnauthorized,
   )
-  if (!res.ok) throw new Error(await hataMesaji(res))
+  if (!res.ok) throw await apiHatasi(res)
 }
