@@ -345,7 +345,7 @@ Başlangıçta tanımlı sekiz yetki (`Business/Auth/Yetkiler.cs` → seed):
 | Analiz Çalıştırma | Kesişim analizi yapar |
 | Kullanıcı Yönetimi · Rol Yönetimi | Yönetim panelini açar |
 
-Başlangıç rolleri: **Yönetici** (8 yetki), **Editör** (5), **Görüntüleyici** (1).
+Başlangıç rolleri: **Yönetici** (8 yetki), **Editör** (6 — yönetim dışındaki her şey), **Görüntüleyici** (1).
 `admin` → Yönetici, `ayse` → Editör olarak bağlanır. Rol ve atamalar yalnızca **ilk kez**
 oluşturulur; panelden yapılan düzenlemeler yeniden başlatmada geri alınmaz.
 

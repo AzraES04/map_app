@@ -33,10 +33,10 @@ public class DatabaseSeeder : IDatabaseSeeder
             Auth.Yetkiler.KayitGuncelleme, Auth.Yetkiler.KayitSilme, Auth.Yetkiler.AnalizCalistirma,
             Auth.Yetkiler.KullaniciYonetimi, Auth.Yetkiler.RolYonetimi,
         }),
-        (EditorRolu, "Harita üzerinde çizim yapar ve kendi kayıtlarını düzenler.", new[]
+        (EditorRolu, "Harita üzerinde çizim yapar, kendi kayıtlarını düzenler ve siler.", new[]
         {
             Auth.Yetkiler.NoktaEkleme, Auth.Yetkiler.CizgiEkleme, Auth.Yetkiler.PoligonEkleme,
-            Auth.Yetkiler.KayitGuncelleme, Auth.Yetkiler.AnalizCalistirma,
+            Auth.Yetkiler.KayitGuncelleme, Auth.Yetkiler.KayitSilme, Auth.Yetkiler.AnalizCalistirma,
         }),
         (GoruntuleyiciRolu, "Yalnızca görüntüler; çizim yapamaz.", new[]
         {
