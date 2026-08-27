@@ -49,6 +49,38 @@ public class User : IAuditableEntity
     /// </summary>
     public bool IsApproved { get; set; } = true;
 
+    // ---------- İki adımlı doğrulama (TOTP) ----------
+
+    /// <summary>
+    /// TOTP gizli anahtarı (Base32). İki adımlı doğrulama kapalıysa null.
+    ///
+    /// ---- BU ALAN NEDEN ŞİFRE KADAR HASSAS? ----
+    ///
+    /// Bu anahtarı bilen, kullanıcının bütün gelecek kodlarını üretebilir —
+    /// yani ikinci adımı tamamen atlar. Şifre hash'i gibi TERSİNMEZ
+    /// saklanamıyor: sunucunun kodu doğrulamak için anahtarın KENDİSİNE
+    /// ihtiyacı var (TOTP simetriktir).
+    ///
+    /// Bu yüzden alan hiçbir DTO'ya konmuyor ve tek bir kez, kurulum
+    /// ekranında gösteriliyor. Yayına alınırken doğru adım bu kolonu
+    /// veritabanı düzeyinde şifrelemektir (örn. ASP.NET Data Protection);
+    /// README'de not olarak duruyor.
+    /// </summary>
+    public string? TotpSecret { get; set; }
+
+    /// <summary>
+    /// İki adımlı doğrulama AÇIK mı?
+    ///
+    /// <see cref="TotpSecret"/> dolu olmasına rağmen bu alan false olabilir:
+    /// kullanıcı kurulumu başlattı ama ilk kodu doğrulayarak bitirmedi.
+    ///
+    /// NEDEN İKİ AYRI ALAN? Tek alanla ("secret varsa açıktır") yapsaydık,
+    /// QR'ı okutmayı yarıda bırakan kullanıcı bir daha HİÇ giriş yapamazdı:
+    /// sistem ondan kod ister, elinde kod üretecek bir şey olmazdı.
+    /// Doğrulama adımı, kullanıcının gerçekten kod üretebildiğinin kanıtı.
+    /// </summary>
+    public bool TotpEnabled { get; set; } = false;
+
     // ---------- Ödev 6 / Madde 2: dinamik yetkilendirme ----------
 
     /// <summary>Kullanıcının rolleri (user_roles). Yetkilerin ASIL kaynağı budur.</summary>

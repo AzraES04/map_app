@@ -82,6 +82,22 @@ public class FakeUserRepository : IUserRepository
         return Task.FromResult<User?>(mevcut);
     }
 
+    /// <summary>
+    /// İki adımlı doğrulama alanları — gerçek depoda olduğu gibi AYRI bir
+    /// metot. UpdateAsync'e bindirseydik, panelin kullanıcı düzenlemesi
+    /// TOTP'yi sessizce silerdi (gerekçe: IUserRepository).
+    /// </summary>
+    public Task TotpAyarlaAsync(int userId, string? secret, bool enabled)
+    {
+        var user = _store.FirstOrDefault(u => u.Id == userId && !u.IsDeleted);
+        if (user is not null)
+        {
+            user.TotpSecret = secret;
+            user.TotpEnabled = enabled;
+        }
+        return Task.CompletedTask;
+    }
+
     public Task SetRolesAsync(int userId, IReadOnlyCollection<int> roleIds)
     {
         _db.KullaniciRolleri.RemoveAll(kr => kr.UserId == userId);

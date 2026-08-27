@@ -127,6 +127,18 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ModifiedDate)
                   .HasColumnName("modified_date");
 
+            // ---------- İki adımlı doğrulama ----------
+
+            // 32 karakter = 20 baytlık anahtarın Base32 karşılığı. Sınırı
+            // gerçek boyuta yakın tutmak, kolonun ne taşıdığını şema
+            // üzerinden de belli ediyor.
+            entity.Property(e => e.TotpSecret)
+                  .HasColumnName("totp_secret").HasMaxLength(64);
+
+            entity.Property(e => e.TotpEnabled)
+                  .HasColumnName("totp_enabled")
+                  .HasDefaultValue(false);
+
             // Ödev 10: kayıt olan kullanıcı yönetici onayı bekler.
             // Varsayılan TRUE: mevcut kullanıcılar ve panelden açılanlar
             // onaylı sayılır; yalnızca kayıt ucu bunu bilerek false yazar.

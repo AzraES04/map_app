@@ -38,6 +38,32 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   // Giriş başarılı: kart soluyor, gezegen yaklaşıyor, ekran kararıp haritaya devrediyor
   const [cikis, setCikis] = useState(false)
+
+  /**
+   * "Beni hatırla" — oturumun hangi depoda tutulacağını belirliyor.
+   *
+   *   işaretli   → localStorage   : tarayıcı kapansa da oturum sürer
+   *   işaretsiz  → sessionStorage : SEKME KAPANINCA oturum biter
+   *
+   * VARSAYILAN İŞARETSİZ. Ortak bir bilgisayarda oturumu açık bırakmak,
+   * kullanıcının istemediği hâlde başına gelebilecek bir şey olmamalı;
+   * kalıcılık bilinçli bir seçim olsun. (Bankacılık uygulamalarının
+   * varsayılanı da budur.)
+   */
+  const [beniHatirla, setBeniHatirla] = useState(false)
+
+  /**
+   * İKİNCİ ADIM — şifre doğrulandı, 6 haneli kod bekleniyor.
+   *
+   * Ayrı bir SAYFA değil, aynı kartın ikinci hâli. Sayfa değiştirseydik
+   * "beni hatırla" tercihi ve kullanıcı adı taşınmak zorunda kalırdı;
+   * üstelik kullanıcı için tek bir işin (giriş yapmak) ortasında adres
+   * değişmesi gereksiz bir kopukluk.
+   *
+   * null → birinci adımdayız. Dolu → { araToken, username }
+   */
+  const [ikinciAdim, setIkinciAdim] = useState(null)
+  const [kod, setKod] = useState('')
   const navigate = useNavigate()
 
   // Token süresi dolup login'e yönlendirildiysek bilgi mesajı göster
@@ -80,7 +106,53 @@ export default function Login() {
 
     if (!res.ok) throw new Error(await sunucuHatasi(res))
 
-    saveSession(await res.json())
+    const cevap = await res.json()
+
+    // İKİ ADIMLI DOĞRULAMA: şifre doğru ama oturum HENÜZ AÇILMADI.
+    // Sunucu token yerine kısa ömürlü bir ara token gönderdi.
+    if (cevap.ikinciAdimGerekli) {
+      setIkinciAdim({ araToken: cevap.araToken, username: cevap.username })
+      setPassword('')   // şifre ekranda gereksiz yere durmasın
+      setKod('')
+      return
+    }
+
+    oturumuAc(cevap)
+  }
+
+  /**
+   * Girişin İKİNCİ adımı: ara token + kod → gerçek oturum.
+   */
+  const kodDogrula = async () => {
+    const res = await fetch('/api/auth/login/2fa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ araToken: ikinciAdim.araToken, kod }),
+    })
+
+    if (res.status === 401) {
+      // Ara token'ın ömrü 5 dakika. Süresi dolduysa kod doğru olsa bile
+      // reddedilir ve kullanıcı baştan başlamalı — mesaj bunu söylüyor,
+      // yoksa "kodu doğru yazdım ama olmuyor" diye döner durur.
+      setError('Kod geçersiz ya da süresi doldu. Kod 30 saniyede bir yenileniyor;'
+             + ' uzun sürdüyse baştan giriş yapın.')
+      setKod('')
+      return
+    }
+
+    if (res.status === 429) {
+      setError(await hataMesaji(res, 'Çok fazla deneme yaptınız, biraz bekleyin.'))
+      return
+    }
+
+    if (!res.ok) throw new Error(await sunucuHatasi(res))
+
+    oturumuAc(await res.json())
+  }
+
+  /** Oturumu saklayıp haritaya geçen ortak son adım (iki yol da buraya çıkıyor). */
+  const oturumuAc = (oturum) => {
+    saveSession(oturum, beniHatirla)
 
     // Haritadaki açılış sahnesi MUTLAKA oynasın: login'deki uzay teması
     // "dünyadan Türkiye'ye iniş" ile kesintisiz devam etsin.
@@ -154,7 +226,8 @@ export default function Login() {
     setError(null)
     setBilgi(null)
     try {
-      if (mod === 'giris') await girisYap()
+      if (ikinciAdim) await kodDogrula()
+      else if (mod === 'giris') await girisYap()
       else await kayitOl()
     } catch (err) {
       setError(`İşlem tamamlanamadı: ${err.message}`)
@@ -198,11 +271,20 @@ export default function Login() {
 
         <h1>Harita Uygulaması</h1>
         <p className="login-subtitle">
-          {kayitModu ? 'Yeni hesap oluşturun' : 'Devam etmek için giriş yapın'}
+          {ikinciAdim
+            ? 'Doğrulama kodunu girin'
+            : kayitModu ? 'Yeni hesap oluşturun' : 'Devam etmek için giriş yapın'}
         </p>
 
-        {/* Ödev 10: giriş / kayıt seçimi */}
-        <div className="login-sekme" role="tablist" aria-label="Giriş veya kayıt">
+        {/* Ödev 10: giriş / kayıt seçimi.
+            İKİNCİ ADIMDA GİZLİ: kullanıcı bir işin ortasında; "Kayıt Ol"a
+            basmak yarım kalmış girişi sessizce çöpe atardı. */}
+        <div
+          className="login-sekme"
+          role="tablist"
+          aria-label="Giriş veya kayıt"
+          hidden={Boolean(ikinciAdim)}
+        >
           <button
             type="button"
             role="tab"
@@ -236,12 +318,57 @@ export default function Login() {
 
         {bilgi && <p className="info-banner">{bilgi}</p>}
 
+        {/* ---------- İKİNCİ ADIM ---------- */}
+        {ikinciAdim && (
+          <>
+            <p className="info-banner">
+              <strong>{ikinciAdim.username}</strong> hesabı iki adımlı
+              doğrulama kullanıyor. Telefonunuzdaki uygulamanın gösterdiği
+              6 haneli kodu girin.
+            </p>
+
+            <label htmlFor="kod">Doğrulama kodu</label>
+            <input
+              id="kod"
+              value={kod}
+              onChange={(e) => setKod(e.target.value)}
+              placeholder="000000"
+              inputMode="numeric"
+              /* one-time-code: iOS ve Android bu ipucuyla kodu klavyenin
+                 üstünde önerebiliyor. */
+              autoComplete="one-time-code"
+              maxLength={7}
+              required
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- kullanıcı
+              // bu ekrana yalnızca kod girmek için geliyor; tek alan var.
+              autoFocus
+            />
+
+            <button type="submit" disabled={loading || cikis}>
+              {cikis ? 'Harita hazırlanıyor…' : loading ? 'Doğrulanıyor…' : 'Doğrula'}
+            </button>
+
+            {error && <p className="error-banner">{error}</p>}
+
+            <button
+              type="button"
+              className="login-vazgec"
+              onClick={() => { setIkinciAdim(null); setKod(''); setError(null) }}
+            >
+              Baştan giriş yap
+            </button>
+          </>
+        )}
+
+        {/* ---------- BİRİNCİ ADIM ---------- */}
+        {!ikinciAdim && (
+        <>
         <label htmlFor="username">Kullanıcı Adı</label>
         <input
           id="username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder={kayitModu ? 'en az 3 karakter' : 'admin'}
+          placeholder={kayitModu ? 'En az 3 karakter' : 'Kullanıcı adınız'}
           autoComplete="username"
           minLength={kayitModu ? 3 : undefined}
           required
@@ -253,7 +380,7 @@ export default function Login() {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder={kayitModu ? 'en az 6 karakter' : '••••••••'}
+          placeholder={kayitModu ? 'En az 6 karakter' : '••••••••'}
           // eslint-disable-next-line jsx-a11y/no-autofocus -- kullanıcı adı
           // zaten dolu geldiyse tek eksik şifre; odağı elle taşımak gereksiz adım.
           autoFocus={hesapDegistirme}
@@ -264,6 +391,23 @@ export default function Login() {
           required
         />
 
+        {/* "Beni hatırla" YALNIZCA giriş modunda. Kayıt olurken oturum
+            açılmıyor (hesap yönetici onayı bekliyor), dolayısıyla
+            hatırlanacak bir oturum da yok. */}
+        {!kayitModu && (
+          <label className="login-hatirla">
+            <input
+              type="checkbox"
+              checked={beniHatirla}
+              onChange={(e) => setBeniHatirla(e.target.checked)}
+            />
+            <span>Beni hatırla</span>
+            <small>
+              İşaretlemezseniz oturum, sekmeyi kapattığınızda sona erer.
+            </small>
+          </label>
+        )}
+
         <button type="submit" disabled={loading || cikis}>
           {cikis ? 'Harita hazırlanıyor…'
             : loading ? (kayitModu ? 'Kaydediliyor…' : 'Giriş yapılıyor…')
@@ -272,11 +416,19 @@ export default function Login() {
 
         {error && <p className="error-banner">{error}</p>}
 
-        <p className="login-hint">
-          {kayitModu
-            ? 'Kaydınız yönetici onayından sonra kullanıma açılır.'
-            : <>Demo kullanıcı: <code>admin</code> / <code>staj123</code></>}
-        </p>
+        {/* Giriş modunda ipucu YOK.
+            Önceden burada "Demo kullanıcı: admin / staj123" yazıyordu; bir
+            giriş ekranının üstünde geçerli bir kullanıcı adı ve şifre
+            göstermek, kimlik doğrulamanın kendisini anlamsızlaştırıyor.
+            Kayıt modundaki cümle kalıyor: o bir uyarı, bir kimlik bilgisi
+            değil. */}
+        {kayitModu && (
+          <p className="login-hint">
+            Kaydınız yönetici onayından sonra kullanıma açılır.
+          </p>
+        )}
+        </>
+        )}
       </form>
 
       {/* Çıkışta ekranı karartıp haritaya devreden perde */}

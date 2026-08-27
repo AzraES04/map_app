@@ -3109,6 +3109,139 @@ ve yeniden kullanım tespiti, çalınan bir kopyanın ömrünü tek kullanıma i
 
 ---
 
+## İki adımlı doğrulama (TOTP)
+
+Giriş artık iki kapıdan geçiyor: **şifre** (bildiğiniz şey) ve
+**telefonunuzdaki kod** (sahip olduğunuz şey). Şifreniz ele geçse bile,
+telefonunuz olmadan hesabınıza girilemiyor.
+
+| | |
+|---|---|
+| Standart | **RFC 6238 (TOTP)** — Google/Microsoft Authenticator, Authy ile uyumlu |
+| Kod | 6 hane, 30 saniyede bir yenileniyor |
+| Kurulum | Hesap menüsü → **Güvenlik ayarları** |
+| Kapatma | **Şifre** ister (kod değil) |
+
+### Neden SMS ya da e-posta değil?
+
+İkisi de bir **dış servise** bağlanmayı gerektiriyor: SMS sağlayıcısı para ve
+sözleşme, e-posta bir SMTP sunucusu ister. Üstelik ikisi de internet olmadan
+çalışmaz — jüri önünde bir ağ sorunu, girişin tamamen kilitlenmesi demek
+olurdu.
+
+TOTP'de sunucu ile telefon arasında **hiçbir iletişim yok**: ikisi de aynı
+gizli anahtarı ve aynı saati bilerek kodu bağımsız hesaplıyor.
+
+### Neden hazır bir kütüphane kullanılmadı?
+
+Algoritma 30 satır ve .NET'in kendi `HMACSHA1` sınıfına dayanıyor
+([`Totp.cs`](backend/StajProject.Business/Auth/Totp.cs)). Kimlik doğrulamanın
+kalbindeki bir kod için üçüncü parti bağımlılık, denetlenmesi gereken yüzeyi
+büyütürdü.
+
+Doğruluğun ölçütü kendi tutarlılığımız değil, **RFC 6238'in resmî test
+vektörleri**: kendi ürettiğimizi kendimiz doğrulamak hiçbir şey ispatlamaz —
+kullanıcının telefonundaki uygulama başka bir kod gösteriyorsa hata mesajı
+alınmaz, sadece kimse giremez. `TotpTests` standardın Appendix B tablosundaki
+altı vektörü de sınıyor.
+
+> QR kodu üretiminde tam tersi karar verildi: orada **`qrcode` paketi**
+> kullanıldı. Reed-Solomon hata düzeltme, maskeleme desenleri ve kapasite
+> tabloları yüzlerce satırlık, gözle denetlenemeyen bir matematik — orada
+> hazır kütüphane riski *azaltıyor*. Ölçüt her seferinde aynı: "kendimiz
+> yazmak denetim yüzeyini büyütür mü, küçültür mü?"
+
+### En kritik tasarım kararı: ara token'ın audience'ı
+
+Şifre doğrulandıktan sonra, kod girilmeden önce istemciye kısa ömürlü
+(5 dakika) bir **ara token** veriliyor. Bu token normal erişim token'ıyla
+**aynı anahtarla** imzalanıyor — yani imzası geçerli.
+
+Audience'ı da aynı olsaydı, istemci onu doğrudan `Authorization: Bearer`
+başlığına koyup **ikinci adımı tamamen atlayabilirdi**. İki adımlı doğrulama
+görünürde var, gerçekte yok olurdu — ve hiçbir hata mesajı alınmazdı.
+
+Bu yüzden ara token `StajProject.IkinciAdim` audience'ıyla imzalanıyor.
+Kapatan şey **bizim kodumuz değil**: ASP.NET'in token doğrulaması
+`ValidateAudience = true` ile çalışıyor ve eşleşmeyen audience'ı çerçeve
+düzeyinde reddediyor. Unutulabilecek bir kontrol değil, yapının kendisi.
+
+Duvar **iki yönlü**: normal bir erişim token'ı da ikinci adımda kabul
+edilmiyor.
+
+### Kurulum neden üç adımlı?
+
+```
+1. "Aç"        → sunucu anahtar üretir, koruma HENÜZ DEVREDE DEĞİL
+2. QR okutulur
+3. Kod girilir → ancak şimdi devreye girer
+```
+
+Üçüncü adım, kullanıcının gerçekten kod **üretebildiğinin** kanıtı. Olmasaydı,
+QR'ı okutmayı yarıda bırakan kişi bir daha hiç giriş yapamazdı: sistem ondan
+kod ister, elinde kod üretecek bir şey olmazdı. Bu yüzden `totp_secret` ve
+`totp_enabled` **iki ayrı kolon**.
+
+### Kapatma neden kod değil ŞİFRE istiyor?
+
+Kapatma, güvenliği **azaltan** ve tam da saldırganın yapmak isteyeceği işlem.
+Açık kalmış bir oturumu ele geçiren biri, şifreyi bilmeden korumayı
+kaldıramamalı. Anahtar da siliniyor: kalsaydı, korumayı yeniden açan kullanıcı
+eski (belki de sızmış) anahtarla devam ederdi.
+
+### Yönetici onayı neden KALDIRILMADI?
+
+Değerlendirme istendi; karar **kalması** yönünde. Üç gerekçe:
+
+1. **2FA kimlik doğrulamıyor, cihaz doğruluyor.** TOTP "bu kişi kim?" sorusuna
+   cevap vermiyor — "bu kişi az önce anahtarı kurduğu telefona sahip mi?"
+   sorusuna cevap veriyor. Kayıt olan herkes kendine TOTP kurabilir. Yani 2FA,
+   onayın yerini **tutamıyor**: ikisi farklı soruların cevabı.
+2. **Onay olmadan kayıt ucu açık kapı olur.** İnternetten gelen herkes hesap
+   açıp bütün POI, geometri ve güzergah verisini görebilirdi — okuma uçları
+   bilinçli olarak yetkisiz (ortak referans verisi).
+3. **Rol ataması zaten insan kararı.** Kayıt olan kullanıcıya rol verilmiyor;
+   coğrafi yetki alanı da bir yöneticinin seçmesi gereken bir şey. Onay adımı
+   kaldırılsaydı da o insan kararı yerinde kalırdı — sadece görünmez olurdu.
+
+Demo akışındaki sürtünme (kaydol → admin'le onayla → geri dön) gerçek ama tek
+seferlik; hazır demo kullanıcıları zaten onaylı geliyor.
+
+---
+
+## "Beni hatırla"
+
+Giriş ekranındaki onay kutusu oturumun **hangi depoda** tutulacağını
+belirliyor:
+
+| | Depo | Sonuç |
+|---|---|---|
+| İşaretli | `localStorage` | Tarayıcı kapansa da oturum sürer (7 gün) |
+| **İşaretsiz (varsayılan)** | `sessionStorage` | **Sekme kapanınca oturum biter** |
+
+**Varsayılan işaretsiz.** Ortak bir bilgisayarda oturumu açık bırakmak,
+kullanıcının istemediği hâlde başına gelebilecek bir şey olmamalı.
+
+Yalnızca süreyi kısaltmak **yetmezdi**: anahtar `localStorage`'da kalır ve
+tarayıcı kapansa bile diskte durmaya devam ederdi. `sessionStorage` sekme
+kapanınca tarayıcı tarafından siliniyor — isteğin tam karşılığı.
+
+İki ayrıntı sessizce bozulabilirdi, ikisi de teste bağlandı:
+
+- **Depo değişince ötekisi temizleniyor.** Temizlemeseydik, "hatırlama" ile
+  giren kullanıcının bir önceki kalıcı oturumu diskte kalır ve sekme
+  kapandığında geri dönerdi.
+- **Sessiz yenileme tercihi bozmuyor.** Erişim token'ı 10 dakikada bir
+  yenileniyor; o yol `saveSession`'ı tercih parametresi olmadan çağırıyor ve
+  mevcut depoyu koruyor. Korumasaydı oturum 10 dakika sonra sessizce diske
+  taşınırdı.
+
+Ayrıca "hatırlama" modunda hesap listesine **anahtar yazılmıyor**: yazsaydık,
+sekme kapandıktan sonra hesap değiştiriciden tek tıkla o oturuma dönülebilir
+ve istek arka kapıdan delinirdi.
+
+---
+
 ## API Uçları
 
 | Metot | Yol | Açıklama |
@@ -3116,6 +3249,11 @@ ve yeniden kullanım tespiti, çalınan bir kopyanın ömrünü tek kullanıma i
 | POST | `/api/auth/login` | Erişim token'ı (10 dk) + yenileme anahtarı (7 gün) — IP başına **5 deneme/dk** |
 | POST | `/api/auth/refresh` | `{ refreshToken }` → yeni token **ve yeni anahtar** (döndürme) — **30 istek/dk** |
 | POST | `/api/auth/logout` | `{ refreshToken }` → oturumu iptal eder (204) |
+| POST | `/api/auth/login/2fa` | `{ araToken, kod }` → iki adımlı girişin 2. adımı — **5 deneme/dk** |
+| POST | `/api/auth/2fa/baslat` | TOTP kurulumunu başlatır (anahtar + QR adresi) |
+| POST | `/api/auth/2fa/dogrula` | `{ kod }` → kurulumu tamamlar ve korumayı açar |
+| POST | `/api/auth/2fa/kapat` | `{ sifre }` → korumayı kapatır ve anahtarı siler |
+| GET | `/api/auth/2fa/durum` | `{ etkin }` |
 | GET | `/api/points` · `/api/lines` · `/api/polygons` | Kayıtları WKT olarak listeler |
 | GET | `/api/points/{id}` | Tek kayıt |
 | POST | `/api/points` | `{ name, color, description?, imageUrl?, wkt }` — **Point Ekleme** yetkisi |

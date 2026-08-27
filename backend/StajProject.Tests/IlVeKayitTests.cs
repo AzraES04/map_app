@@ -361,7 +361,8 @@ public class IlVeKayitTests
             .Options);
 
     private static AuthService AuthServisi(AppDbContext db)
-        => new(new UserRepository(db), new RefreshTokenRepository(db), Options.Create(new JwtSettings
+        => new(new UserRepository(db), new RefreshTokenRepository(db),
+            new FakeCurrentUserService(), Options.Create(new JwtSettings
         {
             Key = "test-anahtari-en-az-32-karakter-olmali-1234",
             Issuer = "test",

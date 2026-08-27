@@ -32,4 +32,33 @@ public interface IAuthService
     /// Geçersiz anahtar için de sessizce başarılı döner.
     /// </summary>
     Task LogoutAsync(string refreshToken);
+
+    // ---------- İki adımlı doğrulama (TOTP) ----------
+
+    /// <summary>
+    /// İkinci adımı tamamlar: ara token + 6 haneli kod karşılığında gerçek
+    /// oturum verir. Ara token ya da kod geçersizse <c>null</c>.
+    /// </summary>
+    Task<LoginResponseDto?> IkinciAdimGirisAsync(IkinciAdimGirisDto request);
+
+    /// <summary>
+    /// Kurulumu başlatır: gizli anahtar üretip kaydeder ama HENÜZ AÇMAZ.
+    /// Zaten açıksa <see cref="Validation.IsKuraliException"/> fırlatır.
+    /// </summary>
+    Task<TotpKurulumDto> TotpBaslatAsync();
+
+    /// <summary>
+    /// Kurulumu tamamlar: kod doğruysa korumayı açar. Kod yanlışsa
+    /// <see cref="Validation.IsKuraliException"/> fırlatır.
+    /// </summary>
+    Task TotpDogrulaVeAcAsync(TotpDogrulaDto request);
+
+    /// <summary>
+    /// Korumayı kapatır ve gizli anahtarı siler. ŞİFRE ister — kapatma,
+    /// güvenliği azaltan bir işlem ve açık kalmış bir oturumla yapılamamalı.
+    /// </summary>
+    Task TotpKapatAsync(TotpKapatDto request);
+
+    /// <summary>Giriş yapmış kullanıcının iki adımlı doğrulama durumu.</summary>
+    Task<TotpDurumDto> TotpDurumAsync();
 }

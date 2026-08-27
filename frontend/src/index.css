@@ -677,6 +677,31 @@ body {
 }
 
 /*
+  GEZEGEN YÜZEYİ — mavi-yeşil dünya (bkz. Dunya.jsx).
+
+  Deliğin tam ölçüsünde: .kure-isik ile aynı boyut ve konum. Bir piksel
+  şaşarsa kenarda uzay rengi ya da harita sızar ve küre "kesilmiş" görünür.
+*/
+.kure-dunya {
+  top: 50%;
+  left: 50%;
+  width: 42vmin;
+  height: 42vmin;
+  margin: -21vmin 0 0 -21vmin;
+  border-radius: 50%;
+  overflow: hidden;
+  /* İniş başlayınca gezegen solup altındaki gerçek haritaya devrediyor.
+     Süre, .uzay-sahnesi'nin 2.6s'lik büyüme geçişinden KISA: gezegen
+     ekranı kaplamadan önce kaybolsun, yoksa devasa bir SVG blob olarak
+     ekranı doldurur. */
+  transition: opacity 1.15s ease-in;
+}
+
+.kure-dunya svg { width: 100%; height: 100%; display: block; }
+
+.kure-dunya.solgun { opacity: 0; }
+
+/*
   KÜRE — hacim ve atmosfer.
   Dört katmanlı kurgu: (1) ince parlak kenar, (2) sol üstten yumuşak ışık,
   (3) sağ altta derin gölge, (4) dışa doğru iki kademeli atmosfer parıltısı.
@@ -4976,3 +5001,173 @@ kbd {
 .durak-eylem { display: flex; gap: 2px; flex-shrink: 0; }
 
 .durak-eylem .btn-ghost { padding: 4px 7px; min-width: 0; }
+
+/* ---------- "Beni hatırla" (giriş ekranı) ---------- */
+
+/*
+  Etiketin TAMAMI tıklanabilir: 13 piksellik onay kutusunu avlamak yerine
+  metin de hedefe dahil. label sarmalaması ayrıca aria bağlantısını
+  kendiliğinden kuruyor.
+*/
+.login-hatirla {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 9px;
+  margin: -2px 0 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.login-hatirla input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.login-hatirla span {
+  font-size: var(--yazi-sm);
+  color: var(--metin);
+}
+
+/* Açıklama onay kutusunun ALTINDA, metinle hizalı ikinci satır.
+   Kullanıcı "hatırlamazsam ne olur?" sorusunu tıklamadan önce görmeli. */
+.login-hatirla small {
+  grid-column: 2;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--metin-soluk);
+}
+
+/* ---------- İki adımlı doğrulama ---------- */
+
+/* Giriş kartındaki "Baştan giriş yap" — bir düğme ama BİRİNCİL değil.
+   Kullanıcıyı yaptığı işten geri çeviren bir çıkış yolu; görünüşü de öyle
+   olmalı, yoksa "Doğrula" ile yarışır. */
+.login-vazgec {
+  background: none;
+  border: none;
+  color: var(--metin-soluk);
+  font-size: var(--yazi-sm);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px;
+  margin-top: -4px;
+}
+
+.login-vazgec:hover { color: var(--metin); }
+
+/* Kod alanı: rakamlar geniş aralıklı ve ortalanmış.
+   Altı hane, normal metin gibi hizalandığında "kod" değil "kelime" gibi
+   okunuyor; harf aralığı onu sayı dizisi olarak okutuyor. */
+#kod, #totp-kod {
+  text-align: center;
+  letter-spacing: 0.4em;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  /* letter-spacing son karakterin de sağına boşluk koyuyor ve metin
+     görsel olarak sola kayıyor; yarısı kadar sol dolgu bunu düzeltiyor. */
+  text-indent: 0.4em;
+}
+
+/* ---------- Güvenlik ekranı ---------- */
+
+.guvenlik-sayfa { max-width: 760px; }
+
+.guvenlik-kart h2 { display: flex; align-items: center; gap: 9px; }
+
+.totp-kurulum {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--kenar);
+}
+
+.totp-adimlar {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--metin-orta);
+  font-size: var(--yazi-sm);
+  line-height: 1.5;
+}
+
+.totp-qr-alan {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+/* QR HER ZAMAN beyaz zeminde: kod okuyucular kontrast bekliyor ve koyu
+   temada koyu zemine çizilen bir kare okunmazdı. Beyaz çerçeve aynı
+   zamanda "sessiz bölge"yi (quiet zone) garanti ediyor. */
+.qr-tuval {
+  background: #ffffff;
+  padding: 10px;
+  border-radius: var(--radius);
+  display: block;
+  flex-shrink: 0;
+}
+
+.qr-hata { max-width: 200px; }
+
+.totp-anahtar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+}
+
+.totp-anahtar .etiket {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--metin-soluk);
+}
+
+.totp-anahtar code {
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  padding: 9px 11px;
+  /* Kullanıcı seçip kopyalayacak; kırılma olmadan tek blok dursun. */
+  user-select: all;
+  word-break: break-all;
+}
+
+.totp-anahtar small { font-size: 11px; color: var(--metin-soluk); line-height: 1.4; }
+
+.totp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 260px;
+}
+
+.totp-form label { font-size: var(--yazi-sm); color: var(--metin-orta); }
+
+.totp-form input {
+  padding: 9px 11px;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  color: var(--metin);
+  font: inherit;
+}
+
+.totp-form input:focus { outline: none; border-color: var(--primary); }
+
+.totp-form .admin-eylemler { margin-top: 4px; }
+
+/* "Açık" rozeti olumlu bir durum bildiriyor — nötr griyle göstermek
+   kullanıcıya bir şeyin eksik olduğu izlenimi verirdi. */
+.admin-rozet.olumlu {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: var(--ok);
+}

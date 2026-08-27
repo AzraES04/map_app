@@ -32,6 +32,26 @@ public interface IUserAdminService
     Task<UserDto?> OnaylaAsync(int id);
 
     /// <summary>
+    /// Bir kullanıcının iki adımlı doğrulamasını SIFIRLAR (yönetici işlemi).
+    ///
+    /// ---- NEDEN GEREKLİ? ----
+    ///
+    /// TOTP'de gizli anahtar yalnızca kullanıcının telefonunda ve sunucuda
+    /// duruyor. Telefon kaybolur, bozulur ya da uygulama silinirse kullanıcı
+    /// KALICI OLARAK kilitlenir: şifresini bilse bile ikinci adımı geçemez ve
+    /// korumayı kapatmak da giriş yapmayı gerektirir.
+    ///
+    /// Kurtarma kodları da bir seçenekti; yönetici sıfırlaması seçildi çünkü
+    /// bu sistemde zaten bir yönetici var (hesapları o onaylıyor, rolleri o
+    /// veriyor) ve kimliği doğrulayacak insan da o. Kurtarma kodları
+    /// kullanıcının onları güvenli bir yere kaydetmiş olmasına bel bağlar —
+    /// pratikte çoğu kişi kaydetmez.
+    ///
+    /// "Kullanıcı Yönetimi" yetkisi ister; kullanıcı yoksa null döner.
+    /// </summary>
+    Task<UserDto?> IkiAdimliSifirlaAsync(int id);
+
+    /// <summary>
     /// Kullanıcının DOĞRUDAN yetkilerini günceller ve güncel matrisi döner.
     /// Rolden gelen yetkiler bu listeye yazılmaz — zaten geçerliler.
     /// </summary>

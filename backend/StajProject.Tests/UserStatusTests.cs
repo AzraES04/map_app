@@ -7,6 +7,7 @@ using StajProject.Business.Services;
 using StajProject.DataAccess.Context;
 using StajProject.DataAccess.Repositories;
 using StajProject.Entities;
+using StajProject.Tests.Fakes;
 using Xunit;
 
 namespace StajProject.Tests;
@@ -157,7 +158,8 @@ public class UserStatusTests
             ExpiryMinutes = 10
         };
 
-        return new AuthService(new UserRepository(db), new RefreshTokenRepository(db), Options.Create(settings));
+        return new AuthService(new UserRepository(db), new RefreshTokenRepository(db),
+            new FakeCurrentUserService(), Options.Create(settings));
     }
 
     /// <summary>Testte de gerçek hash algoritmasını kullanıyoruz ki doğrulama gerçekten çalışsın.</summary>

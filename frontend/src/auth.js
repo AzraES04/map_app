@@ -35,6 +35,52 @@ const REFRESH_EXPIRES_KEY = 'staj_refresh_expires'
 /** Erişim token'ı bu kadar kalınca proaktif olarak yenilenir. */
 const YENILEME_PAYI_MS = 60_000
 
+// ---------------------------------------------------------------------------
+//  "BENİ HATIRLA" — oturum hangi depoda duracak?
+//
+//    işaretli   → localStorage   : tarayıcı kapansa da oturum sürer (7 gün)
+//    işaretsiz  → sessionStorage : SEKME KAPANINCA oturum biter
+//
+//  Neden gerçek bir ayrım? Ortak bir bilgisayarda "beni hatırlama" demek,
+//  kullanıcının makineden kalktığında oturumun kapanmasını beklemesi demek.
+//  İkisini de localStorage'da tutup yalnızca süreyi kısaltmak bu beklentiyi
+//  KARŞILAMAZDI: tarayıcı kapansa bile anahtar diskte kalmaya devam ederdi.
+//
+//  sessionStorage sekme başına ayrıdır ve sekme kapanınca tarayıcı tarafından
+//  silinir — "hatırlama" isteğinin tam karşılığı.
+// ---------------------------------------------------------------------------
+
+/** Oturuma ait anahtarlar — depo değiştirirken hepsi birlikte taşınır/silinir. */
+const OTURUM_ANAHTARLARI = [TOKEN_KEY, EXPIRES_KEY, USER_KEY, REFRESH_KEY, REFRESH_EXPIRES_KEY]
+
+/**
+ * Oturumun ŞU AN bulunduğu depo.
+ *
+ * Önce sessionStorage'a bakıyoruz: "beni hatırlama" ile açılmış bir oturum
+ * varken localStorage'da kalmış eski bir anahtar okunursa, kullanıcı
+ * kapattığını sandığı oturuma geri düşerdi.
+ */
+function aktifDepo() {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) !== null ? sessionStorage : localStorage
+  } catch {
+    // Gizli sekmede ya da depolama kapalıyken erişim hata atabiliyor.
+    return localStorage
+  }
+}
+
+/** Verilen depodan oturum anahtarlarını siler. */
+function oturumuTemizle(depo) {
+  try {
+    OTURUM_ANAHTARLARI.forEach((anahtar) => depo.removeItem(anahtar))
+  } catch { /* depolama kapalı */ }
+}
+
+/** Kullanıcı "beni hatırla" demiş mi? (oturum kalıcı depoda mı) */
+export function kaliciOturumMu() {
+  return aktifDepo() === localStorage
+}
+
 /**
  * Ödev 11 — hesap değiştirici.
  *
@@ -78,26 +124,53 @@ export function girisAnimasyonuOynasinMi() {
 let logoutTimer = null
 let refreshTimer = null
 
-export function saveSession({ token, expiresAt, username, refreshToken, refreshTokenExpiresAt }) {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(EXPIRES_KEY, expiresAt)
-  localStorage.setItem(USER_KEY, username)
+/**
+ * Oturumu saklar.
+ *
+ * @param {boolean} [kalici] "Beni hatırla" işaretli mi?
+ *   Verilmezse MEVCUT depo korunur — sessiz yenileme (oturumuYenile) bu yolu
+ *   kullanıyor ve kullanıcının seçimini her 10 dakikada bir bozmamalı.
+ */
+export function saveSession(
+  { token, expiresAt, username, refreshToken, refreshTokenExpiresAt },
+  kalici,
+) {
+  // Yeni bir giriş mi (kalici verildi), yoksa yenileme mi (verilmedi)?
+  const depo = kalici === undefined ? aktifDepo() : (kalici ? localStorage : sessionStorage)
+
+  // Depo değiştiyse ÖTEKİNİ temizle. Yoksa "beni hatırlama" ile giriş yapan
+  // kullanıcının bir önceki kalıcı oturumu diskte kalır ve sekme
+  // kapandığında geri dönerdi.
+  oturumuTemizle(depo === localStorage ? sessionStorage : localStorage)
+
+  depo.setItem(TOKEN_KEY, token)
+  depo.setItem(EXPIRES_KEY, expiresAt)
+  depo.setItem(USER_KEY, username)
 
   // Yenileme anahtarı KOŞULLU yazılıyor: sunucu bir gün bu alanı
   // göndermezse, eldeki geçerli anahtarın üstüne undefined yazıp oturumu
   // sessizce öldürmeyelim.
   if (refreshToken) {
-    localStorage.setItem(REFRESH_KEY, refreshToken)
-    localStorage.setItem(REFRESH_EXPIRES_KEY, refreshTokenExpiresAt)
+    depo.setItem(REFRESH_KEY, refreshToken)
+    depo.setItem(REFRESH_EXPIRES_KEY, refreshTokenExpiresAt)
   }
 
-  hesabiKaydet({
-    username,
-    token,
-    expiresAt,
-    refreshToken: refreshToken ?? getRefreshToken(),
-    refreshExpiresAt: refreshTokenExpiresAt ?? localStorage.getItem(REFRESH_EXPIRES_KEY),
-  })
+  // ---- Hesap listesi (Ödev 11) ----
+  //
+  // Liste HER ZAMAN localStorage'da: "bu makinede şu hesaplar var" bilgisi
+  // cihaza aittir. Ama "beni hatırlama" denmişse ANAHTARLAR listeye
+  // YAZILMIYOR — yazsaydık, sekme kapandıktan sonra hesap değiştiriciden
+  // tek tıkla o oturuma dönülebilirdi ve "hatırlama" isteği anlamsızlaşırdı.
+  // O hesap listede kalıyor ama şifre soruluyor.
+  hesabiKaydet(depo === localStorage
+    ? {
+      username,
+      token,
+      expiresAt,
+      refreshToken: refreshToken ?? getRefreshToken(),
+      refreshExpiresAt: refreshTokenExpiresAt ?? depo.getItem(REFRESH_EXPIRES_KEY),
+    }
+    : { username })
 }
 
 // ---------------------------------------------------------------------------
@@ -164,19 +237,24 @@ export function hesabaGec(username) {
   const hesap = hesaplariOku().find((h) => h.username === username)
   if (!oturumGecerliMi(hesap)) return false
 
-  localStorage.setItem(TOKEN_KEY, hesap.token)
-  localStorage.setItem(EXPIRES_KEY, hesap.expiresAt)
-  localStorage.setItem(USER_KEY, hesap.username)
+  // Hesap değiştirme oturumun DEPOSUNU değiştirmiyor: kullanıcı "beni
+  // hatırla" tercihini giriş ekranında yaptı; başka bir hesaba geçmek o
+  // tercihi bozmamalı.
+  const depo = aktifDepo()
+
+  depo.setItem(TOKEN_KEY, hesap.token)
+  depo.setItem(EXPIRES_KEY, hesap.expiresAt)
+  depo.setItem(USER_KEY, hesap.username)
 
   if (hesap.refreshToken) {
-    localStorage.setItem(REFRESH_KEY, hesap.refreshToken)
-    localStorage.setItem(REFRESH_EXPIRES_KEY, hesap.refreshExpiresAt)
+    depo.setItem(REFRESH_KEY, hesap.refreshToken)
+    depo.setItem(REFRESH_EXPIRES_KEY, hesap.refreshExpiresAt)
   } else {
     // Devralınan hesabın yenileme anahtarı yoksa ÖNCEKİ hesabınki kalmasın:
     // yanlış sahibin anahtarıyla yenileme yapmak, sessizce başka birinin
     // oturumuna geçmek olurdu.
-    localStorage.removeItem(REFRESH_KEY)
-    localStorage.removeItem(REFRESH_EXPIRES_KEY)
+    depo.removeItem(REFRESH_KEY)
+    depo.removeItem(REFRESH_EXPIRES_KEY)
   }
 
   // Listeyi de tazele ki bu hesap başa geçsin.
@@ -196,15 +274,14 @@ export function hesabaGec(username) {
  * o oturumu gerçekten bırakmak demek.
  */
 export function aktifOturumuBirak() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(EXPIRES_KEY)
-  localStorage.removeItem(USER_KEY)
-
   // Yenileme anahtarı yalnızca AKTİF yuvadan siliniyor; hesap listesindeki
   // kopyası duruyor. Sunucuda da iptal EDİLMİYOR — bu "çıkış" değil,
   // "hesabı arka plana al". İptal etseydik geri dönerken şifre istenirdi.
-  localStorage.removeItem(REFRESH_KEY)
-  localStorage.removeItem(REFRESH_EXPIRES_KEY)
+  //
+  // İKİ DEPO DA temizleniyor: hangisinde olduğunu aramak yerine ikisini de
+  // silmek, yarım kalmış bir oturumun geride kalmasını imkânsız kılıyor.
+  oturumuTemizle(localStorage)
+  oturumuTemizle(sessionStorage)
 
   zamanlayicilariDurdur()
 }
@@ -215,25 +292,25 @@ export function hesabiUnut(username) {
 }
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY)
+  return aktifDepo().getItem(TOKEN_KEY)
 }
 
 export function getUsername() {
-  return localStorage.getItem(USER_KEY)
+  return aktifDepo().getItem(USER_KEY)
 }
 
 export function getExpiresAt() {
-  const raw = localStorage.getItem(EXPIRES_KEY)
+  const raw = aktifDepo().getItem(EXPIRES_KEY)
   return raw ? new Date(raw) : null
 }
 
 export function getRefreshToken() {
-  return localStorage.getItem(REFRESH_KEY)
+  return aktifDepo().getItem(REFRESH_KEY)
 }
 
 /** Oturumun MUTLAK bitiş anı: bundan sonrası yeniden giriş ister. */
 export function getRefreshExpiresAt() {
-  const raw = localStorage.getItem(REFRESH_EXPIRES_KEY)
+  const raw = aktifDepo().getItem(REFRESH_EXPIRES_KEY)
   return raw ? new Date(raw) : null
 }
 
@@ -310,11 +387,8 @@ export function clearSession() {
     })
   }
 
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(EXPIRES_KEY)
-  localStorage.removeItem(USER_KEY)
-  localStorage.removeItem(REFRESH_KEY)
-  localStorage.removeItem(REFRESH_EXPIRES_KEY)
+  oturumuTemizle(localStorage)
+  oturumuTemizle(sessionStorage)
 
   zamanlayicilariDurdur()
 }

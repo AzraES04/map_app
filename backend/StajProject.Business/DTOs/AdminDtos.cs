@@ -74,6 +74,17 @@ public class UserDto
     /// </summary>
     public bool IsApproved { get; set; }
 
+    /// <summary>
+    /// Kullanıcının iki adımlı doğrulaması açık mı?
+    ///
+    /// Yalnızca DURUM taşınıyor — gizli anahtar ASLA. Anahtarı bilen,
+    /// kullanıcının bütün gelecek kodlarını üretebilir; yöneticinin de onu
+    /// görmesi için hiçbir sebep yok. Yönetici yalnızca "açık mı?" bilgisine
+    /// ihtiyaç duyuyor: kilitlenen kullanıcıyı sıfırlayıp sıfırlamayacağına
+    /// karar verebilmek için.
+    /// </summary>
+    public bool IkiAdimliEtkin { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedDate { get; set; }
 

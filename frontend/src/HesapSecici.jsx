@@ -99,6 +99,19 @@ export default function HesapSecici() {
               </span>
             ))}
 
+            {/* Güvenlik ayarları hesap menüsünde: iki adımlı doğrulama
+                "bu hesabın" ayarı ve kullanıcı onu ararken önce hesabına
+                bakıyor. Üst çubukta ayrı bir düğme, zaten kalabalık olan
+                alanı büyütürdü. */}
+            <button
+              type="button"
+              role="menuitem"
+              className="hesap-ekle"
+              onClick={() => { setAcik(false); navigate('/guvenlik') }}
+            >
+              Güvenlik ayarları
+            </button>
+
             <button
               type="button"
               role="menuitem"

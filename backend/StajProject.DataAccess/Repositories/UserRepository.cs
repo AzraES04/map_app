@@ -112,6 +112,19 @@ public class UserRepository : IUserRepository
         return mevcut;
     }
 
+    public async Task TotpAyarlaAsync(int userId, string? secret, bool enabled)
+    {
+        var mevcut = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        if (mevcut is null)
+        {
+            return;
+        }
+
+        mevcut.TotpSecret = secret;
+        mevcut.TotpEnabled = enabled;
+        await _context.SaveChangesAsync();
+    }
+
     public Task SetRolesAsync(int userId, IReadOnlyCollection<int> roleIds)
         => AtamalariEsitleAsync(
             _context.UserRoles.Where(ur => ur.UserId == userId),

@@ -16,7 +16,6 @@ import { defaults as varsayilanKontroller } from 'ol/control/defaults'
 import ScaleLine from 'ol/control/ScaleLine'
 import MousePosition from 'ol/control/MousePosition'
 import { easeOut } from 'ol/easing'
-import { createEmpty, extend as extentGenislet, isEmpty as extentBosMu } from 'ol/extent'
 import { getDistance } from 'ol/sphere'
 import 'ol/ol.css'
 
@@ -30,6 +29,7 @@ import {
   GIRIS_ANIMASYON_ANAHTARI, girisAnimasyonuOynasinMi,
 } from '../auth'
 import { yerAra, yeriCoz } from '../geocode'
+import Dunya from '../Dunya'
 import {
   DRAW_TYPES, DRAW_TYPE_KEYS, geometryToWkt, wktToFeature, describeGeometry,
   RENK_SECENEKLERI, ANALIZ_RENGI,
@@ -1387,6 +1387,21 @@ export default function MapPage() {
    * @param {boolean} bayrakYaz Animasyon tamamlanınca "bu oturumda oynatıldı"
    *   bayrağını yaksın mı? Sadece otomatik açılışta true.
    */
+  /**
+   * Açılış sahnesi oynarken VERİ KATMANLARI gizleniyor.
+   *
+   * NEDEN? Sahnenin anlattığı şey "uzaydan dünyaya iniş". Gezegenin üstünde
+   * duran kayıt işaretleri, POI simgeleri ve hat çizgileri o anlatıyı bozuyor:
+   * uzaydan bakan biri onları görmez ve daha somut olarak, 42vmin'lik disk
+   * içinde üst üste binmiş yüzlerce simge gezegeni lekeli gösteriyordu.
+   *
+   * Katmanları AYRI bir yerden gizlemiyoruz — her katmanın görünürlüğünü zaten
+   * yöneten effect'lere bu koşulu EKLİYORUZ. Ayrı bir "gizle/geri getir" adımı
+   * yazsaydık, sahne bitince kullanıcının kendi kapattığı bir katmanı yanlışlıkla
+   * geri açardık; burada tek doğruluk kaynağı korunuyor.
+   */
+  const sahneGizliyor = uzaySahnesi !== null
+
   const sahneyiOynat = useCallback((bayrakYaz = false) => {
     const map = mapRef.current
     if (!map) return
@@ -1983,8 +1998,8 @@ export default function MapPage() {
   // sonradan eklendiği için "önce düğmeye basıldı, sonra katman geldi"
   // sırası da doğru çalışsın.
   useEffect(() => {
-    wmsKatmanRef.current?.setVisible(wmsAcik)
-  }, [wmsAcik, haritaHazir, geoDurum])
+    wmsKatmanRef.current?.setVisible(wmsAcik && !sahneGizliyor)
+  }, [wmsAcik, haritaHazir, geoDurum, sahneGizliyor])
 
   // ------------------------------------------------------------------------
   //  Ödev 13 / Madde 1: POI katmanı GeoServer'dan, KATEGORİ STİLLERİYLE
@@ -2029,8 +2044,8 @@ export default function MapPage() {
   // ayrı kapatılabilseydi "POI kapalı ama tıklanabiliyor" gibi tuhaf bir
   // durum çıkardı.
   useEffect(() => {
-    poiWmsKatmanRef.current?.setVisible(poiGorunur)
-  }, [poiGorunur, poiWmsAktif])
+    poiWmsKatmanRef.current?.setVisible(poiGorunur && !sahneGizliyor)
+  }, [poiGorunur, poiWmsAktif, sahneGizliyor])
 
   // Ödev 16: ulaşım katmanları TEK anahtarla açılıp kapanıyor.
   //
@@ -2044,10 +2059,10 @@ export default function MapPage() {
     map.getLayers().getArray().forEach((katman) => {
       const kaynak = typeof katman.getSource === 'function' ? katman.getSource() : null
       if (kaynak === durakKaynagiRef.current || kaynak === guzergahKaynagiRef.current) {
-        katman.setVisible(ulasimGorunur)
+        katman.setVisible(ulasimGorunur && !sahneGizliyor)
       }
     })
-  }, [ulasimGorunur, haritaHazir])
+  }, [ulasimGorunur, haritaHazir, sahneGizliyor])
 
   // Ödev 17: HAT BAZLI aç/kapat — "katman kontrolü gibi güzergahlar üzerinde
   // de aç/kapat yapılabilsin."
@@ -2126,14 +2141,14 @@ export default function MapPage() {
   }, [haritaHazir, geoDurum, goLogin])
 
   useEffect(() => {
-    isiKatmanRef.current?.setVisible(isiAcik)
+    isiKatmanRef.current?.setVisible(isiAcik && !sahneGizliyor)
     // Isı haritası kapanınca ölçüm de anlamsızlaşıyor: ekranda "0.42" yazan
     // bir kutu kalması, kapalı bir katmanın değerini okuyormuş gibi görünürdü.
     if (!isiAcik) {
       setSabitOlcum(null)
       setAnlikOlcum(null)
     }
-  }, [isiAcik, haritaHazir, geoDurum])
+  }, [isiAcik, haritaHazir, geoDurum, sahneGizliyor])
 
   // Sabitlenen ölçümün haritadaki işaretçisi (Ödev 11).
   //
@@ -2842,15 +2857,17 @@ export default function MapPage() {
   //  Katman görünürlüğü
   // ------------------------------------------------------------------------
   useEffect(() => {
-    DRAW_TYPE_KEYS.forEach((key) => layersRef.current[key]?.setVisible(visible[key]))
-  }, [visible])
+    DRAW_TYPE_KEYS.forEach(
+      (key) => layersRef.current[key]?.setVisible(visible[key] && !sahneGizliyor),
+    )
+  }, [visible, sahneGizliyor])
 
   // POI katmanı ayrı bir onay kutusuyla açılıp kapanıyor. haritaHazir
   // bağımlılıkta: katman effect sırasına göre state'ten SONRA oluşabiliyor,
   // o durumda da doğru görünürlükle başlasın.
   useEffect(() => {
-    poiKatmanRef.current?.setVisible(poiGorunur)
-  }, [poiGorunur, haritaHazir])
+    poiKatmanRef.current?.setVisible(poiGorunur && !sahneGizliyor)
+  }, [poiGorunur, haritaHazir, sahneGizliyor])
 
   // ------------------------------------------------------------------------
   //  Eylemler
@@ -3371,28 +3388,6 @@ export default function MapPage() {
     })
   }
 
-  /** Tüm kayıtları ekrana sığdır (hepsinin birleşik sınırlayıcı kutusuna fit). */
-  const tumunuGoster = () => {
-    const map = mapRef.current
-    if (!map) return
-
-    // createEmpty() sonsuzlarla dolu bir "boş extent" verir; her katmanınkiyle genişletiyoruz.
-    const kapsam = createEmpty()
-    DRAW_TYPE_KEYS.forEach((key) => {
-      const kaynak = sourcesRef.current[key]
-      if (kaynak && kaynak.getFeatures().length) extentGenislet(kapsam, kaynak.getExtent())
-    })
-
-    if (extentBosMu(kapsam)) return turkiyeyeDon()   // hiç kayıt yoksa Türkiye'ye dön
-
-    map.getView().fit(kapsam, {
-      padding: [90, 90, 90, 90],
-      maxZoom: 14,
-      duration: 600,
-      easing: easeOut,
-    })
-  }
-
   const handleLogout = () => {
     clearSession()
     navigate('/login', { replace: true })
@@ -3772,9 +3767,18 @@ export default function MapPage() {
               için tıklamalar haritaya geçer — böylece "atla" davranışı çalışır. */}
           {uzaySahnesi && (
             <div className={`uzay-sahnesi ${uzaySahnesi}`} aria-hidden="true">
-              {/* Uzay: tüm alanı kaplar, ortasındaki dairesel delikten harita görünür */}
+              {/* Uzay: tüm alanı kaplar, ortasındaki dairesel delikten aşağısı görünür */}
               <div className="uzay-katmani" />
-              {/* Küresel hacim: sol üstten ışık, sağ altta gölge + atmosfer halkası */}
+
+              {/* GEZEGEN YÜZEYİ (mavi-yeşil dünya).
+                  Deliğin içini dolduruyor; iniş başlayınca soluyor ve altındaki
+                  gerçek harita ortaya çıkıyor. Gerekçe: Dunya.jsx başlığı. */}
+              <Dunya solgun={uzaySahnesi === 'inis'} />
+
+              {/* Küresel hacim: sol üstten ışık, sağ altta gölge + atmosfer
+                  halkası. Gezegenin ÜSTÜNDE duruyor ki ışık hem okyanusa hem
+                  karaya birlikte düşsün — altında kalsaydı düz bir çıkartma
+                  gibi görünürdü. */}
               <div className="kure-isik" />
             </div>
           )}
@@ -3786,15 +3790,6 @@ export default function MapPage() {
                 <path d="M10 2.5 2.5 9h2v8h4v-5h3v5h4V9h2L10 2.5Z" />
               </svg>
               <span>Türkiye</span>
-            </button>
-
-            <button type="button" className="harita-btn" onClick={tumunuGoster}
-                    title="Tüm kayıtları ekrana sığdır">
-              <svg viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4" fill="none"
-                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              <span>Tümü</span>
             </button>
 
             {/* Açılış sahnesini istediğin zaman tekrar oynat */}

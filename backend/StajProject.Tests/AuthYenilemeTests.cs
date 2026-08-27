@@ -7,6 +7,7 @@ using StajProject.Business.Services;
 using StajProject.DataAccess.Context;
 using StajProject.DataAccess.Repositories;
 using StajProject.Entities;
+using StajProject.Tests.Fakes;
 using Xunit;
 
 namespace StajProject.Tests;
@@ -33,6 +34,7 @@ public class AuthYenilemeTests
         => new(
             new UserRepository(db),
             new RefreshTokenRepository(db),
+            new FakeCurrentUserService(),
             Options.Create(new JwtSettings
             {
                 Key = "StajProject-Test-Imza-Anahtari-En-Az-32-Karakter!",

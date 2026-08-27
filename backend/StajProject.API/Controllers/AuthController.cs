@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using StajProject.Business.DTOs;
 using StajProject.Business.Services;
@@ -154,5 +155,127 @@ public class AuthController : ControllerBase
         }
 
         return NoContent();
+    }
+
+    // ==================================================================
+    //  İKİ ADIMLI DOĞRULAMA (TOTP)
+    // ==================================================================
+
+    /// <summary>
+    /// Girişin İKİNCİ adımı: ara token + 6 haneli kod → gerçek oturum.
+    ///
+    /// GİRİŞ UCUYLA AYNI HIZ SINIRINDA (5/dk) — ve bu şart. Kod yalnızca
+    /// 6 haneli, yani 1.000.000 olasılık; sınırsız deneme hakkı olsaydı
+    /// saldırgan ara token'ın 5 dakikalık ömrü içinde binlerce kod
+    /// deneyebilirdi. Sınırla birlikte pencere başına en fazla ~25 deneme
+    /// düşüyor.
+    ///
+    /// [Authorize] YOK: kullanıcı henüz giriş yapmış değil, elindeki tek şey
+    /// ara token. Kanıt olarak o kabul ediliyor.
+    /// </summary>
+    [HttpPost("login/2fa")]
+    [EnableRateLimiting("giris")]
+    public async Task<ActionResult<LoginResponseDto>> IkinciAdim([FromBody] IkinciAdimGirisDto request)
+    {
+        try
+        {
+            var response = await _authService.IkinciAdimGirisAsync(request);
+            if (response is null)
+            {
+                // Ara token geçersiz, süresi dolmuş, kod yanlış, hesap
+                // kapatılmış… hepsine AYNI cevap. Ayırt etseydik saldırgana
+                // hangi kısmın tuttuğunu söylerdik.
+                return Unauthorized(new { message = "Doğrulama kodu geçersiz veya süresi dolmuş." });
+            }
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "İkinci adım doğrulamasında beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "Doğrulama yapılamadı. Lütfen tekrar deneyin." });
+        }
+    }
+
+    /// <summary>
+    /// Kurulumu başlatır — gizli anahtarı ve QR adresini döner.
+    ///
+    /// [Authorize] VAR: kendi hesabının korumasını ancak giriş yapmış
+    /// kullanıcı kurabilir. Yetki özniteliği YOK — bu bir yönetim işlemi
+    /// değil, herkesin kendi hesabı için yapabileceği bir ayar.
+    /// </summary>
+    [HttpPost("2fa/baslat")]
+    [Authorize]
+    public Task<ActionResult<TotpKurulumDto>> TotpBaslat()
+        => Calistir(() => _authService.TotpBaslatAsync());
+
+    /// <summary>Kurulumu tamamlar: kod doğruysa koruma açılır.</summary>
+    [HttpPost("2fa/dogrula")]
+    [Authorize]
+    [EnableRateLimiting("giris")]
+    public Task<IActionResult> TotpDogrula([FromBody] TotpDogrulaDto request)
+        => CalistirBossa(() => _authService.TotpDogrulaVeAcAsync(request));
+
+    /// <summary>Korumayı kapatır (şifre ister).</summary>
+    [HttpPost("2fa/kapat")]
+    [Authorize]
+    [EnableRateLimiting("giris")]
+    public Task<IActionResult> TotpKapat([FromBody] TotpKapatDto request)
+        => CalistirBossa(() => _authService.TotpKapatAsync(request));
+
+    /// <summary>Giriş yapmış kullanıcının iki adımlı doğrulama durumu.</summary>
+    [HttpGet("2fa/durum")]
+    [Authorize]
+    public Task<ActionResult<TotpDurumDto>> TotpDurum()
+        => Calistir(() => _authService.TotpDurumAsync());
+
+    // ---------------------------------------------------------------- ortak
+
+    /// <summary>
+    /// Değer DÖNEN uçlar için ortak hata kalıbı.
+    ///
+    /// Ayrı bir yardımcı yazıldı çünkü dört uç da aynı üç şeyi yapıyor:
+    /// iş kuralı hatasını 400'e, beklenmeyeni 500'e çevir, gerisini Ok ile
+    /// döndür. Dört kez kopyalasaydık biri güncellenip diğerleri unutulurdu.
+    /// </summary>
+    private async Task<ActionResult<T>> Calistir<T>(Func<Task<T>> is_)
+    {
+        try
+        {
+            return Ok(await is_());
+        }
+        catch (IsKuraliException ex)
+        {
+            _logger.LogWarning(ex, "İki adımlı doğrulama isteği reddedildi");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "İki adımlı doğrulamada beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "İşlem tamamlanamadı. Lütfen tekrar deneyin." });
+        }
+    }
+
+    /// <summary>Değer DÖNMEYEN uçlar için aynı kalıp (204).</summary>
+    private async Task<IActionResult> CalistirBossa(Func<Task> is_)
+    {
+        try
+        {
+            await is_();
+            return NoContent();
+        }
+        catch (IsKuraliException ex)
+        {
+            _logger.LogWarning(ex, "İki adımlı doğrulama isteği reddedildi");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "İki adımlı doğrulamada beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "İşlem tamamlanamadı. Lütfen tekrar deneyin." });
+        }
     }
 }

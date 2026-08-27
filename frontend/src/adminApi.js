@@ -171,6 +171,19 @@ export function ilSinirlariGetir(onUnauthorized) {
   return sinirSozu
 }
 
+/**
+ * Bir kullanıcının iki adımlı doğrulamasını SIFIRLAR — kilitlenme kurtarması.
+ *
+ * TOTP'de gizli anahtar yalnızca kullanıcının telefonunda ve sunucuda duruyor.
+ * Telefon kaybolursa kullanıcı KALICI olarak kilitlenir: şifresini bilse bile
+ * ikinci adımı geçemez ve korumayı kapatmak da giriş yapmayı gerektirir.
+ *
+ * "Kullanıcı Yönetimi" yetkisi ister.
+ */
+export function ikiAdimliSifirla(id, onUnauthorized) {
+  return istek(`/api/admin/users/${id}/2fa/sifirla`, { method: 'POST' }, onUnauthorized)
+}
+
 /** Kullanıcıyı onaylar (Ödev 10 — kayıt olma). */
 export function kullaniciOnayla(id, onUnauthorized) {
   return istek(`/api/admin/users/${id}/approve`, { method: 'POST' }, onUnauthorized)
@@ -184,3 +197,31 @@ export function kullaniciOnayla(id, onUnauthorized) {
 export function secilebilirAlanlariGetir(onUnauthorized) {
   return istek('/api/admin/geo-permissions/poligonlar', {}, onUnauthorized)
 }
+
+// ---------------------------------------------------------------------------
+//  İki adımlı doğrulama (TOTP) — KENDİ hesabının ayarı
+//
+//  Bu dosyada duruyorlar ama "admin" işlemleri DEĞİL: her kullanıcı kendi
+//  hesabı için çağırıyor, yetki gerekmiyor. Ayrı bir dosya açmak beş satır
+//  için yeni bir modül olurdu; ortak yardımcılar (istek, jsonGovde) zaten
+//  burada.
+// ---------------------------------------------------------------------------
+
+/** Giriş yapmış kullanıcının iki adımlı doğrulama durumu. */
+export const ikiAdimliDurum = (onUnauthorized) =>
+  istek('/api/auth/2fa/durum', {}, onUnauthorized)
+
+/**
+ * Kurulumu BAŞLATIR — gizli anahtarı ve otpauth adresini döner.
+ * Koruma henüz AÇILMAZ; açmak için kod doğrulanmalı.
+ */
+export const ikiAdimliBaslat = (onUnauthorized) =>
+  istek('/api/auth/2fa/baslat', { method: 'POST' }, onUnauthorized)
+
+/** Kurulumu tamamlar: kod doğruysa koruma açılır. */
+export const ikiAdimliDogrula = (kod, onUnauthorized) =>
+  istek('/api/auth/2fa/dogrula', jsonGovde('POST', { kod }), onUnauthorized)
+
+/** Korumayı kapatır. ŞİFRE ister — kod değil (bkz. TotpKapatDto). */
+export const ikiAdimliKapat = (sifre, onUnauthorized) =>
+  istek('/api/auth/2fa/kapat', jsonGovde('POST', { sifre }), onUnauthorized)

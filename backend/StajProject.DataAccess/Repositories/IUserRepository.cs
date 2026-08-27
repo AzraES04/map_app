@@ -46,4 +46,18 @@ public interface IUserRepository
     /// Rolden gelen yetkiler buraya YAZILMAZ; onlar role_permissions'ta durur.
     /// </summary>
     Task SetPermissionsAsync(int userId, IReadOnlyCollection<int> permissionIds);
+
+    /// <summary>
+    /// İki adımlı doğrulama alanlarını yazar.
+    ///
+    /// NEDEN <see cref="UpdateAsync"/> KULLANILMIYOR? O metot bilinçli olarak
+    /// bir ALAN BEYAZ-LİSTESİ: yönetim panelinin kullanıcı düzenlemesi
+    /// yalnızca ad, şifre, aktiflik ve onayı yazsın diye. TOTP alanlarını
+    /// oraya eklemek tehlikeli olurdu: panel bir kullanıcıyı kaydettiğinde
+    /// gövdesinde TotpSecret taşımadığı için o kullanıcının iki adımlı
+    /// doğrulamasını SESSİZCE SİLERDİ.
+    ///
+    /// Ayrı metot, bu iki işlemin birbirine karışmasını imkânsız kılıyor.
+    /// </summary>
+    Task TotpAyarlaAsync(int userId, string? secret, bool enabled);
 }

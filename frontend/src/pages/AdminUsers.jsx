@@ -10,6 +10,7 @@ import {
   rolleriListele,
   kendiYetkilerim,
   kullaniciOnayla,
+  ikiAdimliSifirla,
 } from '../adminApi'
 import { EkleIkonu, KilitIkonu, SilIkonu, YetkiIkonu, HaritaIkonu } from '../icons'
 import { YETKILER } from '../yetkiler'
@@ -193,6 +194,31 @@ export default function AdminUsers() {
       setBilgi(`"${kullanici.username}" onaylandı. Şimdi rol atayabilirsiniz.`)
       await yukle()
       duzenle(guncel)
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') setHata(err.message)
+    }
+  }
+
+  /**
+   * İki adımlı doğrulamayı sıfırlar — telefonunu kaybeden kullanıcının tek
+   * kurtuluş yolu.
+   *
+   * ONAY SORULUYOR: işlem, o hesabın güvenlik korumasını KALDIRIYOR ve
+   * geri alınamıyor (anahtar siliniyor). Yanlış satıra tıklamanın bedeli
+   * başkasının korumasını düşürmek olurdu.
+   */
+  const ikiAdimliyiSifirla = async (kullanici) => {
+    if (!window.confirm(
+      `"${kullanici.username}" hesabının iki adımlı doğrulaması kapatılacak.\n\n`
+      + 'Kullanıcı bundan sonra yalnızca şifresiyle girer ve isterse '
+      + 'korumayı yeniden kurar.\n\nDevam edilsin mi?',
+    )) return
+
+    setHata(null)
+    try {
+      await ikiAdimliSifirla(kullanici.id, oturumBitti)
+      setBilgi(`"${kullanici.username}" hesabının iki adımlı doğrulaması sıfırlandı.`)
+      await yukle()
     } catch (err) {
       if (err.message !== 'Oturum süresi doldu') setHata(err.message)
     }
@@ -401,6 +427,15 @@ export default function AdminUsers() {
                     ) : (
                       <span className="onay-rozeti">Onay bekliyor</span>
                     )}
+
+                    {/* İki adımlı doğrulama rozeti. Yalnızca AÇIK olanlarda
+                        gösteriliyor: kapalı olan çoğunluk için her satıra
+                        "2FA kapalı" yazmak listeyi gürültüye boğardı. */}
+                    {kullanici.ikiAdimliEtkin && (
+                      <span className="admin-rozet olumlu" title="İki adımlı doğrulama açık">
+                        2FA
+                      </span>
+                    )}
                   </td>
                   <td className="sag">
                     {/* Onay düğmesi yalnızca gerekliyken görünüyor — onaylı
@@ -414,6 +449,19 @@ export default function AdminUsers() {
                         title="Bu hesabın girişine izin ver"
                       >
                         Onayla
+                      </button>
+                    )}
+                    {/* Sıfırlama düğmesi yalnızca 2FA AÇIK olan satırlarda:
+                        kapalı bir hesapta sıfırlanacak bir şey yok ve sunucu
+                        zaten reddediyor. */}
+                    {kullanici.ikiAdimliEtkin && (
+                      <button
+                        type="button"
+                        className="btn-ghost"
+                        onClick={() => ikiAdimliyiSifirla(kullanici)}
+                        title="Telefonunu kaybeden kullanıcı için iki adımlı doğrulamayı kapat"
+                      >
+                        2FA sıfırla
                       </button>
                     )}
                     <button type="button" className="btn-ghost" onClick={() => yetkileriAc(kullanici)}>

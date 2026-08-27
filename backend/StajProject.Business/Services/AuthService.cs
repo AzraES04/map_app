@@ -20,13 +20,22 @@ public class AuthService :IAuthService       // BOŞLUK 1
     private readonly JwtSettings _jwtSettings;
     private readonly PasswordHasher<User> _passwordHasher = new();
 
+    /// <summary>
+    /// Giriş yapmış kullanıcı — iki adımlı doğrulama AYARLARI için gerekli
+    /// (kurulum, açma, kapatma). Giriş akışının kendisi bunu kullanmıyor:
+    /// orada henüz kimse giriş yapmış değil.
+    /// </summary>
+    private readonly ICurrentUserService _currentUser;
+
     public AuthService(
         IUserRepository userRepository,
         IRefreshTokenRepository refreshTokenRepository,
+        ICurrentUserService currentUser,
         IOptions<JwtSettings> jwtOptions)
     {
         _userRepository = userRepository;              // BOŞLUK 3
         _refreshTokenRepository = refreshTokenRepository;
+        _currentUser = currentUser;
         _jwtSettings = jwtOptions.Value;      // BOŞLUK 4
     }
 
@@ -71,6 +80,22 @@ public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
         {
             throw new IsKuraliException(
                 "Hesabınız henüz yönetici onayından geçmedi. Onaylandığında giriş yapabilirsiniz.");
+        }
+
+        // 4.6) İKİ ADIMLI DOĞRULAMA — şifre doğru ama henüz yetmez.
+        //
+        // Buradan itibaren kullanıcının kim olduğunu biliyoruz ama oturum
+        // AÇILMIYOR: yalnızca ikinci adımı taşıyacak kısa ömürlü bir ara
+        // token veriliyor. "Yarım oturum" diye bir şey yok — Token ve
+        // RefreshToken boş kalıyor.
+        if (user.TotpEnabled)
+        {
+            return new LoginResponseDto
+            {
+                Username = user.Username,
+                IkinciAdimGerekli = true,
+                AraToken = AraTokenUret(user),
+            };
         }
 
         // 5) Erişim token'ı + yenileme anahtarı üret (Eksik 5)
@@ -335,5 +360,215 @@ public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
     {
         var ozet = SHA256.HashData(Encoding.UTF8.GetBytes(anahtar));
         return Convert.ToHexString(ozet).ToLowerInvariant();
+    }
+
+    // ======================================================================
+    //  İKİ ADIMLI DOĞRULAMA (TOTP)
+    // ======================================================================
+
+    /// <summary>
+    /// İkinci adımı tamamlar: ara token + kod → gerçek oturum.
+    /// </summary>
+    /// <returns>Ara token ya da kod geçersizse <c>null</c>.</returns>
+    public async Task<LoginResponseDto?> IkinciAdimGirisAsync(IkinciAdimGirisDto request)
+    {
+        var kullaniciId = AraTokendanKullaniciId(request.AraToken);
+        if (kullaniciId is null)
+        {
+            return null;
+        }
+
+        var user = await _userRepository.GetByIdAsync(kullaniciId.Value);
+
+        // Hesap durumu BURADA DA sorgulanıyor.
+        //
+        // Birinci adım ile ikinci adım arasında beş dakika var ve o aralıkta
+        // yönetici hesabı pasife almış olabilir. Sormasaydık, kapatılmış bir
+        // hesap ara token'ı elinde tuttuğu için içeri girerdi.
+        if (user is null || user.IsDeleted || !user.IsActive || !user.IsApproved)
+        {
+            return null;
+        }
+
+        // TOTP kapatılmışsa ara token anlamını yitirir: ikinci adım diye bir
+        // şey kalmadı, kullanıcı baştan giriş yapmalı.
+        if (!user.TotpEnabled || !Totp.Dogrula(user.TotpSecret, request.Kod))
+        {
+            return null;
+        }
+
+        return await OturumUretAsync(user);
+    }
+
+    /// <summary>
+    /// Kurulumu başlatır: yeni bir gizli anahtar üretip kullanıcıya kaydeder
+    /// ama HENÜZ AÇMAZ.
+    ///
+    /// Açmamanın sebebi <see cref="User.TotpEnabled"/> açıklamasında: kullanıcı
+    /// kod üretebildiğini kanıtlamadan koruma devreye girerse, QR'ı okutmayı
+    /// yarıda bırakan kişi bir daha hiç giriş yapamaz.
+    ///
+    /// ZATEN AÇIKSA reddediliyor. Açıkken yeni anahtar üretmek, telefondaki
+    /// kaydı sessizce geçersiz kılardı; kapatıp yeniden kurmak bilinçli bir
+    /// adım olmalı.
+    /// </summary>
+    public async Task<TotpKurulumDto> TotpBaslatAsync()
+    {
+        var user = await MevcutKullaniciAsync();
+
+        if (user.TotpEnabled)
+        {
+            throw new IsKuraliException(
+                "İki adımlı doğrulama zaten açık. Yeniden kurmak için önce kapatın.");
+        }
+
+        var anahtar = Totp.AnahtarUret();
+
+        await _userRepository.TotpAyarlaAsync(user.Id, anahtar, enabled: false);
+
+        return new TotpKurulumDto
+        {
+            Anahtar = Totp.OkunurAnahtar(anahtar),
+            KurulumAdresi = Totp.KurulumAdresi(user.Username, anahtar, TotpYayinci),
+        };
+    }
+
+    /// <summary>
+    /// Kurulumu tamamlar: kod doğruysa korumayı açar.
+    /// </summary>
+    public async Task TotpDogrulaVeAcAsync(TotpDogrulaDto request)
+    {
+        var user = await MevcutKullaniciAsync();
+
+        if (user.TotpEnabled)
+        {
+            throw new IsKuraliException("İki adımlı doğrulama zaten açık.");
+        }
+
+        if (string.IsNullOrEmpty(user.TotpSecret))
+        {
+            throw new IsKuraliException(
+                "Önce kurulumu başlatmalısınız.");
+        }
+
+        if (!Totp.Dogrula(user.TotpSecret, request.Kod))
+        {
+            throw new IsKuraliException(
+                "Kod doğrulanamadı. Telefonunuzdaki saatin doğru olduğundan emin olun.");
+        }
+
+        await _userRepository.TotpAyarlaAsync(user.Id, user.TotpSecret, enabled: true);
+    }
+
+    /// <summary>
+    /// İki adımlı doğrulamayı kapatır. ŞİFRE ister (kod değil).
+    ///
+    /// Gerekçe <see cref="TotpKapatDto"/>'da: kapatma, güvenliği azaltan ve
+    /// tam da saldırganın yapmak isteyeceği işlem. Açık kalmış bir oturumu
+    /// ele geçiren biri, şifreyi bilmeden korumayı kaldıramamalı.
+    ///
+    /// Anahtar da SİLİNİYOR: kalsaydı, korumayı yeniden açan kullanıcı eski
+    /// (belki de sızmış) anahtarla devam ederdi.
+    /// </summary>
+    public async Task TotpKapatAsync(TotpKapatDto request)
+    {
+        var user = await MevcutKullaniciAsync();
+
+        if (_passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Sifre)
+            == PasswordVerificationResult.Failed)
+        {
+            throw new IsKuraliException("Şifre hatalı.");
+        }
+
+        await _userRepository.TotpAyarlaAsync(user.Id, secret: null, enabled: false);
+    }
+
+    /// <summary>Giriş yapmış kullanıcının iki adımlı doğrulama durumu.</summary>
+    public async Task<TotpDurumDto> TotpDurumAsync()
+        => new() { Etkin = (await MevcutKullaniciAsync()).TotpEnabled };
+
+    // ---------------------------------------------------------------- iç işler
+
+    /// <summary>
+    /// Authenticator uygulamasında görünecek ad. Kullanıcının telefonunda
+    /// birden çok hesap olabilir; hangisinin hangi uygulamaya ait olduğu
+    /// buradan anlaşılıyor.
+    /// </summary>
+    private const string TotpYayinci = "StajProject";
+
+    private async Task<User> MevcutKullaniciAsync()
+        => await _userRepository.GetByIdAsync(_currentUser.RequireUserId())
+           ?? throw new IsKuraliException("Kullanıcı bulunamadı.");
+
+    /// <summary>
+    /// İkinci adımı bekleyen giriş için kısa ömürlü ara token üretir.
+    ///
+    /// Normal erişim token'ıyla AYNI anahtarla imzalanıyor ama AUDIENCE
+    /// FARKLI — ve bu ayrım korumanın tamamını taşıyor: audience aynı olsaydı
+    /// istemci bu token'ı doğrudan Authorization başlığına koyup ikinci adımı
+    /// atlayabilirdi.
+    /// </summary>
+    private string AraTokenUret(User user)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key));
+
+        var token = new JwtSecurityToken(
+            issuer: _jwtSettings.Issuer,
+            audience: _jwtSettings.IkinciAdimAudience,      // ← kritik satır
+            claims: new[]
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            },
+            expires: DateTime.UtcNow.AddMinutes(_jwtSettings.IkinciAdimDakika),
+            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>
+    /// Ara token'ı doğrulayıp içindeki kullanıcı id'sini çıkarır.
+    /// Geçersiz, süresi dolmuş ya da YANLIŞ AUDIENCE'lı token için null.
+    ///
+    /// Audience kontrolü burada da açık: normal bir erişim token'ıyla ikinci
+    /// adımı geçmeye çalışmak da reddedilmeli. Tek yönlü bir duvar değil,
+    /// iki token türü birbirinin yerine ASLA geçmiyor.
+    /// </summary>
+    private int? AraTokendanKullaniciId(string? araToken)
+    {
+        if (string.IsNullOrWhiteSpace(araToken))
+        {
+            return null;
+        }
+
+        try
+        {
+            var sonuc = new JwtSecurityTokenHandler().ValidateToken(
+                araToken,
+                new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = _jwtSettings.Issuer,
+                    ValidAudience = _jwtSettings.IkinciAdimAudience,
+                    IssuerSigningKey = new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(_jwtSettings.Key)),
+                    ClockSkew = TimeSpan.Zero,
+                },
+                out _);
+
+            var ham = sonuc.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                   ?? sonuc.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            return int.TryParse(ham, out var id) ? id : null;
+        }
+        catch
+        {
+            // Bozuk imza, süresi dolmuş, yanlış audience… hepsi aynı sonuç.
+            // Ayırt etmek saldırgana hangi kısmın tuttuğunu söylemek olurdu.
+            return null;
+        }
     }
 }

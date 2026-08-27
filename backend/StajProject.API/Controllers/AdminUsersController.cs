@@ -87,6 +87,32 @@ public class AdminUsersController : YonetimControllerBase
         });
 
     /// <summary>
+    /// Kullanıcının iki adımlı doğrulamasını SIFIRLAR — kilitlenme kurtarması.
+    ///
+    /// TOTP'de gizli anahtar yalnızca kullanıcının telefonunda ve sunucuda
+    /// duruyor. Telefon kaybolur ya da uygulama silinirse kullanıcı KALICI
+    /// olarak kilitlenir: şifresini bilse bile ikinci adımı geçemez, korumayı
+    /// kapatmak da giriş yapmayı gerektirir.
+    ///
+    /// Kurtarma kodları da bir seçenekti; yönetici sıfırlaması seçildi çünkü
+    /// bu sistemde zaten hesapları onaylayan, rolleri veren bir yönetici var
+    /// ve kullanıcının kimliğini doğrulayacak insan da o. Kurtarma kodları
+    /// kullanıcının onları güvenli bir yere kaydetmiş olmasına bel bağlar —
+    /// pratikte çoğu kişi kaydetmez.
+    ///
+    /// AYRI BİR UÇ, güncelleme ucunun parçası değil: onay ucundaki gerekçenin
+    /// aynısı — yönetici adı düzeltirken farkında olmadan birinin korumasını
+    /// kaldırmamalı.
+    /// </summary>
+    [HttpPost("{id:int}/2fa/sifirla")]
+    public Task<ActionResult<UserDto>> IkiAdimliSifirla(int id)
+        => Calistir<UserDto>(async () =>
+        {
+            var guncel = await _service.IkiAdimliSifirlaAsync(id);
+            return guncel is null ? Bulunamadi(id) : Ok(guncel);
+        });
+
+    /// <summary>
     /// Kullanıcının YETKİ MATRİSİ: sistemdeki tüm yetkiler ve her birinin kaynağı
     /// (rolden mi geliyor, doğrudan mı verilmiş). Arayüz rolden gelenleri
     /// işaretli ve kilitli gösterir.

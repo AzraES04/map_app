@@ -313,3 +313,125 @@ describe('kalan süre metni', () => {
     expect(kalanOturumMetni()).toBe('0:00')
   })
 })
+
+// ============================================================================
+//  "Beni hatırla" — oturum hangi depoda?
+//
+//  Bu ayrım gözle doğrulanamaz: iki durumda da uygulama aynı görünür. Fark
+//  ancak SEKME KAPANDIKTAN sonra ortaya çıkar — yani elle denemek için
+//  tarayıcıyı kapatıp açmak gerekir. Testin yakaladığı şey tam olarak bu.
+// ============================================================================
+
+describe('beni hatırla', () => {
+  const OTURUM = {
+    token: 'erisim-1',
+    expiresAt: an(10 * DAKIKA),
+    username: 'azra',
+    refreshToken: 'yenileme-1',
+    refreshTokenExpiresAt: an(7 * 24 * 60 * DAKIKA),
+  }
+
+  beforeEach(() => sessionStorage.clear())
+
+  it('işaretliyken localStorage kullanıyor (tarayıcı kapansa da sürer)', () => {
+    saveSession(OTURUM, true)
+
+    expect(localStorage.getItem('staj_refresh_token')).toBe('yenileme-1')
+    expect(sessionStorage.getItem('staj_refresh_token')).toBeNull()
+  })
+
+  it('işaretsizken sessionStorage kullanıyor (sekme kapanınca biter)', () => {
+    saveSession(OTURUM, false)
+
+    // ASIL İDDİA: anahtar DİSKE yazılmıyor. Yalnızca süreyi kısaltsaydık
+    // anahtar localStorage'da kalır ve tarayıcı kapansa bile orada dururdu —
+    // "beni hatırlama" isteği karşılanmamış olurdu.
+    expect(sessionStorage.getItem('staj_refresh_token')).toBe('yenileme-1')
+    expect(localStorage.getItem('staj_refresh_token')).toBeNull()
+  })
+
+  it('her iki durumda da oturum AÇIK görünüyor', () => {
+    saveSession(OTURUM, false)
+    expect(isAuthenticated()).toBe(true)
+    expect(getRefreshToken()).toBe('yenileme-1')
+
+    clearSession()
+    saveSession(OTURUM, true)
+    expect(isAuthenticated()).toBe(true)
+    expect(getRefreshToken()).toBe('yenileme-1')
+  })
+
+  it('kalıcıdan geçiciye geçince ESKİ oturum diskte KALMIYOR', () => {
+    saveSession(OTURUM, true)                      // önce "hatırla"
+    saveSession({ ...OTURUM, token: 'erisim-2' }, false)   // sonra "hatırlama"
+
+    // Temizlemeseydik sekme kapandığında sessionStorage silinir, localStorage'daki
+    // ESKİ oturum yeniden devreye girer ve kullanıcı kapattığını sandığı
+    // oturuma geri düşerdi.
+    expect(localStorage.getItem('staj_token')).toBeNull()
+    expect(sessionStorage.getItem('staj_token')).toBe('erisim-2')
+  })
+
+  it('geçiciden kalıcıya geçince sekme deposu temizleniyor', () => {
+    saveSession(OTURUM, false)
+    saveSession({ ...OTURUM, token: 'erisim-2' }, true)
+
+    expect(sessionStorage.getItem('staj_token')).toBeNull()
+    expect(localStorage.getItem('staj_token')).toBe('erisim-2')
+  })
+
+  it('SESSİZ YENİLEME kullanıcının tercihini BOZMUYOR', async () => {
+    saveSession(OTURUM, false)   // "beni hatırlama"
+
+    fetchKur([{
+      yol: '/api/auth/refresh',
+      cevap: () => yanit(200, {
+        token: 'erisim-2',
+        expiresAt: an(10 * DAKIKA),
+        username: 'azra',
+        refreshToken: 'yenileme-2',
+        refreshTokenExpiresAt: an(7 * 24 * 60 * DAKIKA),
+      }),
+    }])
+
+    await oturumuYenile()
+
+    // Yenileme saveSession'ı ikinci parametre OLMADAN çağırıyor; mevcut depo
+    // korunmalı. Korunmasaydı 10 dakika sonra oturum sessizce diske taşınır
+    // ve "sekmeyi kapatınca bitsin" isteği çiğnenirdi.
+    expect(sessionStorage.getItem('staj_refresh_token')).toBe('yenileme-2')
+    expect(localStorage.getItem('staj_refresh_token')).toBeNull()
+  })
+
+  it('çıkış İKİ depoyu da temizliyor', () => {
+    saveSession(OTURUM, true)
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(yanit(204, null))))
+
+    clearSession()
+
+    expect(localStorage.getItem('staj_token')).toBeNull()
+    expect(sessionStorage.getItem('staj_token')).toBeNull()
+    expect(isAuthenticated()).toBe(false)
+  })
+
+  it('"hatırlama" modunda hesap listesine ANAHTAR yazılmıyor', () => {
+    saveSession(OTURUM, false)
+
+    // Hesap listesi cihaza ait ve localStorage'da. Ama anahtarı oraya
+    // yazsaydık, sekme kapandıktan sonra hesap değiştiriciden tek tıkla o
+    // oturuma dönülebilirdi — "hatırlama" isteği arka kapıdan delinirdi.
+    const liste = JSON.parse(localStorage.getItem('staj_hesaplar') ?? '[]')
+    const kayit = liste.find((h) => h.username === 'azra')
+
+    expect(kayit).toBeDefined()
+    expect(kayit.refreshToken).toBeUndefined()
+    expect(kayit.token).toBeUndefined()
+  })
+
+  it('"hatırla" modunda hesap listesine anahtar YAZILIYOR', () => {
+    saveSession(OTURUM, true)
+
+    const liste = JSON.parse(localStorage.getItem('staj_hesaplar') ?? '[]')
+    expect(liste.find((h) => h.username === 'azra').refreshToken).toBe('yenileme-1')
+  })
+})

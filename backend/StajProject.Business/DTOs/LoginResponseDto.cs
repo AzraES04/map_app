@@ -32,4 +32,26 @@ public class LoginResponseDto
     /// için kullanıcı ancak bu an geldiğinde giriş ekranına döner.
     /// </summary>
     public DateTime RefreshTokenExpiresAt { get; set; }
+
+    // ---------- İki adımlı doğrulama ----------
+
+    /// <summary>
+    /// Şifre doğru ama HİZMET HENÜZ VERİLMEDİ: kullanıcının iki adımlı
+    /// doğrulaması açık, altı haneli kod bekleniyor.
+    ///
+    /// Bu true iken <see cref="Token"/> ve <see cref="RefreshToken"/> BOŞ
+    /// gelir — yarım bir oturum diye bir şey yok. İstemcinin tek yapacağı
+    /// <see cref="AraToken"/> ile ikinci adıma gitmek.
+    /// </summary>
+    public bool IkinciAdimGerekli { get; set; }
+
+    /// <summary>
+    /// İkinci adım için kısa ömürlü ara token (yalnızca
+    /// <see cref="IkinciAdimGerekli"/> true iken dolu).
+    ///
+    /// Normal erişim token'ı YERİNE GEÇEMEZ: farklı bir audience ile
+    /// imzalanıyor ve API'nin token doğrulaması onu reddediyor
+    /// (bkz. JwtSettings.IkinciAdimAudience).
+    /// </summary>
+    public string? AraToken { get; set; }
 }

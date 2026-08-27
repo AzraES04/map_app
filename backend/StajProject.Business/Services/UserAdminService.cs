@@ -128,6 +128,30 @@ public class UserAdminService : IUserAdminService
     /// ve bilinçli bir adımı — onayla birlikte otomatik rol verseydik, hangi
     /// rolün verildiği görünmez bir varsayım olurdu.
     /// </summary>
+    public async Task<UserDto?> IkiAdimliSifirlaAsync(int id)
+    {
+        var kullanici = await _userRepository.GetByIdAsync(id);
+        if (kullanici is null)
+        {
+            return null;
+        }
+
+        if (!kullanici.TotpEnabled)
+        {
+            throw new IsKuraliException(
+                $"\"{kullanici.Username}\" hesabında iki adımlı doğrulama zaten kapalı.");
+        }
+
+        // Anahtar da siliniyor: kalsaydı, kullanıcı korumayı yeniden açtığında
+        // eski (belki de telefonla birlikte başkasının eline geçmiş) anahtarla
+        // devam ederdi — yani sıfırlama sıfırlamamış olurdu.
+        await _userRepository.TotpAyarlaAsync(id, secret: null, enabled: false);
+
+        // İlişkileriyle yeniden okuyoruz (OnaylaAsync ile aynı gerekçe).
+        var tam = await _userRepository.GetByIdAsync(id);
+        return tam is null ? null : DtoyaCevir(tam);
+    }
+
     public async Task<UserDto?> OnaylaAsync(int id)
     {
         var kullanici = await _userRepository.GetByIdAsync(id);
@@ -321,6 +345,7 @@ public class UserAdminService : IUserAdminService
             Username = kullanici.Username,
             IsActive = kullanici.IsActive,
             IsApproved = kullanici.IsApproved,
+            IkiAdimliEtkin = kullanici.TotpEnabled,
             CreatedAt = kullanici.CreatedAt,
             ModifiedDate = kullanici.ModifiedDate,
             Roles = kullanici.UserRoles

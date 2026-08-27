@@ -58,6 +58,14 @@ public class YetkilendirmeDenetimiTests
         ["AuthController.Refresh"] = "Anahtarın kendisi kanıt; hız sınırı ile korunuyor (AuthYenilemeTests).",
         ["AuthController.Logout"] = "Süresi dolmuş token'la da çıkılabilmeli; anahtarın kendisi kanıt (AuthYenilemeTests).",
 
+        // İki adımlı doğrulama (TOTP). Dördü de KENDİ HESABININ ayarı —
+        // yönetim işlemi değil, dolayısıyla bir "yetki" ile eşleşmiyor.
+        // Kanıt zinciri her birinde farklı ve her biri kendi testinde:
+        ["AuthController.IkinciAdim"] = "Giriş akışının 2. adımı; kanıt ara token + kod, hız sınırlı (IkinciAdimTests).",
+        ["AuthController.TotpBaslat"] = "Kendi hesabının ayarı; [Authorize] yeterli (IkinciAdimTests).",
+        ["AuthController.TotpDogrula"] = "Kendi hesabının ayarı; kanıt TOTP kodu, hız sınırlı (IkinciAdimTests).",
+        ["AuthController.TotpKapat"] = "Kendi hesabının ayarı; kanıt ŞİFRE, hız sınırlı (IkinciAdimTests).",
+
         // POI ve durak GÜNCELLEME/SİLME: gereken yetki
         // "X Yönetimi" VEYA ("X Ekleme" + kaydın sahibi olmak).
         // Bu VEYA'yı tek yetki adı alan [YetkiGerekli] ifade edemiyor;

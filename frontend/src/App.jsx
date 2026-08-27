@@ -6,6 +6,7 @@ import AdminUsers from './pages/AdminUsers.jsx'
 import AdminRoles from './pages/AdminRoles.jsx'
 import AdminPoi from './pages/AdminPoi.jsx'
 import AdminGuzergah from './pages/AdminGuzergah.jsx'
+import Guvenlik from './pages/Guvenlik.jsx'
 import { isAuthenticated } from './auth'
 
 // Korumalı rota: geçerli token yoksa login'e yönlendirir
@@ -18,6 +19,15 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+
+        {/* Güvenlik ekranı /admin ALTINDA DEĞİL — yönetim işlemi değil,
+            herkesin kendi hesabı için kullandığı bir ayar. AdminLayout'un
+            içine koysaydık yönetim yetkisi olmayan kullanıcı (örn.
+            "Ulaşım Kullanıcısı") kendi korumasını hiç açamazdı. */}
+        <Route
+          path="/guvenlik"
+          element={<RequireAuth><Guvenlik /></RequireAuth>}
+        />
         <Route
           path="/map"
           element={
