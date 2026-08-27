@@ -104,6 +104,27 @@ public class UlasimController : YonetimControllerBase
             return guncel is null ? Bulunamadi(id) : Ok(guncel);
         });
 
+    /// <summary>
+    /// Ödev 17 / Madde 1 — "Rota Oluştur".
+    ///
+    /// Güzergahın duraklarından geçen sürüş rotasını OSRM'e hesaplatır,
+    /// veritabanına yazar ve güncel güzergahı döner.
+    ///
+    /// POST, GET DEĞİL: uç veritabanını DEĞİŞTİRİYOR ve dış bir servise
+    /// iş yaptırıyor. GET olsaydı tarayıcı ve vekil sunucular onu
+    /// önbelleğe alabilir, hatta önceden çağırabilirdi.
+    ///
+    /// Gövde yok: hesaplanacak her şey (durak dizilimi) zaten sunucuda.
+    /// </summary>
+    [HttpPost("guzergahlar/{id:int}/rota")]
+    [YetkiGerekli(Yetkiler.GuzergahYonetimi)]
+    public Task<ActionResult<GuzergahDto>> RotaOlustur(int id)
+        => Calistir<GuzergahDto>(async () =>
+        {
+            var guncel = await _service.RotaHesaplaAsync(id);
+            return guncel is null ? Bulunamadi(id) : Ok(guncel);
+        });
+
     // ==================================================================
     //  Durak
     // ==================================================================

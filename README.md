@@ -165,6 +165,13 @@ Entities hiçbir katmana bağımlı değildir; katman atlama ve döngüsel bağ�
 | 16 | **Sürükle-bırak** ile durak sıralaması | `PUT /api/ulasim/guzergahlar/{id}/sira` |
 | 16 | Duraklara tıklayınca bilgi kutucuğu | `MapPage.jsx` → `secili.tip === DURAK` kartı |
 | 16 | *(not)* Ulaşım rolleri POI/çizim EKLEYEMEZ, POI'leri görür | Rol tanımları + `UlasimTests` |
+| 17 | **OSRM** ile otomatik rota üretimi (Docker'da local) | `osrm/`, `OsrmClient.cs` |
+| 17 | Rotalar veritabanına kaydediliyor ve haritada gösteriliyor | `guzergah.rota` (LineString), `MapPage.jsx` |
+| 17 | Güzergahlar üzerinde **aç/kapat** (katman kontrolü gibi) | `.guzergah-anahtar` + `gizliGuzergahlar` |
+| 17 | Durak sırası değişince rota **otomatik** güncelleniyor | `UlasimService.RotayiTazeleAsync` |
+| 17 | Rota yönü **ok işaretleriyle** gösteriliyor | `MapPage.jsx` → `yonOklari()` |
+| 17 | Ulaşım rolleri POI'de **yalnızca görüntüleme** | `UlasimPoiYetkiTests` |
+| 17 | Admin panelinde **duraklar da düzenlenebiliyor** | `AdminGuzergah.jsx` → `.durak-form` |
 
 ---
 
@@ -2627,10 +2634,159 @@ eklendi.
 
 ---
 
+## 18) OSRM ile Otomatik Rota Üretimi
+
+**Ödev 17 — iki madde.** Biri rota motoru, biri modül yetkilendirmeleri.
+
+| Madde | İstenen | Nerede |
+|---|---|---|
+| 1 | Güzergaha **"Rota Oluştur"** düğmesi | `AdminGuzergah.jsx` → `rotayiHesapla` |
+| 1 | Rota hesabı **OSRM** ile (Docker'da local, HTTP) | `osrm/docker-compose.yml`, `OsrmClient.cs` |
+| 1 | Hesaplanan rota **veritabanına** kaydediliyor | `guzergah.rota` · migration `GuzergahRotasi` |
+| 1 | Rota **haritada** gösteriliyor | `MapPage.jsx` → `guzergahStili()` |
+| 1 | Güzergahlarda **aç/kapat** (katman kontrolü gibi) | `gizliGuzergahlar` + `.guzergah-anahtar` |
+| 1 | **Sıra değişince** rota otomatik güncelleniyor | `UlasimService.RotayiTazeleAsync` |
+| 1 | Rota yönü **ok işaretleriyle** | `MapPage.jsx` → `yonOklari()` |
+| 2 | Ulaşım rolleri POI'de **yalnızca görüntüleme** | `UlasimPoiYetkiTests` |
+| 2 | Admin panelinde güzergah **ve durak** düzenleme | `AdminGuzergah.jsx` → `.durak-form` |
+
+Kurulum ve kaynak ihtiyacı: **[`osrm/README.md`](osrm/README.md)**.
+
+### Ödev 16'daki kararın geri alınması
+
+Ödev 16'da güzergahın geometrisi bilerek **saklanmıyordu**. Gerekçe şuydu:
+
+> Çizgi duraklardan türetilebilir bir değer; saklamak ikinci bir doğruluk
+> kaynağı yaratır ve ikisi birbirinden kayabilir.
+
+Ödev 17 o gerekçenin **dayanağını** ortadan kaldırdı. Artık çizgi durakları
+düz birleştirmiyor; OSRM'in OpenStreetMap yol ağı üzerinden hesapladığı gerçek
+sürüş rotası. Bu değer duraklardan tek başına türetilemiyor (dış servis
+gerekiyor), hesaplanması saniyeler sürüyor ve OSRM kapalıyken hiç
+üretilemiyor. Yani artık *türetilmiş* değil **üretilmiş** bir veri.
+
+**Peki eski endişe — çizgiyle durakların ayrışması?** Ortadan kalkmadı,
+**yönetiliyor**:
+
+1. Durak eklendiğinde, taşındığında, silindiğinde ve **sırası değiştiğinde**
+   rota kendiliğinden yeniden hesaplanıyor.
+2. Buna rağmen ayrışma mümkün: OSRM o an kapalı olabilir. Bu yüzden
+   `guzergah.rota_imza` kolonu, rotanın **hangi durak dizilimi için**
+   hesaplandığını yazıyor. İmza tutmuyorsa arayüz *"rota güncel değil"* diyor,
+   çizgiyi solgun gösteriyor ve panelde uyarı çıkıyor.
+
+Ayrışma **gizlenmiyor, görünür kılınıyor** — sessizce yanlış bir hat
+çizmektense.
+
+### İmza neden gerekli, neden böyle?
+
+`rota_imza` = durakların **sırasıyla** id'leri ve koordinatlarının SHA-256
+özeti (64 karakter).
+
+| Değişiklik | İmza değişir mi? | Neden doğru |
+|---|---|---|
+| Durak sırası değişti | ✅ | Rota da değişecek |
+| Durak taşındı | ✅ | Koordinat farklı |
+| Durak eklendi/silindi | ✅ | Dizilim farklı |
+| Durağın **adı** değişti | ❌ | Rota aynı kalacak — boşuna OSRM isteği atılmıyor |
+
+Basit alternatifler neden yetmedi: **durak sayısı** iki durağın yer
+değiştirmesini görmez; **son değişiklik tarihi** ise durak tablosundaki her
+dokunuşta değişir ve rotayı gereksiz yere eskimiş gösterirdi.
+
+Koordinatlar 6 basamağa yuvarlanıyor (≈11 cm): ham `double` yazsaydık aynı
+noktanın farklı yuvarlama artıklarıyla okunması imzayı değiştirir ve rota
+durduk yere "eskimiş" görünürdü.
+
+### OSRM kapalıyken kullanıcının işi engellenmiyor
+
+Bu, modülün en önemli tasarım kararı:
+
+```
+Kullanıcı durağı sürükledi
+        │
+        ├─ 1. Sıralama veritabanına YAZILDI  ← kullanıcının asıl işi, BİTTİ
+        │
+        └─ 2. Rota yenilenmeye çalışılıyor
+                 ├─ OSRM açık  → yeni rota yazılır, imza güncellenir
+                 └─ OSRM kapalı → SESSİZCE geçilir; eski rota durur,
+                                   imza tutmadığı için "güncel değil" görünür
+```
+
+İkinci adımda istisna fırlatsaydık kullanıcı *"sıralama kaydedilemedi"* hatası
+görürdü — oysa kaydedilmişti. Dış bir servisin arızasını, kullanıcının kendi
+verisini kaybettiğine inandırmaya çeviremeyiz.
+
+Elle basılan **"Rota Oluştur"** düğmesi ise tam tersi davranıyor: orada
+kullanıcı düğmeye bastı, "olmadı" cevabını ve sebebini görmeyi hak ediyor.
+
+### Yön okları neden ayrı feature değil?
+
+Oklar çizginin üstüne ayrı nesne olarak konmuyor, **çizgiyi çizen stilin
+içinde** üretiliyor (`yonOklari()`). Ayrı feature olsalardı kaynakta yüzlerce
+fazladan nesne dolaşır, tıklama testine karışır ve hat gizlendiğinde ayrıca
+gizlenmeleri gerekirdi.
+
+Oklar her köşeye de konmuyor: OSRM her viraj için bir nokta üretiyor, şehir
+içinde bu yüzlerce nokta demek — çizgi okların altında kaybolurdu. Bunun
+yerine çizgi boyunca **eşit aralıklarla**, uzunluğa göre 3–24 arası ok
+yerleştiriliyor.
+
+Okun açısı hesaplanırken komşu köşeler **kullanılmıyor**: OSRM rotasında
+ardışık iki nokta bazen santimetrelerce yakın ve o kadar kısa bir vektörün
+açısı gürültüye boğuluyor — oklar titriyordu. Bunun yerine çizgi boyunca
+küçük bir ileri/geri adım alınıyor.
+
+### Hat bazlı aç/kapat neden katman gizlemekle yapılmadı?
+
+Bütün hatlar **aynı iki katmanı** paylaşıyor (durak noktaları + çizgiler).
+Katman gizlemek hepsini birden kapatırdı. Bunun yerine her feature'a `gizli`
+özelliği yazılıyor ve stil fonksiyonu onu görünce `null` dönüyor —
+OpenLayers'ta "bu feature çizilmesin" demenin yolu bu.
+
+Durum **kapalı olanları** tutuyor, açık olanları değil. Açıkları tutsaydık
+sunucuya yeni giren bir hat listede olmadığı için **gizli** başlar ve
+kullanıcı eklediği hattı haritada bulamazdı.
+
+### Kesikli çizgi = kuş uçuşu
+
+Rotası olmayan hat, Ödev 16'daki düz çizgiyle ama **kesikli** çiziliyor.
+Aynı görünümü verseydik, OSRM kapalıyken binaların içinden geçen bir çizgi
+gerçek güzergah sanılırdı. Yön okları da yalnızca gerçek rotada gösteriliyor:
+olmayan bir güzergah hakkında yön bilgisi vermek yanıltıcı olurdu.
+
+### Madde 2 — modül yetkilendirmeleri
+
+**POI'de yalnızca görüntüleme.** Kural Ödev 16'da da vardı ve test edilmişti,
+ama o test rol tanımındaki **elle yazılmış** bir yasaklı-yetki listesine
+bağlıydı: yeni bir POI yetkisi eklenirse liste güncellenmedikçe test yeşil
+kalırdı.
+
+`UlasimPoiYetkiTests` listeyi elle tutmuyor: POI controller'larının **yazma
+uçlarını yansımayla okuyup** hangi yetkileri istediklerini kendisi buluyor,
+sonra ulaşım rollerinin hiçbirinde o yetkilerden bulunmadığını doğruluyor.
+Yeni bir uç eklendiğinde test onu kendiliğinden hesaba katıyor.
+
+"Görüntüleyebilsinler" tarafı bir yetki **ekleyerek** değil, hiçbir şey
+eklemeyerek sağlanıyor: `GET /api/poi` bilinçli olarak yetkisiz. Ayrı bir test
+bunu da koruyor — biri okuma ucuna yetki eklerse, hiç yetkisi olmayan
+"Ulaşım Kullanıcısı" POI'leri göremez hâle gelir ve ödevin şartı sessizce
+bozulur.
+
+**Durak düzenleme.** Ödev 16'da `PUT /api/ulasim/duraklar/{id}` ucu vardı ve
+testliydi ama **arayüzden erişilemiyordu**: ad düzeltmek için durağı silip
+yeniden eklemek gerekiyordu, bu da sırayı bozuyordu. Artık durak satırının
+içinde açılan bir form var. Konum bilerek düzenlenmiyor — koordinatı elle
+yazmak hataya açık; durağın yeri haritada seçilir.
+
+---
+
 ## Kurulum
 
 ### Gereksinimler
 - .NET 8 SDK · PostgreSQL 17 + **PostGIS 3.5** · Node.js 18+ · **Java 17/21 + GeoServer 2.28**
+- **Docker** (Ödev 17 — OSRM rota motoru). İsteğe bağlı: kurulmazsa uygulama
+  eksiksiz çalışır, hatlar yalnızca yollara oturmaz. Bkz. [`osrm/README.md`](osrm/README.md).
 
 ### 1. Veritabanı
 
@@ -2750,13 +2906,51 @@ powershell -ExecutionPolicy Bypass -File geoserver\gs-yapilandir.ps1
 
 `baslat.bat` GeoServer'ın ayakta olup olmadığını kontrol eder, kapalıysa başlatır.
 
+### 6. OSRM — rota motoru (Ödev 17) · *isteğe bağlı*
+
+Ayrıntılı adımlar ve kaynak ihtiyacı: **[`osrm/README.md`](osrm/README.md)**. Özet:
+
+```bash
+powershell -ExecutionPolicy Bypass -File osrm\osrm-kur.ps1
+```
+
+```bash
+cd osrm
+docker compose up -d
+```
+
+Birinci komut OpenStreetMap Türkiye verisini indirip (≈500 MB) OSRM'in
+sorgulayabileceği hâle getiriyor; **bir kez** çalıştırılır ve 5–20 dakika
+sürer. Makine zorlanırsa haritayı bir dikdörtgene kırpın:
+`-Kutu "31.5,39.0,39.5,42.2"`.
+
+> **İSTEĞE BAĞLI, çünkü kurulmazsa uygulama eksiksiz çalışıyor.** Rotası olmayan
+> hat, Ödev 16'daki düz çizgiyle (kesikli olarak) çiziliyor — hat yine görünüyor,
+> sadece yollara oturmuyor. Projeyi yalnızca haritayı görmek için açan biri
+> gigabaytlarca OSM verisi hazırlamak zorunda kalmamalı.
+>
+> Hiç denenmesin isterseniz: `appsettings.json` → `Osrm:Enabled: false`.
+
+`baslat.bat` OSRM'i de kontrol ediyor — ama **veri hazır değilse konteyneri hiç
+başlatmıyor.** Veri olmadan açılan OSRM porta cevap verir ama her isteğe hata
+döner; "çalışıyor" gibi görünen bozuk bir servis, hiç çalışmayandan daha kafa
+karıştırıcıdır.
+
 ### Testler
 
 ```bash
 dotnet test backend/StajProject.sln
 ```
 
-238 test: durum kolonlarının davranışı (EF InMemory ile gerçek `DbContext` üzerinde),
+```bash
+cd frontend && npm test
+```
+
+**368 backend + 77 frontend testi.** İkisini birden (ve derlemeleri) tek komutta
+çalıştırmak için: `dogrula.bat` — CI'nin (`.github/workflows/ci.yml`) yerel
+karşılığı.
+
+Backend tarafında: durum kolonlarının davranışı (EF InMemory ile gerçek `DbContext` üzerinde),
 WKT çözümleme / tip doğrulama / SRID yönetimi, görsel adresi güvenliği, geri alma,
 başlangıç verisi kuralları, sahiplik süzgeci, `LocationService`, yetki birleştirme
 kuralları (`YetkiTests.cs`), coğrafi alan kısıtı (`CografiYetkiTests.cs`) ve — Ödev 8 —
@@ -2767,6 +2961,27 @@ derinlik, "dolu kategori silinemez") ve POI'nin sahiplik / coğrafi yetki davran
 dönüşü, eski `"09:00 - 18:00"` biçiminden plana köprü, resmî tatil takvimi (sabit
 tatiller, yarım günler, tanımsız yılda düşen bayrak), kategori önerisi (OSM türü,
 ad içindeki kelime, Türkçe harf katlaması, pasif kategori) ve POI araması.
+
+Ödev 16 ile `UlasimTests.cs`: 1-N ilişkisi, sıra sıkıştırma, sürükle-bırak
+sıralamasının doğrulanması ve ulaşım rollerinin POI/çizim yetkisi taşımaması.
+
+Ödev 17 ile iki dosya daha:
+- `RotaTests.cs` (22 test) — rota hesabı, **döndürme tetikleyicileri** (sıra
+  değişince OSRM'e yeni istek gidiyor mu), **gereksiz istek atmama** (yalnızca ad
+  değişince gitmiyor), imza davranışı ve OSRM kapalıyken sıralamanın yine de
+  kaydedilmesi. Gerçek OSRM'e bağlanmıyor: sınanan şey OSRM'in doğru rota bulup
+  bulmadığı değil — o OSRM'in kendi işi — bizim ne zaman istek attığımız ve
+  cevap gelmediğinde ne yaptığımız.
+- `UlasimPoiYetkiTests.cs` (7 test) — POI controller'larının yazma uçlarını
+  **yansımayla** okuyup ulaşım rollerinin o yetkilerden hiçbirini taşımadığını
+  doğruluyor. Elle tutulan bir yasaklı-yetki listesi yok; yeni bir uç eklenince
+  test onu kendiliğinden hesaba katıyor.
+
+Frontend tarafında (Vitest + jsdom): saf yardımcılar, `KonumAnaliziPaneli`'nin
+puan-toplamı kuralı, yenileme anahtarı akışı ve — Ödev 17 — **yön oku açısı**
+(`rotaOklari.test.js`). Sonuncusu tek bir satırı koruyor:
+`rotation = π/2 − atan2(dy, dx)`. Yanlış yazılırsa hata mesajı alınmaz; oklar
+sessizce yanlış yöne bakar.
 
 > **Madde 1 birim testinde yok:** karşılığı bir GeoServer yapılandırmasıdır,
 > ayakta bir GeoServer'la doğrulanır. `gs-yapilandir.ps1` sonunda her katman için
@@ -2936,6 +3151,7 @@ ve yeniden kullanım tespiti, çalınan bir kopyanın ömrünü tek kullanıma i
 | **GET** | **`/api/ulasim/guzergahlar`** | Güzergahlar, durakları SIRALI hâlde — **yetki istemez** (Ödev 16) |
 | **POST/PUT/DELETE** | **`/api/ulasim/guzergahlar[/{id}]`** | Hat tanımı — **Güzergah Yönetimi** |
 | **PUT** | **`/api/ulasim/guzergahlar/{id}/sira`** | `{ durakIdleri: […] }` → sürükle-bırak sıralaması — **Güzergah Yönetimi** |
+| **POST** | **`/api/ulasim/guzergahlar/{id}/rota`** | "Rota Oluştur" — OSRM'den hesaplayıp kaydeder (Ödev 17) — **Güzergah Yönetimi** |
 | **GET** | **`/api/ulasim/duraklar`** | Bütün duraklar — **yetki istemez** |
 | **POST** | **`/api/ulasim/duraklar`** | `{ ad, guzergahId, wkt, aciklama? }` — **Durak Ekleme** |
 | **PUT/DELETE** | **`/api/ulasim/duraklar/{id}`** | Sahibi (Durak Ekleme) **veya** Güzergah Yönetimi |

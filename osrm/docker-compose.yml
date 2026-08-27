@@ -1,0 +1,73 @@
+# ============================================================================
+#  OSRM — Open Source Routing Machine (Ödev 17 / Madde 1)
+#
+#  Ödev metni: "Rota hesaplamaları için OSRM kullanın (Docker üzerinde
+#  localde çalıştırıp HTTP istekleri atmanız tercih edilmektedir)."
+#
+#  ---- ÖNCE VERİ HAZIRLANMALI ----
+#
+#  Bu dosya YALNIZCA hazır veriyi servis eder. Ham OpenStreetMap dosyasını
+#  (.osm.pbf) OSRM'in okuyabileceği hâle getirmek ayrı bir iş ve bir kez
+#  yapılıyor:
+#
+#      powershell -ExecutionPolicy Bypass -File osrm-kur.ps1
+#
+#  Betik indirme + üç aşamalı hazırlığı (extract → partition → customize)
+#  çalıştırıp veri/ klasörünü dolduruyor. Ayrıntı: README.md
+#
+#  ---- NEDEN 5001 PORTU? ----
+#
+#  OSRM'in kendi varsayılanı 5000; ama bu projede 5000 backend'in portu.
+#  İkisi aynı portu isteseydi hangisinin önce açıldığına göre biri sessizce
+#  başlamazdı. Dışarıya 5001 açıp konteynerin içinde 5000'de bırakıyoruz.
+# ============================================================================
+
+services:
+  osrm:
+    # Sürüm SABİTLENDİ (:latest değil). OSRM'in veri biçimi sürümler arasında
+    # değişiyor: yeni bir imaj, eski hazırlanmış veriyi "incompatible file
+    # version" diyerek reddeder. Sabit etiket, bir sabah projenin kendi
+    # kendine bozulmasını engelliyor.
+    image: osrm/osrm-backend:v5.25.0
+    container_name: staj-osrm
+
+    ports:
+      - "5001:5000"
+
+    # veri/ klasörü SALT OKUNUR bağlanıyor: osrm-routed veriyi yalnızca
+    # okuyor, yazma yetkisi vermenin bir sebebi yok.
+    volumes:
+      - ./veri:/data:ro
+
+    # --algorithm mld: hazırlık aşamasıyla AYNI algoritma olmak zorunda.
+    #   mld (Multi-Level Dijkstra) → osrm-partition + osrm-customize
+    #   ch  (Contraction Hierarchies) → osrm-contract
+    # MLD seçildi çünkü hazırlığı belirgin biçimde daha hızlı ve daha az
+    # bellek istiyor; sorgu hızındaki fark bu ölçekte hissedilmiyor.
+    #
+    # --max-viaroute-size: tek istekteki en fazla nokta. Backend zaten
+    # kendi tarafında 100'de sınırlıyor (OsrmSettings.MaxNokta); burada da
+    # sınırlamak, doğrudan OSRM'e atılan isteklere karşı ikinci kapı.
+    command: >
+      osrm-routed
+      --algorithm mld
+      --max-viaroute-size 100
+      /data/harita.osrm
+
+    restart: unless-stopped
+
+    # Sağlık kontrolü: Ankara'daki bir noktaya en yakın yolu sor.
+    # Yalnızca porta bakmak yetmezdi — veri yüklenmemiş bir OSRM de portu
+    # açar ama her isteğe hata döner.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- "http://localhost:5000/nearest/v1/driving/32.8597,39.9334"
+          | grep -q '"code":"Ok"'
+      interval: 30s
+      timeout: 10s
+      # Açılışta veriyi belleğe almak büyük haritalarda dakikalar sürebiliyor;
+      # start_period o süre boyunca konteyneri "sağlıksız" saymıyor.
+      start_period: 120s
+      retries: 3

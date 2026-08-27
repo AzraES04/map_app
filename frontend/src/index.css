@@ -4602,13 +4602,55 @@ kbd {
 
 .guzergah-lejant li {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   font-size: var(--yazi-sm);
 }
 
 /* Pasif hat listede KALIR (silinmiş değil), sadece söner. */
 .guzergah-lejant li.pasif { opacity: 0.5; }
+
+/* ---------- Ödev 17: hat bazlı aç/kapat ---------- */
+
+/* Satırın tamamı tıklanabilir: onay kutusunun 13 pikselini avlamak yerine
+   ad ve renk de hedefe dahil. Etikete sarmak, ayrıca aria bağlantısını da
+   kendiliğinden kuruyor. */
+.guzergah-anahtar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.guzergah-anahtar input { flex-shrink: 0; }
+
+/* Kapatılan hat listeden KAYBOLMUYOR — kaybolsaydı geri açmanın yolu
+   kalmazdı. Yalnızca soluyor ve adı üstü çizili görünüyor. */
+.guzergah-lejant li.gizli .guzergah-ad {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.guzergah-lejant li.gizli .guzergah-cizgi { opacity: 0.35; }
+
+/* Rota özeti: onay kutusunun ALTINDA, çizgiyle hizalı girinti. */
+.guzergah-rota {
+  margin-left: 52px;
+  font-size: 11px;
+  color: var(--metin-soluk);
+  line-height: 1.3;
+}
+
+/* "Rota güncel değil" bir UYARI: duraklar değişti ama OSRM'e ulaşılamadı.
+   Rengi diğerlerinden ayrı olmalı ki gözden kaçmasın. */
+.guzergah-rota.eski {
+  color: var(--uyari, #d9822b);
+  font-weight: 600;
+}
+
+/* "Rota yok" uyarı değil bilgi: henüz hesaplanmamış, yanlış bir şey yok. */
+.guzergah-rota.yok { font-style: italic; }
 
 /* Renk kutusu değil ÇİZGİ: haritada hattı temsil eden şey bir çizgi,
    lejant da onu taklit etmeli. */
@@ -4795,6 +4837,82 @@ kbd {
   margin: 0;
   padding: 0;
 }
+
+/* ---------- Ödev 17: rota rozetleri (güzergah listesi) ---------- */
+
+.rota-durum { display: block; margin-top: 2px; }
+
+.rota-rozet {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+/* Rota var ve güncel: sonucu söyleyen NÖTR bir bilgi. */
+.rota-rozet.var {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok);
+}
+
+/* Rota güncel değil: duraklar değişti ama OSRM'e ulaşılamadı — UYARI.
+   Diğerlerinden ayrı bir renk olmalı ki gözden kaçmasın. */
+.rota-rozet.eski {
+  background: color-mix(in srgb, var(--uyari) 18%, transparent);
+  color: var(--uyari);
+}
+
+/* Rota yok: henüz hesaplanmamış. Yanlış bir şey yok, o yüzden sessiz. */
+.rota-rozet.yok {
+  background: var(--yuzey-3);
+  color: var(--metin-soluk);
+  font-style: italic;
+}
+
+/* ---------- Ödev 17: durak düzenleme formu ---------- */
+
+/* Satır artık İKİ SATIRLI olabiliyor (form açıldığında), o yüzden
+   flex-direction sütun ve içerik iki gruba ayrılıyor. */
+.durak-listesi li { flex-wrap: wrap; }
+
+.durak-form {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--kenar);
+  /* Form alanları sürüklenebilir olmamalı: kullanıcı metin seçmeye
+     çalışırken satır sürüklenmeye başlıyordu. */
+  cursor: default;
+}
+
+.durak-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--yazi-sm);
+  color: var(--metin-soluk);
+}
+
+.durak-form input {
+  padding: 6px 9px;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  color: var(--metin);
+  font: inherit;
+}
+
+.durak-form input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.durak-form-eylem { display: flex; gap: 7px; }
 
 .durak-listesi li {
   display: flex;

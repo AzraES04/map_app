@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using StajProject.DataAccess.Context;
+using NetTopologySuite.Geometries;
 using StajProject.Entities;
 
 namespace StajProject.DataAccess.Repositories;
@@ -80,6 +81,33 @@ public class UlasimRepository : IUlasimRepository
 
         guzergah.IsDeleted = true;
         guzergah.IsActive = false;
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> RotaYazAsync(
+        int guzergahId,
+        LineString? rota,
+        double? mesafeMetre,
+        double? sureSaniye,
+        string? imza)
+    {
+        var guzergah = await _context.Guzergahlar.FirstOrDefaultAsync(g => g.Id == guzergahId);
+        if (guzergah is null)
+        {
+            return false;
+        }
+
+        guzergah.Rota = rota;
+        guzergah.RotaMesafeMetre = mesafeMetre;
+        guzergah.RotaSureSaniye = sureSaniye;
+        guzergah.RotaImza = imza;
+
+        // Zaman damgası BAŞARILI hesapta yazılıyor, başarısızda temizleniyor.
+        // "Rota null ama hesaplandı 14:32" gibi bir satır, hesabın çalıştığını
+        // ama sonuç vermediğini söyleyen tutarsız bir kayıt olurdu.
+        guzergah.RotaHesaplandi = rota is null ? null : DateTime.UtcNow;
+
         await _context.SaveChangesAsync();
         return true;
     }

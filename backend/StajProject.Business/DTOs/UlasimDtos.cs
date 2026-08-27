@@ -70,6 +70,42 @@ public class GuzergahDto
     /// <summary>Durak sayısı — listede özet olarak gösteriliyor.</summary>
     public int DurakSayisi => Duraklar.Count;
 
+    // ---------- Ödev 17 / Madde 1: OSRM rotası ----------
+
+    /// <summary>
+    /// OSRM'in hesapladığı, yollara oturmuş hat çizgisi — WKT LINESTRING
+    /// (EPSG:4326). Rota henüz hesaplanmadıysa null.
+    ///
+    /// Arayüz null gelince Ödev 16'daki düz çizgiye düşüyor: hat yine
+    /// görünüyor ama "kuş uçuşu" olduğu belli ediliyor.
+    /// </summary>
+    public string? RotaWkt { get; set; }
+
+    /// <summary>Toplam sürüş mesafesi (metre).</summary>
+    public double? RotaMesafeMetre { get; set; }
+
+    /// <summary>
+    /// Tahmini SÜRÜŞ süresi (saniye) — sefer süresi değil.
+    /// Durak bekleme ve trafik hesaba katılmıyor.
+    /// </summary>
+    public double? RotaSureSaniye { get; set; }
+
+    /// <summary>Rotanın en son hesaplandığı an (UTC).</summary>
+    public DateTime? RotaHesaplandi { get; set; }
+
+    /// <summary>
+    /// Rota, MEVCUT durak dizilimi için mi hesaplandı?
+    ///
+    /// false olması tek bir şey demek: durak eklendi/taşındı/sırası değişti
+    /// ama o an OSRM'e ulaşılamadığı için rota yenilenemedi. Arayüz bu
+    /// durumda "rota güncel değil" uyarısı gösteriyor ve eski çizgiyi
+    /// SOLGUN çiziyor — güncelmiş gibi göstermek, haritada sessizce yanlış
+    /// bilgi vermek olurdu.
+    ///
+    /// Rota hiç YOKSA true döner: ortada eskimiş bir şey yok.
+    /// </summary>
+    public bool RotaGuncel { get; set; } = true;
+
     public int? UserId { get; set; }
     public string? KullaniciAdi { get; set; }
 

@@ -59,6 +59,21 @@ public interface IUlasimService
     /// <summary>
     /// Sürükle-bırak sıralamasını uygular (Ödev 16 / Madde 2).
     /// "Güzergah Yönetimi" yetkisi ister; güncel güzergahı döndürür.
+    ///
+    /// Ödev 17: sıra değiştiği için rota da OTOMATİK yenileniyor.
     /// </summary>
     Task<GuzergahDto?> SiralamaGuncelleAsync(int guzergahId, DurakSiralamaDto dto);
+
+    /// <summary>
+    /// Ödev 17 / Madde 1 — "Rota Oluştur": güzergahın rotasını OSRM'den
+    /// hesaplatıp veritabanına yazar.
+    ///
+    /// Güzergah yoksa null. OSRM kapalıysa, durak sayısı 2'nin altındaysa ya
+    /// da rota hesaplanamadıysa <see cref="Validation.IsKuraliException"/>
+    /// fırlatır — kullanıcı düğmeye bastı, sebebini görmeli.
+    ///
+    /// (Otomatik yenileme aynı işi SESSİZCE yapıyor: orada kullanıcı başka
+    /// bir iş yapıyordu ve OSRM'in arızası o işi engellememeli.)
+    /// </summary>
+    Task<GuzergahDto?> RotaHesaplaAsync(int guzergahId);
 }

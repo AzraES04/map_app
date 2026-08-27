@@ -1,3 +1,4 @@
+using NetTopologySuite.Geometries;
 using StajProject.Entities;
 
 namespace StajProject.DataAccess.Repositories;
@@ -42,6 +43,27 @@ public interface IUlasimRepository
 
     /// <summary>Soft delete. Kayıt yoksa false.</summary>
     Task<bool> GuzergahSilAsync(int id);
+
+    /// <summary>
+    /// Güzergahın OSRM rotasını yazar (Ödev 17 / Madde 1).
+    ///
+    /// NEDEN <c>GuzergahGuncelleAsync</c> KULLANILMIYOR? O metot kullanıcının
+    /// girdiği alanları (ad, renk, açıklama, aktiflik) yazıyor ve rota
+    /// kolonlarına dokunmuyor — bilerek. Rota kullanıcının GİRDİĞİ bir değer
+    /// değil, sistemin ÜRETTİĞİ bir değer. İkisini aynı metotta toplasaydık
+    /// "adı düzelt" isteği, gövdesinde rota taşımadığı için rotayı sessizce
+    /// silerdi.
+    ///
+    /// <paramref name="rota"/> null geçilebilir: "hesaplanamadı" durumunu
+    /// kaydetmek de bir bilgi.
+    /// </summary>
+    /// <returns>Güzergah yoksa false.</returns>
+    Task<bool> RotaYazAsync(
+        int guzergahId,
+        LineString? rota,
+        double? mesafeMetre,
+        double? sureSaniye,
+        string? imza);
 
     // ---------- Durak ----------
 

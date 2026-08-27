@@ -113,3 +113,24 @@ export const durakGuncelle = (id, veri, onUnauthorized) =>
 /** Soft delete — kalan durakların sırası sunucuda 1..N'e sıkıştırılır. */
 export const durakSil = (id, onUnauthorized) =>
   istek(`/api/ulasim/duraklar/${id}`, { method: 'DELETE' }, onUnauthorized)
+
+// ---------------------------------------------------------------------------
+//  Rota (Ödev 17 / Madde 1)
+// ---------------------------------------------------------------------------
+
+/**
+ * "Rota Oluştur" — güzergahın duraklarından geçen sürüş rotasını OSRM'e
+ * hesaplatır ve veritabanına yazar. Güncel güzergahı döner.
+ *
+ * POST, GET DEĞİL: uç veritabanını değiştiriyor ve dış bir servise iş
+ * yaptırıyor. Gövde yok — hesaplanacak her şey (durak dizilimi) zaten
+ * sunucuda.
+ *
+ * "Güzergah Yönetimi" yetkisi ister.
+ *
+ * ELLE çağrılan yol bu. Durak eklendiğinde/taşındığında/silindiğinde ve
+ * SIRA değiştiğinde rota sunucuda kendiliğinden yenileniyor; arayüzün ayrıca
+ * bu fonksiyonu çağırmasına gerek yok.
+ */
+export const rotaOlustur = (guzergahId, onUnauthorized) =>
+  istek(`/api/ulasim/guzergahlar/${guzergahId}/rota`, { method: 'POST' }, onUnauthorized)

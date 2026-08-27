@@ -52,7 +52,7 @@ public class UlasimTests
 
         var geo = new FakeGeoPermissionService();
 
-        return new Ortam(db, new UlasimService(new FakeUlasimRepository(db), oturum, izinler, geo), geo);
+        return new Ortam(db, new UlasimService(new FakeUlasimRepository(db), oturum, izinler, geo, new FakeOsrmClient()), geo);
     }
 
     private static void YetkiVer(SahteVeritabani db, int kullaniciId, params string[] adlar)
@@ -425,7 +425,8 @@ public class UlasimTests
         var izinler = new PermissionService(
             new FakePermissionRepository(sahip.Db), new FakeUserRepository(sahip.Db), oturum);
         var digeri = new UlasimService(
-            new FakeUlasimRepository(sahip.Db), oturum, izinler, new FakeGeoPermissionService());
+            new FakeUlasimRepository(sahip.Db), oturum, izinler,
+            new FakeGeoPermissionService(), new FakeOsrmClient());
 
         var hata = await Assert.ThrowsAsync<IsKuraliException>(
             () => digeri.DurakGuncelleAsync(durak.Id, new DurakUpdateDto { Ad = "X", GuzergahId = hat.Id }));
@@ -454,7 +455,8 @@ public class UlasimTests
         var izinler = new PermissionService(
             new FakePermissionRepository(o.Db), new FakeUserRepository(o.Db), oturum);
         var yonetici = new UlasimService(
-            new FakeUlasimRepository(o.Db), oturum, izinler, new FakeGeoPermissionService());
+            new FakeUlasimRepository(o.Db), oturum, izinler,
+            new FakeGeoPermissionService(), new FakeOsrmClient());
 
         var guncel = await yonetici.DurakGuncelleAsync(
             durak.Id, new DurakUpdateDto { Ad = "Kızılay", GuzergahId = hat.Id });

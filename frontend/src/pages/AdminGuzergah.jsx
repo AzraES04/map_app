@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   guzergahlariListele, guzergahEkle, guzergahGuncelle, guzergahSil,
-  durakSil, siralamaKaydet,
+  durakSil, durakGuncelle, siralamaKaydet, rotaOlustur,
 } from '../ulasimApi'
 import {
   EkleIkonu, SilIkonu, DurakIkonu, GuzergahIkonu, SurukleIkonu, KullaniciIkonu,
@@ -20,6 +20,20 @@ import {
 //  İki ayrı ekrana bölmek de mümkündü ama sıralama işi tam olarak "hangi
 //  hattın hangi durakları" sorusunu gerektiriyor; ikisini yan yana tutmak
 //  ekran değiştirmeden çalışmayı sağlıyor.
+//
+//  ---- ÖDEV 17 EKLERİ ----
+//
+//    • "Rota Oluştur" (Madde 1): hattın duraklarından geçen sürüş rotasını
+//      OSRM'e hesaplatır. Düğme yalnızca ELLE tetiklemek için: durak
+//      eklendiğinde/taşındığında/silindiğinde ve SIRA değiştiğinde rota
+//      sunucuda zaten kendiliğinden yenileniyor. Düğme, OSRM kapalıyken
+//      yapılan değişikliklerden sonra "şimdi hesapla" demenin yolu.
+//
+//    • DURAK DÜZENLEME (Madde 2: "Güzergahlar ve Duraklar listelenmeli;
+//      isim, renk vb. alanlar düzenlenebilmelidir"). Ödev 16'da duraklar
+//      yalnızca listelenip sıralanabiliyordu; PUT ucu vardı ama arayüzden
+//      erişilemiyordu — ad düzeltmek için durağı silip yeniden eklemek
+//      gerekiyordu ki bu sırayı da bozuyordu.
 //
 //  SÜRÜKLE-BIRAK KÜTÜPHANESİZ. react-beautiful-dnd / dnd-kit eklemek
 //  bağımlılık listesini büyütürdü; tarayıcının kendi HTML5 Drag & Drop
@@ -78,6 +92,19 @@ export default function AdminGuzergah() {
   const suruklenenIdRef = useRef(null)
   const [suruklenenId, setSuruklenenId] = useState(null)
   const [siraKaydediliyor, setSiraKaydediliyor] = useState(false)
+
+  /** Ödev 17: rota hesaplanan güzergahın id'si (düğme "hesaplanıyor…" olsun). */
+  const [rotaHesaplanan, setRotaHesaplanan] = useState(null)
+
+  /**
+   * Ödev 17 / Madde 2: düzenlenen durak — { id, ad, aciklama, guzergahId }.
+   *
+   * Ayrı bir ekran DEĞİL, satırın yerinde açılan bir form. Sebep: durak
+   * düzenlemenin tek bağlamı hangi hattın kaçıncı durağı olduğu ve o bağlam
+   * tam da bu listede. Ayrı ekrana gitmek kullanıcıyı sıralamadan koparırdı.
+   */
+  const [durakFormu, setDurakFormu] = useState(null)
+  const [durakKaydediliyor, setDurakKaydediliyor] = useState(false)
 
   const oturumBitti = useCallback(
     () => navigate('/login', { replace: true, state: { expired: true } }),
@@ -186,6 +213,67 @@ export default function AdminGuzergah() {
       await yukle()
     } catch (err) {
       if (err.message !== 'Oturum süresi doldu') setHata(err.message)
+    }
+  }
+
+  // ------------------------------------------------------------------
+  //  Ödev 17 / Madde 1 — "Rota Oluştur"
+  // ------------------------------------------------------------------
+
+  const rotayiHesapla = async (g) => {
+    setHata(null)
+    setRotaHesaplanan(g.id)
+    try {
+      const guncel = await rotaOlustur(g.id, oturumBitti)
+      const km = ((guncel.rotaMesafeMetre ?? 0) / 1000).toFixed(1)
+      const dk = Math.round((guncel.rotaSureSaniye ?? 0) / 60)
+      setBilgi(`"${g.ad}" rotası hesaplandı: ${km} km · ~${dk} dk sürüş.`)
+      await yukle()
+    } catch (err) {
+      // OSRM kapalı / rota bulunamadı mesajları buradan geliyor. Liste
+      // ekranda KALIYOR: kullanıcı hangi hatta ne olduğunu görmeye devam
+      // etmeli, hata yüzünden ekranı boşaltmak yardımcı olmaz.
+      if (err.message !== 'Oturum süresi doldu') setHata(err.message)
+    } finally {
+      setRotaHesaplanan(null)
+    }
+  }
+
+  // ------------------------------------------------------------------
+  //  Ödev 17 / Madde 2 — durak düzenleme
+  // ------------------------------------------------------------------
+
+  const duragiDuzenle = (durak) => setDurakFormu({
+    id: durak.id,
+    ad: durak.ad,
+    aciklama: durak.aciklama ?? '',
+    guzergahId: durak.guzergahId,
+  })
+
+  const durakFormunuKaydet = async (e) => {
+    e.preventDefault()
+    setDurakKaydediliyor(true)
+    setHata(null)
+
+    try {
+      // wkt GÖNDERİLMİYOR → konum değişmiyor.
+      //
+      // Konumu bu formdan düzenletmiyoruz çünkü koordinatı elle yazmak hem
+      // hataya açık hem de anlamsız: durağın yeri haritada seçilir. Burada
+      // yalnızca metin alanları var.
+      await durakGuncelle(durakFormu.id, {
+        ad: durakFormu.ad,
+        guzergahId: durakFormu.guzergahId,
+        aciklama: durakFormu.aciklama || null,
+      }, oturumBitti)
+
+      setBilgi(`"${durakFormu.ad}" durağı güncellendi.`)
+      setDurakFormu(null)
+      await yukle()
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') setHata(err.message)
+    } finally {
+      setDurakKaydediliyor(false)
     }
   }
 
@@ -402,10 +490,44 @@ export default function AdminGuzergah() {
                         {!g.isActive && <span className="pasif-rozet">Pasif</span>}
                         {g.kullaniciAdi && <> · <KullaniciIkonu /> {g.kullaniciAdi}</>}
                       </small>
+
+                      {/* Ödev 17: rotanın durumu — üç hâl, üçü farklı şey söylüyor.
+                          "yok" bilgi, "güncel değil" UYARI, özet ise sonuç. */}
+                      <small className="rota-durum">
+                        {!g.rotaWkt && g.durakSayisi >= 2 && (
+                          <span className="rota-rozet yok">rota yok</span>
+                        )}
+                        {g.rotaWkt && !g.rotaGuncel && (
+                          <span className="rota-rozet eski">rota güncel değil</span>
+                        )}
+                        {g.rotaWkt && g.rotaGuncel && (
+                          <span className="rota-rozet var">
+                            {((g.rotaMesafeMetre ?? 0) / 1000).toFixed(1)} km
+                            {' · ~'}{Math.round((g.rotaSureSaniye ?? 0) / 60)} dk sürüş
+                          </span>
+                        )}
+                      </small>
                     </span>
                   </button>
 
                   <span className="guzergah-eylem">
+                    {/* Ödev 17 / Madde 1 — "Rota Oluştur".
+
+                        2 duraktan az olan hatta KAPALI: rota için en az iki
+                        nokta gerekiyor ve sunucu zaten reddediyor. Düğmeyi
+                        açık bırakıp hata göstermektense, neden basılamadığını
+                        title ile söylemek daha az sürtünme. */}
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => rotayiHesapla(g)}
+                      disabled={g.durakSayisi < 2 || rotaHesaplanan === g.id}
+                      title={g.durakSayisi < 2
+                        ? 'Rota için en az 2 durak gerekli.'
+                        : 'Durakları izleyen sürüş rotasını OSRM ile hesapla'}
+                    >
+                      {rotaHesaplanan === g.id ? 'Hesaplanıyor…' : 'Rota Oluştur'}
+                    </button>
                     <button type="button" className="btn-ghost"
                             onClick={() => guzergahDuzenle(g)}>
                       Düzenle
@@ -505,12 +627,74 @@ export default function AdminGuzergah() {
                           >
                             ▼
                           </button>
+                          {/* Ödev 17 / Madde 2: duraklar da düzenlenebilmeli.
+                              Ödev 16'da PUT ucu vardı ama arayüzden
+                              erişilemiyordu; ad düzeltmek için durağı silip
+                              yeniden eklemek gerekiyordu ve bu sırayı bozuyordu. */}
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => duragiDuzenle(durak)}
+                            title="Durağı düzenle"
+                            aria-label={`${durak.ad} durağını düzenle`}
+                          >
+                            Düzenle
+                          </button>
                           <button type="button" className="btn-ghost sil"
                                   onClick={() => duragiSil(durak)}
                                   title="Durağı sil">
                             <SilIkonu />
                           </button>
                         </span>
+
+                        {/* Form SATIRIN İÇİNDE açılıyor: düzenlenen durağın
+                            hangi hattın kaçıncı durağı olduğu bağlamı
+                            kaybolmasın. Ayrı bir ekrana gitmek kullanıcıyı
+                            sıralamadan koparırdı. */}
+                        {durakFormu?.id === durak.id && (
+                          <form className="durak-form" onSubmit={durakFormunuKaydet}>
+                            <label>
+                              Durak adı
+                              <input
+                                type="text"
+                                value={durakFormu.ad}
+                                onChange={(e) => setDurakFormu({ ...durakFormu, ad: e.target.value })}
+                                maxLength={150}
+                                required
+                                autoFocus
+                              />
+                            </label>
+
+                            <label>
+                              Açıklama
+                              <input
+                                type="text"
+                                value={durakFormu.aciklama}
+                                onChange={(e) => setDurakFormu({ ...durakFormu, aciklama: e.target.value })}
+                                maxLength={500}
+                                placeholder="peron, aktarma bilgisi…"
+                              />
+                            </label>
+
+                            <div className="durak-form-eylem">
+                              <button type="submit" className="btn-primary" disabled={durakKaydediliyor}>
+                                {durakKaydediliyor ? 'Kaydediliyor…' : 'Kaydet'}
+                              </button>
+                              <button type="button" className="btn-ghost"
+                                      onClick={() => setDurakFormu(null)}>
+                                Vazgeç
+                              </button>
+                            </div>
+
+                            {/* Konum bilerek düzenlenmiyor: koordinatı elle
+                                yazmak hataya açık ve anlamsız — durağın yeri
+                                haritada seçilir. */}
+                            <p className="muted">
+                              Konum bu formdan değişmez; durağı taşımak için harita
+                              ekranını kullanın.
+                            </p>
+                          </form>
+                        )}
                       </li>
                     ))}
                   </ol>

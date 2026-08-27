@@ -10,7 +10,7 @@ import Draw from 'ol/interaction/Draw'
 import Modify from 'ol/interaction/Modify'
 import Snap from 'ol/interaction/Snap'
 import Overlay from 'ol/Overlay'
-import { Style, Circle, Fill, Stroke, Text } from 'ol/style'
+import { Style, Circle, Fill, Stroke, Text, RegularShape } from 'ol/style'
 import { fromLonLat, toLonLat } from 'ol/proj'
 import { defaults as varsayilanKontroller } from 'ol/control/defaults'
 import ScaleLine from 'ol/control/ScaleLine'
@@ -44,6 +44,9 @@ import {
 } from '../wms'
 // Ödev 14: ağırlıklı uygunluk ızgarasını haritaya çizen yardımcılar
 import { izgaraKaynagiOlustur, uygunlukKatmaniOlustur, uygunlukRengiCss } from '../isiIzgarasi'
+import {
+  cizgiUzunlugu, okSayisi, okOranlari, okAcisi, soluklastir, rotaOzeti,
+} from '../rotaOklari'
 // Ödev 15: kategoriye özgü POI simgeleri (çizim verisi sunucudan geliyor)
 import { ikonHaritasiKur, ikonBul, ikonSvg } from '../poiIkon'
 import { kendiYetkilerim, calismaAlanim, illeriGetir } from '../adminApi'
@@ -507,6 +510,13 @@ function durakStili() {
   })
 
   return (feature) => {
+    // Ödev 17: hattı kapatılmışsa durağı da çizme.
+    //
+    // Katmanı gizlemek YETMEZDİ: durak ve hat AYNI katmanda değil ama bütün
+    // hatlar aynı iki katmanı paylaşıyor. Tek tek gizlemenin yolu stilden
+    // null dönmek — OpenLayers'ta "bu feature çizilmesin" demenin yolu bu.
+    if (feature.get('gizli')) return null
+
     const renk = feature.get('renk') || '#7a7f87'
     stil.getImage().getFill().setColor(renk)
     stil.getText().setText(String(feature.get('sira') ?? ''))
@@ -522,10 +532,21 @@ function durakStili() {
 }
 
 /**
- * GÜZERGAH ÇİZGİSİ — durakları sırasıyla birleştiren hat.
+ * GÜZERGAH ÇİZGİSİ (Ödev 16 + Ödev 17).
  *
- * Çizgi VERİTABANINDA TUTULMUYOR, duraklardan türetiliyor (gerekçe:
- * Entities/Ulasim.cs). Bu stil de rengi özellikten okuyor.
+ * İKİ FARKLI ÇİZGİ, TEK STİL:
+ *
+ *   • OSRM ROTASI (Ödev 17) — yollara oturmuş gerçek sürüş güzergahı;
+ *     sunucudan `rotaWkt` olarak geliyor. DÜZ çiziliyor.
+ *
+ *   • DÜZ HAT (Ödev 16'nın davranışı) — durakları doğrudan birleştiren
+ *     çizgi. Yalnızca rota yoksa kullanılıyor ve KESİKLİ çiziliyor:
+ *     kullanıcı "bu kuş uçuşu, gerçek güzergah değil" bilgisini bakışta
+ *     almalı. Aynı görünümü verseydik, OSRM kapalıyken binaların içinden
+ *     geçen bir çizgi gerçek hat sanılırdı.
+ *
+ * ROTA GÜNCEL DEĞİLSE (durak değişti ama OSRM o an kapalıydı) çizgi SOLGUN
+ * gösteriliyor. Veriyi silmiyoruz ama doğruymuş gibi de göstermiyoruz.
  *
  * İki katmanlı: altta kalın beyaz bir taban, üstte hattın rengi. Beyaz
  * taban olmasaydı koyu bir uydu zemininde ya da yoğun OSM çizgileri
@@ -541,9 +562,61 @@ function guzergahStili() {
   })
 
   return (feature) => {
-    hat.getStroke().setColor(feature.get('renk') || '#2d7dd2')
-    return [taban, hat]
+    if (feature.get('gizli')) return null
+
+    const renk = feature.get('renk') || '#2d7dd2'
+    const rotaVar = Boolean(feature.get('rotaVar'))
+    const guncel = feature.get('rotaGuncel') !== false
+
+    hat.getStroke().setColor(guncel ? renk : soluklastir(renk))
+    taban.getStroke().setColor(guncel ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.45)')
+
+    // lineDash'i açıkça null'a çekmek ŞART: stil nesnesi bütün hatlar
+    // arasında PAYLAŞILIYOR, bir önceki feature'dan kalan desen aksi hâlde
+    // düz çizilmesi gereken hatlara da bulaşırdı.
+    hat.getStroke().setLineDash(rotaVar ? null : [10, 8])
+
+    // Ödev 17: "Rota yönü harita üzerinde ok işaretleri ile gösterilmelidir."
+    // Oklar yalnızca GERÇEK rotada gösteriliyor: düz kuş uçuşu çizgide
+    // "yön" göstermek, olmayan bir güzergah hakkında bilgi vermek olurdu.
+    const oklar = rotaVar
+      ? yonOklari(feature.getGeometry(), renk, guncel)
+      : []
+
+    return [taban, hat, ...oklar]
   }
+}
+
+/**
+ * YÖN OKLARI (Ödev 17 / Madde 1) — stil nesnelerine dönüştürme.
+ *
+ * Hesabın kendisi `rotaOklari.js`'te: kaç ok, nereye, hangi açıyla.
+ * Burası yalnızca o sonuçları OpenLayers stiline çeviriyor.
+ *
+ * Oklar ayrı FEATURE olarak eklenmiyor, çizgiyi çizen stilin İÇİNDE
+ * üretiliyor. Ayrı feature olsalardı kaynakta yüzlerce fazladan nesne
+ * dolaşır, tıklama testine karışır ve hat gizlendiğinde ayrıca gizlenmeleri
+ * gerekirdi.
+ */
+function yonOklari(cizgi, renk, guncel) {
+  if (!cizgi || typeof cizgi.getCoordinateAt !== 'function') return []
+
+  const uzunluk = cizgiUzunlugu(cizgi.getCoordinates())
+  if (uzunluk === 0) return []
+
+  const noktaAl = (oran) => cizgi.getCoordinateAt(oran)
+
+  return okOranlari(okSayisi(uzunluk)).map((oran) => new Style({
+    geometry: new PointGeom(noktaAl(oran)),
+    image: new RegularShape({
+      points: 3,
+      radius: 7,
+      rotation: okAcisi(noktaAl, oran),
+      rotateWithView: true,
+      fill: new Fill({ color: guncel ? renk : soluklastir(renk) }),
+      stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: 1.5 }),
+    }),
+  }))
 }
 
 /** Henüz kaydedilmemiş çizim: kesikli turuncu — "bu geçici" mesajını verir. */
@@ -905,6 +978,24 @@ export default function MapPage() {
   const [durakForm, setDurakForm] = useState(BOS_DURAK_FORMU)
   const [durakKaydediliyor, setDurakKaydediliyor] = useState(false)
   const [ulasimGorunur, setUlasimGorunur] = useState(true)
+
+  // Ödev 17: "Katman kontrolü gibi güzergahlar üzerinde de aç/kapat
+  // yapılabilsin."
+  //
+  // Kapalı olanları tutuyoruz, açık olanları DEĞİL. Sebep: yeni eklenen bir
+  // güzergah varsayılan olarak GÖRÜNÜR olmalı. Açıkları tutsaydık, sunucuya
+  // yeni giren her hat listede olmadığı için gizli başlar ve kullanıcı
+  // eklediği hattı haritada bulamazdı.
+  const [gizliGuzergahlar, setGizliGuzergahlar] = useState(() => new Set())
+
+  const guzergahGorunurluguDegistir = useCallback((id) => {
+    setGizliGuzergahlar((onceki) => {
+      const yeni = new Set(onceki)
+      if (yeni.has(id)) yeni.delete(id)
+      else yeni.add(id)
+      return yeni
+    })
+  }, [])
 
   // Ödev 13 / Madde 3: resmî tatil takvimi (backend'den, içinde bulunulan yıl).
   // { yil, tatiller: [{ tarih, ad, yarimGun }], diniBayramlarTanimli }
@@ -1467,6 +1558,7 @@ export default function MapPage() {
             feature.set('renk', guzergah.renk)     // stil rengi buradan okuyor
             feature.set('sira', durak.sira)        // simgenin içindeki numara
             feature.set('aktif', durak.isActive)
+            feature.set('guzergahId', guzergah.id)   // hat bazlı aç/kapat için
             feature.set('dto', durak)
             feature.set('tip', DURAK)              // popup hangi kartı çizecek
             durakKaynagi.addFeature(feature)
@@ -1474,10 +1566,30 @@ export default function MapPage() {
             koordinatlar.push(feature.getGeometry().getCoordinates())
           })
 
-          if (koordinatlar.length >= 2) {
-            const hat = new Feature({ geometry: new LineStringGeom(koordinatlar) })
+          // ---- Hattın çizgisi (Ödev 17) ----
+          //
+          // ÖNCELİK SIRASI:
+          //   1. OSRM rotası varsa O çiziliyor — yollara oturmuş gerçek
+          //      güzergah, yön oklarıyla birlikte.
+          //   2. Yoksa Ödev 16'daki düz çizgiye düşülüyor (kesikli çizilerek
+          //      "bu kuş uçuşu" mesajı veriliyor).
+          //
+          // Düz çizgiyi tamamen kaldırmadık: OSRM kurulmamış bir makinede
+          // harita hattı hiç göstermezdi ve modül çalışmıyor gibi görünürdü.
+          const rotaCizgisi = guzergah.rotaWkt
+            ? wktToFeature(guzergah.rotaWkt).getGeometry()
+            : null
+
+          const hatGeom = rotaCizgisi
+            ?? (koordinatlar.length >= 2 ? new LineStringGeom(koordinatlar) : null)
+
+          if (hatGeom) {
+            const hat = new Feature({ geometry: hatGeom })
             hat.setId(`guzergah-${guzergah.id}`)
             hat.set('renk', guzergah.renk)
+            hat.set('guzergahId', guzergah.id)          // hat bazlı aç/kapat için
+            hat.set('rotaVar', Boolean(rotaCizgisi))    // düz mü, gerçek rota mı
+            hat.set('rotaGuncel', guzergah.rotaGuncel !== false)
             guzergahKaynagi.addFeature(hat)
           }
         })
@@ -1936,6 +2048,26 @@ export default function MapPage() {
       }
     })
   }, [ulasimGorunur, haritaHazir])
+
+  // Ödev 17: HAT BAZLI aç/kapat — "katman kontrolü gibi güzergahlar üzerinde
+  // de aç/kapat yapılabilsin."
+  //
+  // Katman gizlemekle yapılamıyor: bütün hatlar aynı iki katmanı (durak +
+  // çizgi) paylaşıyor. Bunun yerine her feature'a `gizli` özelliği yazılıyor
+  // ve stil fonksiyonu o özelliği görünce null dönüyor.
+  //
+  // feature.set(...) OpenLayers'ta kendiliğinden yeniden çizim tetikliyor;
+  // ayrıca render çağırmaya gerek yok.
+  useEffect(() => {
+    if (!haritaHazir) return
+
+    const uygula = (kaynak) => kaynak?.getFeatures().forEach((f) => {
+      f.set('gizli', gizliGuzergahlar.has(f.get('guzergahId')))
+    })
+
+    uygula(durakKaynagiRef.current)
+    uygula(guzergahKaynagiRef.current)
+  }, [gizliGuzergahlar, haritaHazir, guzergahlar])
 
   // Vektör katmanının stili: WMS çiziyorsa görünmez tıklama hedefi, çizmiyorsa
   // Ödev 12'nin mor halkası (gerekçe: poiVurusStili).
@@ -4684,20 +4816,55 @@ export default function MapPage() {
                 </span>
               </label>
 
+              {/* Ödev 17: "Katman kontrolü gibi güzergahlar üzerinde de
+                  aç/kapat yapılabilsin."
+
+                  Her hat kendi onay kutusu. Lejant zaten buradaydı; onu
+                  tıklanabilir yapmak, ayrı bir "hat filtresi" bölümü açmaktan
+                  daha az yer kaplıyor ve renk/ad/sayı bağlamı yanında
+                  duruyor. */}
               <ul className="guzergah-lejant">
-                {guzergahlar.map((g) => (
-                  <li key={g.id} className={g.isActive ? '' : 'pasif'}>
-                    <span className="guzergah-cizgi" style={{ background: g.renk }} />
-                    <span className="guzergah-ad">{g.ad}</span>
-                    <span className="sayi">{g.durakSayisi}</span>
-                  </li>
-                ))}
+                {guzergahlar.map((g) => {
+                  const gorunur = !gizliGuzergahlar.has(g.id)
+                  return (
+                    <li key={g.id} className={`${g.isActive ? '' : 'pasif'}${gorunur ? '' : ' gizli'}`}>
+                      <label className="guzergah-anahtar">
+                        <input
+                          type="checkbox"
+                          checked={gorunur}
+                          onChange={() => guzergahGorunurluguDegistir(g.id)}
+                          aria-label={`${g.ad} hattını haritada göster`}
+                        />
+                        <span className="guzergah-cizgi" style={{ background: g.renk }} />
+                        <span className="guzergah-ad">{g.ad}</span>
+                        <span className="sayi">{g.durakSayisi}</span>
+                      </label>
+
+                      {/* Rota durumu — üç hâl, üçü de farklı bir şey söylüyor. */}
+                      {g.rotaWkt && g.rotaGuncel && (
+                        <small className="guzergah-rota">
+                          {rotaOzeti(g)}
+                        </small>
+                      )}
+                      {g.rotaWkt && !g.rotaGuncel && (
+                        <small className="guzergah-rota eski" title="Duraklar değişti ama rota yenilenemedi.">
+                          rota güncel değil
+                        </small>
+                      )}
+                      {!g.rotaWkt && g.durakSayisi >= 2 && (
+                        <small className="guzergah-rota yok" title="Hat kuş uçuşu çiziliyor.">
+                          rota yok
+                        </small>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
 
               <p className="tool-hint muted">
-                Hattin çizgisi <strong>veritabanında tutulmuyor</strong>: durakların
-                sırasından üretiliyor. Sıra değişince çizgi de değişiyor, ikisi
-                asla ayrışamıyor.
+                Kesikli çizgi <strong>kuş uçuşu</strong> demek: o hat için OSRM
+                rotası henüz üretilmemiş. Düz çizgi ve <strong>yön okları</strong>,
+                yollara oturmuş gerçek güzergahı gösteriyor.
               </p>
             </section>
           )}

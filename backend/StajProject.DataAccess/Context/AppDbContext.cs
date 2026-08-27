@@ -596,6 +596,26 @@ public class AppDbContext : DbContext
                   .HasForeignKey(e => e.UserId)
                   .OnDelete(DeleteBehavior.SetNull);
 
+            // ---------- Ödev 17 / Madde 1: OSRM rotası ----------
+
+            // LineString, Point DEĞİL: hat bir çizgi. Tipi şemada sabitlemek,
+            // yanlışlıkla başka bir geometri yazılmasını veritabanı düzeyinde
+            // imkânsız kılıyor (diğer geometri tablolarındaki kuralın aynısı).
+            entity.Property(e => e.Rota)
+                  .HasColumnName("rota")
+                  .HasColumnType("geometry(LineString, 4326)");
+
+            entity.Property(e => e.RotaMesafeMetre).HasColumnName("rota_mesafe_metre");
+            entity.Property(e => e.RotaSureSaniye).HasColumnName("rota_sure_saniye");
+            entity.Property(e => e.RotaHesaplandi).HasColumnName("rota_hesaplandi");
+
+            // İmza SHA-256 hex özeti — sabit 64 karakter.
+            entity.Property(e => e.RotaImza).HasColumnName("rota_imza").HasMaxLength(64);
+
+            // Mekânsal index: "bu alandan geçen hatlar" sorgusu ileride
+            // gerekirse hazır olsun; duraklardaki gist index'iyle aynı gerekçe.
+            entity.HasIndex(e => e.Rota).HasMethod("gist");
+
             entity.HasQueryFilter(e => !e.IsDeleted);
         });
 

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using StajProject.DataAccess.Context;
 using StajProject.DataAccess.GeoServer;
+using StajProject.DataAccess.Osrm;
 using StajProject.DataAccess.Repositories;
 using StajProject.Entities;
 
@@ -71,6 +72,7 @@ public static class DataAccessRegistration
 
         // Ödev 8: GeoServer bağlantısı ve okuma yolunun seçimi
         AddGeoServer(services, configuration);
+        AddOsrm(services, configuration);
 
         return services;   // zincirlenebilsin diye
     }
@@ -85,6 +87,23 @@ public static class DataAccessRegistration
     /// "Bağımlılık tersine çevirme" (dependency inversion) ilkesinin somut
     /// faydası tam olarak bu.
     /// </summary>
+    /// <summary>
+    /// OSRM yönlendirme motoru (Ödev 17 / Madde 1).
+    ///
+    /// GeoServer kaydıyla aynı desen: ayarlar tekil, istemci typed client.
+    /// Enabled KAPALI olsa bile kaydediliyor — durum ekranı "OSRM bağlı mı?"
+    /// sorusunu soruyor ve kayıt olmasaydı servis çözümlenemez, uygulama
+    /// açılışta patlardı.
+    /// </summary>
+    private static void AddOsrm(IServiceCollection services, IConfiguration configuration)
+    {
+        var ayarlar = configuration.GetSection("Osrm").Get<OsrmSettings>()
+                      ?? new OsrmSettings();
+
+        services.AddSingleton(ayarlar);
+        services.AddHttpClient<IOsrmClient, OsrmClient>();
+    }
+
     private static void AddGeoServer(IServiceCollection services, IConfiguration configuration)
     {
         // Ayarlar okunmazsa (bölüm hiç yoksa) sınıfın kendi varsayılanları geçerli:

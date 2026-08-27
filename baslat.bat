@@ -33,6 +33,33 @@ if errorlevel 1 (
     echo.
 )
 
+REM ---- Odev 17: OSRM ayakta mi? -----------------------------------------
+REM Rota hesabi OSRM'e gidiyor. KAPALI OLMASI HATA DEGIL: hatlar Odev 16'daki
+REM duz cizgi haline doner ve uygulama eksiksiz calisir. Bu yuzden asagidaki
+REM adim basarisiz olursa akis DURMUYOR, sadece uyariyor.
+REM
+REM Veri hazirlanmamissa (osrm\veri\harita.osrm yok) konteyneri hic
+REM baslatmiyoruz: veri olmadan acilan OSRM porta cevap verir ama her istege
+REM hata doner - "calisiyor" gibi gorunen bozuk bir servis, hic calismayandan
+REM daha kafa karistiricidir.
+if not exist "%~dp0osrm\veri\harita.osrm" (
+    echo  OSRM verisi hazir degil - rota ozelligi kapali.
+    echo    Hazirlamak icin: powershell -ExecutionPolicy Bypass -File osrm\osrm-kur.ps1
+    echo.
+) else (
+    powershell -NoProfile -Command "try { $null = Invoke-WebRequest -Uri 'http://localhost:5001/nearest/v1/driving/32.8597,39.9334' -UseBasicParsing -TimeoutSec 3; exit 0 } catch { exit 1 }"
+    if errorlevel 1 (
+        echo  OSRM calismiyor - baslatiliyor...
+        pushd "%~dp0osrm"
+        docker compose up -d
+        popd
+        echo.
+    ) else (
+        echo  OSRM calisiyor: http://localhost:5001
+        echo.
+    )
+)
+
 REM %~dp0 = bu .bat dosyasinin bulundugu klasor (sonunda ters bolu var)
 start "StajProject - BACKEND (kapatmayin)" cmd /k "cd /d "%~dp0backend" && dotnet run --project StajProject.API --urls http://localhost:5000"
 
@@ -47,6 +74,7 @@ echo.
 echo   Backend   : http://localhost:5000/swagger
 echo   Frontend  : http://localhost:5173
 echo   GeoServer : http://localhost:8080/geoserver   (admin / geoserver)
+echo   OSRM      : http://localhost:5001                (rota motoru)
 echo.
 echo   Giris    : admin / staj123   veya   ayse / staj123
 echo.

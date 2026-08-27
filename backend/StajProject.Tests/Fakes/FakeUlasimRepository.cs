@@ -1,3 +1,4 @@
+using NetTopologySuite.Geometries;
 using StajProject.DataAccess.Repositories;
 using StajProject.Entities;
 
@@ -25,6 +26,35 @@ public class FakeUlasimRepository : IUlasimRepository
 
     private IEnumerable<Guzergah> YasayanGuzergahlar
         => _db.Guzergahlar.Where(g => !g.IsDeleted);
+
+    /// <summary>
+    /// Ödev 17 — rota kolonlarını yazar.
+    ///
+    /// Gerçek depoda olduğu gibi zaman damgası yalnızca BAŞARILI hesapta
+    /// yazılıyor: "rota null ama hesaplandı 14:32" tutarsız bir satır olurdu
+    /// ve testler bu tutarlılığı da sınıyor.
+    /// </summary>
+    public Task<bool> RotaYazAsync(
+        int guzergahId,
+        LineString? rota,
+        double? mesafeMetre,
+        double? sureSaniye,
+        string? imza)
+    {
+        var guzergah = YasayanGuzergahlar.FirstOrDefault(g => g.Id == guzergahId);
+        if (guzergah is null)
+        {
+            return Task.FromResult(false);
+        }
+
+        guzergah.Rota = rota;
+        guzergah.RotaMesafeMetre = mesafeMetre;
+        guzergah.RotaSureSaniye = sureSaniye;
+        guzergah.RotaImza = imza;
+        guzergah.RotaHesaplandi = rota is null ? null : DateTime.UtcNow;
+
+        return Task.FromResult(true);
+    }
 
     private bool GuzergahYasiyorMu(Durak durak)
         => _db.Guzergahlar.FirstOrDefault(g => g.Id == durak.GuzergahId) is not { IsDeleted: true };

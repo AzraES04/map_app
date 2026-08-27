@@ -1,9 +1,13 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using NetTopologySuite.Geometries;
 using StajProject.Business.Auth;
 using StajProject.Business.DTOs;
 using StajProject.Business.Geo;
 using StajProject.Business.Validation;
+using StajProject.DataAccess.Osrm;
 using StajProject.DataAccess.Repositories;
 using StajProject.Entities;
 
@@ -26,16 +30,25 @@ public class UlasimService : IUlasimService
     private readonly IPermissionService _permissionService;
     private readonly IGeoPermissionService _geoPermission;
 
+    /// <summary>
+    /// Rota motoru (Ödev 17). Arayüz üzerinden alınıyor: servis "rotayı kim
+    /// hesaplıyor" bilmiyor, yalnızca sözleşmeyi tanıyor. Testler bunun
+    /// yerine sahte bir istemci geçirerek OSRM olmadan çalışabiliyor.
+    /// </summary>
+    private readonly IOsrmClient _osrm;
+
     public UlasimService(
         IUlasimRepository repository,
         ICurrentUserService currentUser,
         IPermissionService permissionService,
-        IGeoPermissionService geoPermission)
+        IGeoPermissionService geoPermission,
+        IOsrmClient osrm)
     {
         _repository = repository;
         _currentUser = currentUser;
         _permissionService = permissionService;
         _geoPermission = geoPermission;
+        _osrm = osrm;
     }
 
     // ======================================================================
@@ -168,6 +181,12 @@ public class UlasimService : IUlasimService
         // Araya eklenmiş olabilir (Sira elle verildiyse) → sırayı sıkıştır.
         await SiralariDuzeltAsync(dto.GuzergahId);
 
+        // Ödev 17: yeni durak hattın şeklini değiştirdi → rota yenilensin.
+        // Sıkıştırmadan SONRA çağrılıyor: imza sıraya bakıyor ve henüz
+        // sıkıştırılmamış numaralarla üretilen imza, bir sonraki okumada
+        // tutmaz ve rota durduk yere "eskimiş" görünürdü.
+        await RotayiTazeleAsync(dto.GuzergahId);
+
         return (await DurakGetirAsync(olusan.Id))!;
     }
 
@@ -220,6 +239,19 @@ public class UlasimService : IUlasimService
             await SiralariDuzeltAsync(eskiGuzergah);
         }
 
+        // Ödev 17: İKİ hattın da rotası etkilenmiş olabilir — durak birinden
+        // çıkıp diğerine girdi. Yalnızca yeni güzergahı yenileseydik, eski
+        // hattın rotası artık ona ait olmayan bir duraktan geçmeye devam
+        // ederdi.
+        //
+        // Durağın yalnızca adı değiştiyse imza aynı kalıyor ve bu çağrı
+        // OSRM'e hiç gitmiyor (bkz. RotayiTazeleAsync).
+        await RotayiTazeleAsync(dto.GuzergahId);
+        if (dto.GuzergahId != eskiGuzergah)
+        {
+            await RotayiTazeleAsync(eskiGuzergah);
+        }
+
         return guncel is null ? null : (await DurakGetirAsync(id));
     }
 
@@ -241,6 +273,12 @@ public class UlasimService : IUlasimService
             // Boşluk bırakmak zararsız görünüyor ama arayüzde "3. durak"
             // yazan sayı ile listedeki konum ayrışırdı.
             await SiralariDuzeltAsync(mevcut.GuzergahId);
+
+            // Ödev 17: durak gitti, hat kısaldı → rota yenilensin.
+            // İki durağın altına düşüldüyse RotayiTazeleAsync rotayı
+            // TEMİZLİYOR; aksi hâlde haritada artık var olmayan bir durağa
+            // giden hat asılı kalırdı.
+            await RotayiTazeleAsync(mevcut.GuzergahId);
         }
 
         return silindi;
@@ -284,7 +322,196 @@ public class UlasimService : IUlasimService
 
         await _repository.SiralariYazAsync(guzergahId, gelen);
 
+        // ÖDEV 17'NİN AÇIKÇA İSTEDİĞİ DAVRANIŞ:
+        // "Güzergah üzerindeki durak sırası değiştiğinde OSRM'e yeni istek
+        //  atılarak rota otomatik güncellenmelidir."
+        //
+        // Kullanıcının ayrıca "Rota Oluştur"a basması gerekmiyor. Basmak
+        // zorunda kalsaydı, sürükle-bırak sonrası haritadaki hat ile durak
+        // listesi ayrışmış hâlde kalır ve bunu fark etmek kullanıcıya
+        // kalırdı.
+        await RotayiTazeleAsync(guzergahId);
+
         return await GuzergahGetirAsync(guzergahId);
+    }
+
+
+    // ======================================================================
+    //  Ödev 17 / Madde 1 — OSRM ROTASI
+    // ======================================================================
+
+    /// <summary>
+    /// Güzergahın rotasını OSRM'den hesaplatıp veritabanına yazar
+    /// ("Rota Oluştur" düğmesi).
+    ///
+    /// Elle çağrılan yol BU. Otomatik yenileme aynı işi
+    /// <see cref="RotayiTazeleAsync"/> üzerinden yapıyor; aradaki tek fark
+    /// hataların nasıl bildirildiği:
+    ///
+    ///   • Burada kullanıcı düğmeye BASTI — "olmadı" cevabını ve sebebini
+    ///     görmeyi hak ediyor, o yüzden iş kuralı hatası fırlatılıyor.
+    ///   • Otomatik yolda kullanıcı başka bir iş yapıyordu (durak taşıdı);
+    ///     OSRM'in kapalı olması o işi engellememeli, o yüzden sessizce
+    ///     geçiliyor.
+    ///
+    /// "Güzergah Yönetimi" yetkisi ister: rota hattın kalıcı bir özelliği ve
+    /// hesaplatmak dış bir servise yük bindiriyor.
+    /// </summary>
+    public async Task<GuzergahDto?> RotaHesaplaAsync(int guzergahId)
+    {
+        // Yetki denetimi CONTROLLER'da: [YetkiGerekli(Yetkiler.GuzergahYonetimi)].
+        // GuzergahEkle/Guncelle/Sil de aynı deseni izliyor — servis, yetkiyi
+        // ikinci kez sormuyor.
+        var guzergah = await _repository.GuzergahGetirAsync(guzergahId);
+        if (guzergah is null)
+        {
+            return null;
+        }
+
+        if (!_osrm.Etkin)
+        {
+            throw new IsKuraliException(
+                "Rota servisi (OSRM) kapalı. appsettings.json → Osrm:Enabled ayarına bakın.");
+        }
+
+        var duraklar = SiraliDuraklar(guzergah);
+
+        if (duraklar.Count < 2)
+        {
+            throw new IsKuraliException(
+                "Rota için en az 2 durak gerekli. Bu güzergahta " +
+                $"{duraklar.Count} durak var.");
+        }
+
+        var sonuc = await _osrm.RotaHesaplaAsync(
+            duraklar.Select(d => d.Geom.Coordinate).ToList());
+
+        if (sonuc is null)
+        {
+            // Rota yazılMIYOR: eldeki eski rota duruyor.
+            //
+            // Neden temizlemiyoruz? Kullanıcı "yeniden hesapla" dedi ve
+            // olmadı. Eski rotayı silmek, elimizdeki en iyi bilgiyi bir
+            // başarısızlık yüzünden yok etmek olurdu; harita da o an
+            // boşalırdı. Eski rota duruyor, imza uyuşmuyorsa arayüz zaten
+            // "güncel değil" diyor.
+            throw new IsKuraliException(
+                "OSRM rota hesaplayamadı. Servis çalışıyor mu ve durakların "
+                + "bulunduğu bölge yüklü veri kapsamında mı, kontrol edin.");
+        }
+
+        await _repository.RotaYazAsync(
+            guzergahId,
+            sonuc.Cizgi,
+            sonuc.MesafeMetre,
+            sonuc.SureSaniye,
+            RotaImzasiUret(duraklar));
+
+        return await GuzergahGetirAsync(guzergahId);
+    }
+
+    /// <summary>
+    /// Rotayı SESSİZCE yeniler — durak ekleme/güncelleme/silme ve sıralama
+    /// değişikliklerinin ardından çağrılıyor (Ödev 17: "durak sırası
+    /// değiştiğinde OSRM'e yeni istek atılarak rota otomatik güncellenmelidir").
+    ///
+    /// ---- NEDEN HATA FIRLATMIYOR? ----
+    ///
+    /// Kullanıcının yaptığı iş "durağı yukarı taşımak"tı. O iş
+    /// VERİTABANINDA ZATEN BİTTİ. Şimdi OSRM'e ulaşılamıyor diye istisna
+    /// fırlatırsak kullanıcı "sıralama kaydedilemedi" hatası görür — oysa
+    /// kaydedildi. Dış bir servisin arızasını, kullanıcının kendi verisini
+    /// kaybettiğine inandırmaya çeviremeyiz.
+    ///
+    /// Sessiz geçmenin bedeli: veritabanında güncelliğini yitirmiş bir rota
+    /// kalabilir. Bu bedel <see cref="Guzergah.RotaImza"/> ile ödeniyor —
+    /// imza eski dizilimi gösterdiği için arayüz durumu fark ediyor ve
+    /// "rota güncel değil" diyor.
+    ///
+    /// ---- GEREKSİZ İSTEK ATMIYOR ----
+    ///
+    /// İmza değişmediyse OSRM'e hiç gidilmiyor. Örneğin yalnızca durağın ADI
+    /// düzeltildiğinde geometri ve sıra aynı kalıyor; rota da aynı olacaktı.
+    /// </summary>
+    private async Task RotayiTazeleAsync(int guzergahId)
+    {
+        if (!_osrm.Etkin)
+        {
+            return;
+        }
+
+        var guzergah = await _repository.GuzergahGetirAsync(guzergahId);
+        if (guzergah is null)
+        {
+            return;
+        }
+
+        var duraklar = SiraliDuraklar(guzergah);
+
+        // 2'nin altına düşüldüyse rota artık anlamsız: temizliyoruz.
+        // Bırakırsak haritada, artık var olmayan duraklara giden bir hat
+        // çizili kalırdı.
+        if (duraklar.Count < 2)
+        {
+            if (guzergah.Rota is not null)
+            {
+                await _repository.RotaYazAsync(guzergahId, null, null, null, null);
+            }
+            return;
+        }
+
+        var imza = RotaImzasiUret(duraklar);
+        if (guzergah.Rota is not null && guzergah.RotaImza == imza)
+        {
+            return;   // dizilim değişmemiş, rota zaten güncel
+        }
+
+        var sonuc = await _osrm.RotaHesaplaAsync(
+            duraklar.Select(d => d.Geom.Coordinate).ToList());
+
+        if (sonuc is null)
+        {
+            return;   // eski rota yerinde kalıyor, imza uyuşmadığı için "eski" görünecek
+        }
+
+        await _repository.RotaYazAsync(
+            guzergahId, sonuc.Cizgi, sonuc.MesafeMetre, sonuc.SureSaniye, imza);
+    }
+
+    /// <summary>Güzergahın duraklarını sırasıyla verir.</summary>
+    private static List<Durak> SiraliDuraklar(Guzergah guzergah)
+        => guzergah.Duraklar.OrderBy(d => d.Sira).ThenBy(d => d.Id).ToList();
+
+    /// <summary>
+    /// Durak diziliminin parmak izi — rotanın güncelliğini anlamanın yolu.
+    ///
+    /// İÇERİK: her durağın id'si ve koordinatı, SIRAYLA.
+    ///   • Sıra değişirse metin değişir (id'lerin dizilişi farklı).
+    ///   • Durak taşınırsa değişir (koordinat farklı).
+    ///   • Durak eklenir/silinirse değişir (uzunluk farklı).
+    ///   • Durağın ADI değişirse DEĞİŞMEZ — rota da değişmeyeceği için
+    ///     boşuna OSRM isteği atılmıyor.
+    ///
+    /// Koordinatlar 6 basamağa yuvarlanıyor (≈11 cm). Ham double yazsaydık
+    /// aynı noktanın farklı yuvarlama artıklarıyla okunması imzayı
+    /// değiştirebilir ve rota durduk yere "eskimiş" görünürdü.
+    ///
+    /// InvariantCulture ZORUNLU: Türkçe kültürde ondalık ayırıcı virgül olur
+    /// ve aynı dizilim, makinenin diline göre farklı imza üretirdi.
+    ///
+    /// Neden düz metin değil de SHA-256? 100 duraklı bir hatta düz metin
+    /// birkaç KB tutar; kolon sabit 64 karakter olsun diye özetliyoruz.
+    /// Kriptografik bir amaç yok — çakışma olasılığı zaten yok denecek kadar
+    /// küçük ve sonucu yalnızca "rota eski mi?" uyarısı.
+    /// </summary>
+    internal static string RotaImzasiUret(IReadOnlyList<Durak> siraliDuraklar)
+    {
+        var metin = string.Join('|', siraliDuraklar.Select(d => string.Create(
+            CultureInfo.InvariantCulture,
+            $"{d.Id}:{d.Geom.X:F6},{d.Geom.Y:F6}")));
+
+        var ozet = SHA256.HashData(Encoding.UTF8.GetBytes(metin));
+        return Convert.ToHexString(ozet).ToLowerInvariant();
     }
 
     // ======================================================================
@@ -430,6 +657,21 @@ public class UlasimService : IUlasimService
             .OrderBy(d => d.Sira)
             .Select(d => DtoyaCevir(d, guzergah))
             .ToList(),
+
+        // ---------- Ödev 17: rota ----------
+        RotaWkt = guzergah.Rota is null ? null : WktConverter.Write(guzergah.Rota),
+        RotaMesafeMetre = guzergah.RotaMesafeMetre,
+        RotaSureSaniye = guzergah.RotaSureSaniye,
+        RotaHesaplandi = guzergah.RotaHesaplandi,
+
+        // Rota, MEVCUT durak dizilimi için mi hesaplanmış?
+        //
+        // Rota yoksa "güncel" diyoruz (false değil): ortada eskimiş bir şey
+        // yok, sadece hiç hesaplanmamış. Arayüz o durumu zaten RotaWkt'nin
+        // boş olmasından anlıyor; burada false dönseydi "rota güncel değil"
+        // uyarısı hiç rota olmayan hatlarda da çıkardı.
+        RotaGuncel = guzergah.Rota is null
+            || guzergah.RotaImza == RotaImzasiUret(SiraliDuraklar(guzergah)),
     };
 
     /// <summary>

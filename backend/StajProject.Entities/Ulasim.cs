@@ -32,16 +32,31 @@ namespace StajProject.Entities;
 /// <summary>
 /// Bir ulaşım hattı (Ödev 16 / Madde 1).
 ///
-/// Güzergahın kendi geometrisi YOK: hattın çizgisi, duraklarının
-/// <see cref="Durak.Sira"/> sırasına göre birleştirilmesiyle çıkıyor.
+/// ---- ÖDEV 17: HATTIN ÇİZGİSİ ARTIK SAKLANIYOR ----
 ///
-/// NEDEN AYRI BİR LineString KOLONU TUTULMUYOR?
-/// Tutsaydık iki kaynak olurdu: durak listesi ve çizgi. Sürükle-bırakla sıra
-/// değiştiğinde ya da bir durak taşındığında ikisi birbirinden kayabilirdi ve
-/// haritada "duraklar burada ama çizgi şurada" gibi bir çelişki doğardı.
-/// Çizgi TÜRETİLMİŞ bir değer olduğu için tek doğru yeri hesaplandığı an.
-/// (Aynı ilke Ödev 10'da bölge sınırları için de uygulandı: bölge, illerinin
-/// birleşimidir, ayrı bir geometri değil.)
+/// Ödev 16'da bu sınıfın geometrisi YOKTU ve gerekçesi şuydu: çizgi
+/// duraklardan TÜRETİLEBİLİR bir değer, saklamak ikinci bir doğruluk kaynağı
+/// yaratır ve ikisi birbirinden kayabilirdi.
+///
+/// Ödev 17 o gerekçenin dayanağını ortadan kaldırdı. Artık çizgi durakları
+/// düz birleştirmiyor; OSRM'in OpenStreetMap yol ağı üzerinden hesapladığı
+/// GERÇEK sürüş rotası. Bu değer:
+///   • duraklardan tek başına türetilemiyor (dış bir servis gerekiyor),
+///   • hesaplanması saniyeler sürüyor ve ağ isteği gerektiriyor,
+///   • OSRM kapalıyken hiç üretilemiyor.
+/// Yani artık "türetilmiş" değil, ÜRETİLMİŞ bir veri. Her harita açılışında
+/// yeniden hesaplatmak, dış bir servisi uygulamanın açılış yoluna sokmak
+/// olurdu. Ödev metni de zaten saklanmasını istiyor.
+///
+/// Peki Ödev 16'daki asıl endişe — çizgi ile durakların ayrışması — ne oldu?
+/// Ortadan kalkmadı, YÖNETİLİYOR:
+///   1. Durak eklendiğinde, taşındığında, silindiğinde ve sıra
+///      değiştiğinde rota kendiliğinden yeniden hesaplanıyor.
+///   2. Buna rağmen ayrışma mümkün (OSRM o an kapalıysa). Bu yüzden
+///      <see cref="RotaImza"/> kolonu, rotanın HANGİ durak dizilimi için
+///      hesaplandığını yazıyor. İmza tutmuyorsa arayüz "rota güncel değil"
+///      diyor ve düz çizgiye düşüyor — sessizce yanlış bir hat çizmiyor.
+/// Yani ayrışma gizlenmiyor, GÖRÜNÜR kılınıyor.
 /// </summary>
 public class Guzergah : IAuditableEntity
 {
@@ -67,6 +82,48 @@ public class Guzergah : IAuditableEntity
     /// <c>OrderBy(d =&gt; d.Sira)</c> ile okuyor.
     /// </summary>
     public ICollection<Durak> Duraklar { get; set; } = new List<Durak>();
+
+    // ---------- Ödev 17 / Madde 1: OSRM rotası ----------
+
+    /// <summary>
+    /// OSRM'in hesapladığı, yollara oturmuş hat çizgisi (EPSG:4326).
+    ///
+    /// Null ise rota henüz hesaplanmadı ya da hesaplanamadı; arayüz o zaman
+    /// Ödev 16'daki düz çizgiye düşüyor.
+    /// </summary>
+    public LineString? Rota { get; set; }
+
+    /// <summary>Rotanın toplam sürüş mesafesi (metre). OSRM'den geliyor.</summary>
+    public double? RotaMesafeMetre { get; set; }
+
+    /// <summary>
+    /// Tahmini SÜRÜŞ süresi (saniye) — sefer süresi DEĞİL.
+    /// Duraklarda bekleme ve trafik hesaba katılmıyor; arayüz de bunu
+    /// "sürüş süresi" diye yazıyor ki yanlış okunmasın.
+    /// </summary>
+    public double? RotaSureSaniye { get; set; }
+
+    /// <summary>Rotanın en son ne zaman hesaplandığı (UTC).</summary>
+    public DateTime? RotaHesaplandi { get; set; }
+
+    /// <summary>
+    /// Rotanın HANGİ durak dizilimi için hesaplandığının parmak izi.
+    ///
+    /// İçeriği: durakların sırasıyla id'leri ve koordinatları
+    /// (bkz. <c>UlasimService.RotaImzasiUret</c>).
+    ///
+    /// NEDEN GEREKLİ? Rota, durak değişikliklerinde otomatik yenileniyor —
+    /// ama OSRM o an kapalıysa yenilenemiyor ve veritabanında ESKİ rota
+    /// kalıyor. İmza olmasaydı arayüz bunu anlayamaz, güncelliğini yitirmiş
+    /// bir hattı doğruymuş gibi çizerdi. Şimdi imza tutmuyorsa "rota güncel
+    /// değil" uyarısı çıkıyor.
+    ///
+    /// Neden sadece "durak sayısı" ya da "son değişiklik tarihi" yetmedi?
+    /// Sayı, iki durağın YER DEĞİŞTİRMESİNİ görmez; tarih ise durak
+    /// tablosundaki her dokunuşta değişir ve rotayı gereksiz yere eskimiş
+    /// gösterirdi (örn. yalnızca durak adı düzeltildiğinde).
+    /// </summary>
+    public string? RotaImza { get; set; }
 
     /// <summary>
     /// Güzergahı tanımlayan kullanıcı. Nullable ve SetNull: hat ortak veridir,

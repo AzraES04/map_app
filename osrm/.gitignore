@@ -1,0 +1,7 @@
+# Hazirlanmis OSRM verisi surumlenmiyor.
+#
+# Neden? Turkiye icin birkac GB tutuyor ve TURETILMIS bir cikti: kaynak
+# OpenStreetMap, uretim tarifi osrm-kur.ps1. Depoya koymak, her klonda
+# gigabaytlarca veriyi tasimak ve OSM guncellendikce eskiyen bir kopyayi
+# surumlemek olurdu.
+veri/
