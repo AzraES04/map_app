@@ -19,5 +19,15 @@
   },
   "GeoServer": {
     "Password": "geoserver"
+  },
+
+  "//Swagger": [
+    "Swagger ÜRETİMDE KAPALIDIR (Program.cs). Anahtar hiç yazılmazsa yalnızca",
+    "geliştirmede açılır; yani unutmak kapalı bırakmak demektir. Üretimde bilerek",
+    "açmak ya da geliştirmede kapatmak için aşağıdaki bloğu kullanın.",
+    "Ortam değişkeni karşılığı: Swagger__Enabled=true"
+  ],
+  "Swagger": {
+    "Enabled": true
   }
 }

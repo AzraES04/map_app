@@ -169,8 +169,34 @@ await app.Services.SeedDatabaseAsync();
 // Hata yakalayıcı EN BAŞTA: altındaki tüm katmanların hatalarını sarabilmesi için.
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-app.UseSwagger();
-app.UseSwaggerUI();
+// ---- Swagger: ÜRETİMDE KAPALI ----
+//
+// Burası önceden koşulsuzdu. Sorun şu: Swagger yalnızca bir "deneme ekranı"
+// değil, API'nin TAM HARİTASI. Açık bırakılırsa /swagger/v1/swagger.json'ı
+// çeken herkes tüm uçları, yöntemleri, DTO alanlarını ve kodda yazdığımız
+// /// <summary> açıklamalarını ("kendi hesabını pasife alamaz", "hard delete"
+// gibi iç notlar dahil) kimlik doğrulamasız okur. Saklamak güvenlik değildir,
+// ama saldırgana hazır kroki vermek de gereksizdir.
+//
+// Neden "Swagger:Enabled" anahtarı da var, sadece IsDevelopment() yetmedi mi?
+// Bu proje jüri önünde ve bazen Production ortamıyla çalıştırılarak
+// gösterilecek; Swagger'ı orada da açabilmek gerekiyor. Çözüm: kararı
+// yapılandırmaya taşımak ama VARSAYILANI güvenli tutmak. Anahtar hiç
+// yazılmazsa (?? ile) yalnızca geliştirmede açılır — yani unutmak, açık
+// bırakmak değil kapalı bırakmak demek.
+//
+// AddSwaggerGen kaydı yukarıda duruyor ve kaldırılmadı: pahalı olan taraf
+// üretimde çalışmayan bir servis kaydı değil, dışarı açılan UÇ. Kaydı da
+// koşullu yapmak, anahtar sonradan açıldığında "servis bulunamadı"
+// hatası verirdi.
+var swaggerAcik = builder.Configuration.GetValue<bool?>("Swagger:Enabled")
+                  ?? app.Environment.IsDevelopment();
+
+if (swaggerAcik)
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.UseCors("AllowFrontend");
 

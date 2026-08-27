@@ -14,7 +14,7 @@ haritanın üstündeki **arama barından** aranır.
 | | |
 |---|---|
 | **Giriş** | `admin` / `staj123` (Admin) · `ayse` / `staj123` (Operatör) · `mehmet` / `staj123` (Kullanıcı) |
-| **API** | `http://localhost:5000` · Swagger: `/swagger` |
+| **API** | `http://localhost:5000` · Swagger: `/swagger` (yalnızca geliştirmede) |
 | **Arayüz** | `http://localhost:5173` · Yönetim paneli: `/admin` |
 | **GeoServer** | `http://localhost:8080/geoserver` · `admin` / `geoserver` · workspace `staj` |
 | **Test** | 238 birim testi |
@@ -2851,6 +2851,28 @@ kuralı ihlalleri (yinelenen kullanıcı adı, kendi hesabını silme…) → **
 açıklayıcı mesaj.
 
 Swagger arayüzünde tüm uçlar koddaki `/// <summary>` açıklamalarıyla belgelenmiştir.
+
+### Swagger üretimde kapalıdır
+
+Swagger yalnızca bir deneme ekranı değil, **API'nin tam haritası**: şeması 173 KB ve
+içinde her uç, her DTO alanı ve koddaki `/// <summary>` açıklamalarının tamamı var.
+Açık bırakılırsa bunu kimlik doğrulamasız herkes okur. Bu yüzden `Program.cs` içinde
+koşula bağlandı:
+
+| Ortam | `Swagger:Enabled` | `/swagger` |
+|---|---|---|
+| Development | yazılmamış | **200** (açık) |
+| Production | yazılmamış | **404** (kapalı) |
+| Production | `true` | **200** — bilinçli olarak açıldı |
+| Development | `false` | **404** |
+
+Karar yapılandırmaya taşındı ama **varsayılan güvenli**: anahtar hiç yazılmazsa
+yalnızca geliştirmede açılır — yani unutmak, açık bırakmak değil kapalı bırakmak
+demektir. Üretimde bilerek açmak için:
+
+```bash
+set Swagger__Enabled=true
+```
 
 ---
 
