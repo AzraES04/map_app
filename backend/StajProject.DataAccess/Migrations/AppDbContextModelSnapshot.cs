@@ -24,6 +24,76 @@ namespace StajProject.DataAccess.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("StajProject.Entities.Durak", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("aciklama");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("ad");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<Point>("Geom")
+                        .IsRequired()
+                        .HasColumnType("geometry(Point, 4326)")
+                        .HasColumnName("geom");
+
+                    b.Property<int>("GuzergahId")
+                        .HasColumnType("integer")
+                        .HasColumnName("guzergah_id");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_date");
+
+                    b.Property<int>("Sira")
+                        .HasColumnType("integer")
+                        .HasColumnName("sira");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Geom");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Geom"), "gist");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("GuzergahId", "Sira");
+
+                    b.ToTable("durak", (string)null);
+                });
+
             modelBuilder.Entity("StajProject.Entities.GeoPermission", b =>
                 {
                     b.Property<int>("Id")
@@ -33,9 +103,9 @@ namespace StajProject.DataAccess.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<Polygon>("Geom")
+                    b.Property<Geometry>("Geom")
                         .IsRequired()
-                        .HasColumnType("geometry(Polygon, 4326)")
+                        .HasColumnType("geometry(Geometry, 4326)")
                         .HasColumnName("geom");
 
                     b.Property<DateTime>("InsertedDate")
@@ -90,6 +160,100 @@ namespace StajProject.DataAccess.Migrations
                         {
                             t.HasCheckConstraint("CK_geo_permissions_tek_sahip", "(user_id IS NOT NULL AND role_id IS NULL) OR (user_id IS NULL AND role_id IS NOT NULL)");
                         });
+                });
+
+            modelBuilder.Entity("StajProject.Entities.Guzergah", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("aciklama");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("ad");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_date");
+
+                    b.Property<string>("Renk")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("renk");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("guzergah", (string)null);
+                });
+
+            modelBuilder.Entity("StajProject.Entities.Il", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("ad");
+
+                    b.Property<string>("Bolge")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("bolge");
+
+                    b.Property<Geometry>("Geom")
+                        .IsRequired()
+                        .HasColumnType("geometry(Geometry, 4326)")
+                        .HasColumnName("geom");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Ad")
+                        .IsUnique();
+
+                    b.HasIndex("Bolge");
+
+                    b.HasIndex("Geom");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Geom"), "gist");
+
+                    b.ToTable("iller", (string)null);
                 });
 
             modelBuilder.Entity("StajProject.Entities.LineEntity", b =>
@@ -243,6 +407,134 @@ namespace StajProject.DataAccess.Migrations
                         .HasFilter("is_deleted = false");
 
                     b.ToTable("permissions", (string)null);
+                });
+
+            modelBuilder.Entity("StajProject.Entities.Poi", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<Point>("Geom")
+                        .IsRequired()
+                        .HasColumnType("geometry(Point, 4326)")
+                        .HasColumnName("geom");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Isim")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("isim");
+
+                    b.Property<int>("KategoriId")
+                        .HasColumnType("integer")
+                        .HasColumnName("kategori_id");
+
+                    b.Property<string>("MesaiPlani")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("mesai_plani");
+
+                    b.Property<string>("MesaiSaatleri")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("mesai_saatleri");
+
+                    b.Property<DateTime?>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_date");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Geom");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Geom"), "gist");
+
+                    b.HasIndex("KategoriId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("poi", (string)null);
+                });
+
+            modelBuilder.Entity("StajProject.Entities.PoiCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Aciklama")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("aciklama");
+
+                    b.Property<string>("Ad")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("ad");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<string>("Ikon")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("ikon");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_date");
+
+                    b.Property<int?>("ParentId")
+                        .HasColumnType("integer")
+                        .HasColumnName("parent_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("ParentId", "Ad");
+
+                    b.ToTable("poi_category", (string)null);
                 });
 
             modelBuilder.Entity("StajProject.Entities.PointEntity", b =>
@@ -474,6 +766,12 @@ namespace StajProject.DataAccess.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsApproved")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_approved");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -546,6 +844,24 @@ namespace StajProject.DataAccess.Migrations
                     b.ToTable("user_roles", (string)null);
                 });
 
+            modelBuilder.Entity("StajProject.Entities.Durak", b =>
+                {
+                    b.HasOne("StajProject.Entities.Guzergah", "Guzergah")
+                        .WithMany("Duraklar")
+                        .HasForeignKey("GuzergahId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("StajProject.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Guzergah");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("StajProject.Entities.GeoPermission", b =>
                 {
                     b.HasOne("StajProject.Entities.Role", "Role")
@@ -561,6 +877,44 @@ namespace StajProject.DataAccess.Migrations
                     b.Navigation("Role");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("StajProject.Entities.Guzergah", b =>
+                {
+                    b.HasOne("StajProject.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("StajProject.Entities.Poi", b =>
+                {
+                    b.HasOne("StajProject.Entities.PoiCategory", "Kategori")
+                        .WithMany("Poiler")
+                        .HasForeignKey("KategoriId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("StajProject.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Kategori");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("StajProject.Entities.PoiCategory", b =>
+                {
+                    b.HasOne("StajProject.Entities.PoiCategory", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Parent");
                 });
 
             modelBuilder.Entity("StajProject.Entities.RolePermission", b =>
@@ -620,11 +974,23 @@ namespace StajProject.DataAccess.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("StajProject.Entities.Guzergah", b =>
+                {
+                    b.Navigation("Duraklar");
+                });
+
             modelBuilder.Entity("StajProject.Entities.Permission", b =>
                 {
                     b.Navigation("RolePermissions");
 
                     b.Navigation("UserPermissions");
+                });
+
+            modelBuilder.Entity("StajProject.Entities.PoiCategory", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Poiler");
                 });
 
             modelBuilder.Entity("StajProject.Entities.Role", b =>

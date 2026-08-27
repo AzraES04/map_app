@@ -28,6 +28,17 @@ public class AppDbContext : DbContext
     // Ödev 7 / Madde 2: coğrafi yetki (kullanıcı/rol bazlı çizim alanı)
     public DbSet<GeoPermission> GeoPermissions => Set<GeoPermission>();
 
+    // Ödev 10: 81 ilin sınırları — il ve bölge bazlı yetki tanımının kaynağı
+    public DbSet<Il> Iller => Set<Il>();
+
+    // Ödev 12: POI (ilgi noktası) ve hiyerarşik kategori sözlüğü
+    public DbSet<PoiCategory> PoiKategorileri => Set<PoiCategory>();
+    public DbSet<Poi> Poiler => Set<Poi>();
+
+    // Ödev 16: akıllı ulaşım modülü — güzergah 1 ─< N durak
+    public DbSet<Guzergah> Guzergahlar => Set<Guzergah>();
+    public DbSet<Durak> Duraklar => Set<Durak>();
+
     // ---------- Ödev 3 / Görev 1: ModifiedDate otomatik güncelleme ----------
     // Her kayıt işleminden ÖNCE devreye girer. Böylece "modified_date yazmayı unuttum"
     // diye bir durum kalmaz; kural tek yerde, merkezî olarak uygulanır.
@@ -113,6 +124,17 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ModifiedDate)
                   .HasColumnName("modified_date");
 
+            // Ödev 10: kayıt olan kullanıcı yönetici onayı bekler.
+            // Varsayılan TRUE: mevcut kullanıcılar ve panelden açılanlar
+            // onaylı sayılır; yalnızca kayıt ucu bunu bilerek false yazar.
+            entity.Property(e => e.IsApproved)
+                  .HasColumnName("is_approved")
+                  .HasDefaultValue(true)
+                  // IsActive'deki sentinel gerekçesinin aynısı: bool'un CLR
+                  // varsayılanı false olduğu için, sentinel true'ya çekilmezse
+                  // "IsApproved = false" olan kayıt sessizce true yazılırdı.
+                  .HasSentinel(true);
+
             // Username unique olmalı — AMA soft delete ile birlikte düşün:
             // "ayse" silinip is_deleted=true olduysa, yeni bir "ayse" açılabilmeli.
             // Bu yüzden index'i kısmi (partial) yapıyoruz: sadece silinmemiş satırlar için benzersizlik.
@@ -162,7 +184,33 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.Geom).HasMethod("gist");
         });
 
+        // ---------- Ödev 10: il sınırları ----------
+        modelBuilder.Entity<Il>(entity =>
+        {
+            entity.ToTable("iller");
+            entity.HasKey(e => e.Id);
+
+            // ValueGeneratedNever: id PLAKA kodudur, veritabanı üretmez.
+            // Bunu söylemezsek EF kolonu identity yapar ve seed'in yazdığı
+            // plaka numaraları yok sayılır.
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedNever();
+
+            entity.Property(e => e.Ad).HasColumnName("ad").HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Bolge).HasColumnName("bolge").HasMaxLength(50).IsRequired();
+
+            // Geometry (Polygon değil): 81 ilin 17'si MultiPolygon.
+            entity.Property(e => e.Geom)
+                  .HasColumnName("geom")
+                  .HasColumnType("geometry(Geometry, 4326)")
+                  .IsRequired();
+
+            entity.HasIndex(e => e.Geom).HasMethod("gist");
+            entity.HasIndex(e => e.Bolge);        // "bu bölgedeki iller" sorgusu
+            entity.HasIndex(e => e.Ad).IsUnique();
+        });
+
         ConfigureAuthorization(modelBuilder);
+        ConfigurePoi(modelBuilder);
     }
 
     // ---------- Ödev 6 / Madde 2: rol / yetki tabloları ----------
@@ -236,9 +284,12 @@ public class AppDbContext : DbContext
             entity.Property(e => e.InsertedDate).HasColumnName("inserted_date");
             entity.Property(e => e.InsertedUserId).HasColumnName("inserted_user_id");
 
+            // Ödev 10: tip artık Polygon değil GEOMETRY. İl/bölge seçimiyle
+            // tanımlanan alanlar MultiPolygon olabiliyor; kolon tipi Polygon
+            // kalsaydı PostGIS bu kayıtları reddederdi.
             entity.Property(e => e.Geom)
                   .HasColumnName("geom")
-                  .HasColumnType("geometry(Polygon, 4326)")
+                  .HasColumnType("geometry(Geometry, 4326)")
                   .IsRequired();
 
             // Alan sorguları "bu nokta içeride mi?" diye soracak — mekânsal index şart.
@@ -343,4 +394,216 @@ public class AppDbContext : DbContext
 
         entity.HasQueryFilter(e => !e.IsDeleted);
     }
+
+    // ---------- Ödev 12: POI ve hiyerarşik kategori ----------
+    //
+    // İki tablo, iki farklı zorluk:
+    //   poi_category → kendi kendine bakan yabancı anahtar (ata-çocuk)
+    //   poi          → PostGIS nokta + iki farklı silme davranışı
+    private static void ConfigurePoi(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PoiCategory>(entity =>
+        {
+            entity.ToTable("poi_category");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Ad).HasColumnName("ad").HasMaxLength(150).IsRequired();
+            entity.Property(e => e.Aciklama).HasColumnName("aciklama").HasMaxLength(500);
+
+            // Ödev 15: kategoriye özgü simge. Kolon bir ANAHTAR tutuyor
+            // ("fincan", "eczane"), çizimin kendisini değil — gerekçe:
+            // PoiCategory.Ikon. 40 karakter, en uzun anahtarın çok üstünde.
+            entity.Property(e => e.Ikon).HasColumnName("ikon").HasMaxLength(40);
+
+            entity.Property(e => e.ParentId).HasColumnName("parent_id");
+            entity.Property(e => e.CreatedDate).HasColumnName("created_date");
+
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+            entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+            // ATA-ÇOCUK: aynı tabloya bakan yabancı anahtar.
+            //
+            // Restrict (Cascade DEĞİL) bilinçli: Cascade olsaydı bir kategoriyi
+            // fiziksel silmek bütün alt ağacı sessizce götürürdü. Zaten soft
+            // delete kullanıyoruz; çocuğu olan kategoriyi silme denemesi
+            // servis katmanında anlamlı bir mesajla reddediliyor.
+            entity.HasOne(e => e.Parent)
+                  .WithMany(e => e.Children)
+                  .HasForeignKey(e => e.ParentId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.ParentId);
+
+            // "Aynı ata altında aynı ad iki kez olmasın" kuralı SERVİSTE.
+            //
+            // Neden veritabanı index'i değil? PostgreSQL'de benzersiz index
+            // NULL'ları birbirinden farklı sayar; kök kategorilerde parent_id
+            // NULL olduğu için (NULL, 'Yeme-İçme') çifti iki kez yazılabilirdi.
+            // Kuralın yarısını uygulayan bir index, hiç uygulamayandan daha
+            // yanıltıcı olurdu — bu yüzden index yalnızca ARAMA için.
+            entity.HasIndex(e => new { e.ParentId, e.Ad });
+
+            entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        modelBuilder.Entity<Poi>(entity =>
+        {
+            entity.ToTable("poi");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Isim).HasColumnName("isim").HasMaxLength(200).IsRequired();
+            entity.Property(e => e.KategoriId).HasColumnName("kategori_id");
+            entity.Property(e => e.MesaiSaatleri).HasColumnName("mesai_saatleri").HasMaxLength(200);
+
+            // Ödev 13 / Madde 3: gün gün mesai planı.
+            //
+            // Kolon tipi JSONB (JSON değil): PostgreSQL jsonb'yi ayrıştırılmış
+            // biçimde saklar, yani bozuk JSON veritabanı seviyesinde reddedilir
+            // ve ileride "salı açık olanlar" gibi bir sorgu index'lenebilir.
+            // Uzunluk sınırı YOK — sınır koymak, gün sayısı arttığında
+            // (öğle arası, sezonluk saat) sessizce kesilen veri demek olurdu.
+            //
+            // C# tarafı string: Entities katmanı Business'taki MesaiPlani
+            // tipini göremez (bağımlılık yönü), Npgsql metni jsonb'ye
+            // kendiliğinden çeviriyor.
+            entity.Property(e => e.MesaiPlani).HasColumnName("mesai_plani").HasColumnType("jsonb");
+
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.CreatedDate).HasColumnName("created_date");
+
+            entity.Property(e => e.Geom)
+                  .HasColumnName("geom")
+                  .HasColumnType("geometry(Point, 4326)")
+                  .IsRequired();
+
+            // "Bu alanın içindeki POI'ler" ve harita sorguları için mekânsal index.
+            entity.HasIndex(e => e.Geom).HasMethod("gist");
+
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+            entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+            // Kategori ZORUNLU ve Restrict: dolu bir kategoriyi silmek,
+            // POI'leri kategorisiz (yani listelenemez) bırakırdı.
+            entity.HasOne(e => e.Kategori)
+                  .WithMany(k => k.Poiler)
+                  .HasForeignKey(e => e.KategoriId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Ekleyen kullanıcı İSTEĞE BAĞLI ve SetNull: POI ortak veridir,
+            // ekleyen hesap ortadan kalksa da nokta haritada kalmalı.
+            // (geo_permissions'daki Cascade'in tersi — orada kayıt sahibine
+            // AİT bir kuraldı, burada sahibinden bağımsız bir veri.)
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.KategoriId);
+            entity.HasIndex(e => e.UserId);
+
+            // Kategori süzgeci de filtreye dahil: kategori zorunlu bir ilişki
+            // olduğu için, silinmiş bir kategoriye bağlı POI'nin listelenmesi
+            // "kategorisi olmayan POI" gibi tutarsız bir sonuç üretirdi.
+            // (Servis zaten dolu kategorinin silinmesini engelliyor; bu ikinci hat.)
+            entity.HasQueryFilter(e => !e.IsDeleted && !e.Kategori!.IsDeleted);
+        });
+
+        ConfigureUlasim(modelBuilder);
+    }
+
+    // ----------------------------------------------------------------------
+    //  Ödev 16 — ulaşım modülü
+    // ----------------------------------------------------------------------
+
+    /// <summary>
+    /// Güzergah ve durak tabloları (1-N).
+    ///
+    /// Ayrı bir metotta çünkü OnModelCreating zaten çok uzun; modül bazlı
+    /// bölmek "hangi tablo hangi ödevden geldi" sorusunu da okunur kılıyor.
+    /// </summary>
+    private static void ConfigureUlasim(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Guzergah>(entity =>
+        {
+            entity.ToTable("guzergah");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Ad).HasColumnName("ad").HasMaxLength(150).IsRequired();
+
+            // Renk "#rrggbb" — tam 7 karakter. Uzunluk sınırı biçimi garanti
+            // etmiyor (biçim kontrolü serviste), ama kolonun ne taşıdığını
+            // şema üzerinden de belli ediyor.
+            entity.Property(e => e.Renk).HasColumnName("renk").HasMaxLength(7).IsRequired();
+
+            entity.Property(e => e.Aciklama).HasColumnName("aciklama").HasMaxLength(500);
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.CreatedDate).HasColumnName("created_date");
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+            entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        modelBuilder.Entity<Durak>(entity =>
+        {
+            entity.ToTable("durak");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Ad).HasColumnName("ad").HasMaxLength(150).IsRequired();
+            entity.Property(e => e.GuzergahId).HasColumnName("guzergah_id");
+            entity.Property(e => e.Sira).HasColumnName("sira");
+            entity.Property(e => e.Aciklama).HasColumnName("aciklama").HasMaxLength(500);
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.CreatedDate).HasColumnName("created_date");
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+            entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+            entity.Property(e => e.Geom)
+                  .HasColumnName("geom")
+                  .HasColumnType("geometry(Point, 4326)")
+                  .IsRequired();
+
+            // "Bu alandaki duraklar" ve harita sorguları için mekânsal index.
+            entity.HasIndex(e => e.Geom).HasMethod("gist");
+
+            // 1-N'İN ŞEMADAKİ KARŞILIĞI.
+            //
+            // Restrict (Cascade DEĞİL): dolu bir güzergahı silmek durakları
+            // sessizce götürürdü. Zaten soft delete kullanıyoruz; dolu güzergahın
+            // silinmesi serviste anlamlı bir mesajla reddediliyor — kategori
+            // ağacındaki kuralın (PoiCategory) aynısı.
+            entity.HasOne(e => e.Guzergah)
+                  .WithMany(g => g.Duraklar)
+                  .HasForeignKey(e => e.GuzergahId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            // Bir güzergahın durakları SIRAYLA okunuyor; bileşik index hem
+            // süzmeyi hem sıralamayı tek taramada karşılıyor.
+            entity.HasIndex(e => new { e.GuzergahId, e.Sira });
+
+            // Güzergah süzgeci de filtreye dahil: silinmiş bir güzergaha bağlı
+            // durağın listelenmesi "güzergahı olmayan durak" gibi tutarsız bir
+            // sonuç üretirdi (poi → poi_category filtresiyle aynı desen).
+            entity.HasQueryFilter(e => !e.IsDeleted && !e.Guzergah!.IsDeleted);
+        });
+    }
+
 }

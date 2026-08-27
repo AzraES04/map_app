@@ -19,6 +19,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\StajProject.Business\StajProject.Business.csproj" />
+
+    <!-- Ödev sonrası denetim: controller'ların YETKİ ÖZNİTELİKLERİ yansımayla
+         taranıyor (YetkilendirmeDenetimiTests). Bunun için test projesinin API
+         derlemesini görmesi gerekiyor.
+
+         NEDEN RİSKLİ DEĞİL? Referans yalnızca DERLEME zamanında kullanılıyor;
+         hiçbir test web sunucusu ayığa kaldırmıyor, Program.cs çalışmıyor.
+         Test projeleri web projesine referans vermeyi zaten normal karşılar
+         (WebApplicationFactory'nin de ön koşulu budur). -->
+    <ProjectReference Include="..\StajProject.API\StajProject.API.csproj" />
   </ItemGroup>
 
 </Project>

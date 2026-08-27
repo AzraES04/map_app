@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using StajProject.Business.Geo;
 using StajProject.Business.Validation;
 
 namespace StajProject.API.Controllers;
@@ -28,6 +29,17 @@ public abstract class YonetimControllerBase : ControllerBase
         {
             return await govde();
         }
+        catch (WktFormatException ex)
+        {
+            // Yönetim uçlarının bir kısmı GEOMETRİ de alıyor (coğrafi yetki alanı,
+            // POI konumu). Bozuk WKT sunucu hatası değil, gönderilen verinin
+            // hatasıdır. Bu catch olmadan aşağıdaki genel Exception dalına
+            // düşüp 500 dönerdi — üstelik ExceptionHandlingMiddleware'deki
+            // doğru karşılığa (400) hiç ulaşamadan, çünkü controller onu
+            // burada yutmuş oluyor.
+            _logger.LogWarning(ex, "Geçersiz istek verisi");
+            return BadRequest(new { message = ex.Message });
+        }
         catch (IsKuraliException ex)
         {
             // İş kuralı ihlali → istemcinin hatası. Mesaj kullanıcıya gösterilebilir.
@@ -48,6 +60,11 @@ public abstract class YonetimControllerBase : ControllerBase
         try
         {
             return await govde();
+        }
+        catch (WktFormatException ex)
+        {
+            _logger.LogWarning(ex, "Geçersiz istek verisi");
+            return BadRequest(new { message = ex.Message });
         }
         catch (IsKuraliException ex)
         {

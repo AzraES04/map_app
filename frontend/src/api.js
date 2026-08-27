@@ -92,6 +92,49 @@ export async function kesisimAnalizi(wkt, haricTutulanPolygonId, onUnauthorized)
   return res.json()
 }
 
+/**
+ * POST /api/analysis/konum — KONUM ANALİZİ (Ödev 14).
+ *
+ * Kesişim analizinden farkı: cevap bir kayıt listesi değil, bir SKOR YÜZEYİ.
+ * Sunucu seçilen alanı ızgaraya bölüp her hücreye 0–1 arası bir uygunluk
+ * puanı veriyor; harita katmanı doğrudan o diziden çiziliyor (bkz. isiIzgarasi.js).
+ *
+ * Hedef bölge İKİ YOLDAN BİRİYLE gönderilir — ikisi birden gönderilirse
+ * sunucu 400 döner (hangisinin geçerli olduğunu sessizce seçmek, kullanıcının
+ * gördüğü alanla analizin çalıştığı alanı ayırırdı):
+ *   • ilPlakalari: [6, 42]   → seçilen illerin sınırlarının birleşimi
+ *   • wkt: "POLYGON ((...))" → haritada çizilen alan
+ *
+ * @param {{wkt?: string, ilPlakalari?: number[],
+ *          kriterler: {kategoriId: number, agirlik: number}[]}} istek
+ */
+export async function konumAnalizi(istek, onUnauthorized) {
+  const res = await authFetch(
+    '/api/analysis/konum',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(istek),
+    },
+    onUnauthorized,
+  )
+  if (!res.ok) throw await apiHatasi(res)
+  return res.json()
+}
+
+/**
+ * GET /api/geoserver/durum — veri kaynağının durumu (Ödev 8).
+ *
+ * Harita paneli bunu açılışta bir kez okur: "Veri kaynağı: GeoServer WFS"
+ * rozetini ve WMS düğmesini buna göre çizer. Bağlantı yoksa uygulama yine
+ * açılır — sadece rozet "bağlantı yok" der ve WMS düğmesi kapalı kalır.
+ */
+export async function geoServerDurumu(onUnauthorized) {
+  const res = await authFetch('/api/geoserver/durum', {}, onUnauthorized)
+  if (!res.ok) throw await apiHatasi(res)
+  return res.json()
+}
+
 /** PUT — kaydı günceller. Wkt gönderilirse geometri de değişir. */
 export async function guncelle(endpoint, id, veri, onUnauthorized) {
   const res = await authFetch(

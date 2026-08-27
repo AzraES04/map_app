@@ -20,6 +20,12 @@ public interface IGeoPermissionService
     Task<List<GeoPermissionDto>> GetForRoleAsync(int roleId);
 
     Task<GeoPermissionDto> CreateAsync(GeoPermissionCreateDto dto);
+
+    /// <summary>
+    /// Yetki alanı olarak seçilebilecek kayıtlı poligonlar (Ödev 11).
+    /// Sahibi kim olursa olsun hepsi listelenir.
+    /// </summary>
+    Task<List<GeometryDto>> GetSecilebilirAlanlarAsync();
     Task<bool> DeleteAsync(int id);
 
     /// <summary>Giriş yapan kullanıcının çalışma alanı (harita ekranı için).</summary>

@@ -119,6 +119,41 @@ public class UserAdminService : IUserAdminService
         return await _userRepository.SoftDeleteAsync(id);
     }
 
+    /// <summary>
+    /// Kayıt olan kullanıcıyı onaylar (Ödev 10).
+    ///
+    /// Onaylanan hesaba ROL VERİLMİYOR. Onay yalnızca kapıyı açar: kullanıcı
+    /// girebilir ama yetkisi olmadığı için hiçbir araç görünmez (Ödev 7'nin
+    /// "yetkisi olmayana buton gösterme" kuralı). Rol atamak yöneticinin ayrı
+    /// ve bilinçli bir adımı — onayla birlikte otomatik rol verseydik, hangi
+    /// rolün verildiği görünmez bir varsayım olurdu.
+    /// </summary>
+    public async Task<UserDto?> OnaylaAsync(int id)
+    {
+        var kullanici = await _userRepository.GetByIdAsync(id);
+        if (kullanici is null)
+        {
+            return null;
+        }
+
+        if (kullanici.IsApproved)
+        {
+            throw new IsKuraliException("Bu hesap zaten onaylı.");
+        }
+
+        kullanici.IsApproved = true;
+
+        if (await _userRepository.UpdateAsync(kullanici) is null)
+        {
+            return null;
+        }
+
+        // İlişkileriyle yeniden okuyoruz: UpdateAsync'in döndürdüğü nesnede
+        // roller yüklü değil, DTO'daki rol listesi boş çıkardı.
+        var tam = await _userRepository.GetByIdAsync(id);
+        return tam is null ? null : DtoyaCevir(tam);
+    }
+
     public async Task<UserPermissionsDto?> SetPermissionsAsync(int id, SetUserPermissionsDto dto)
     {
         var matris = await _permissionService.GetForUserAsync(id);
@@ -285,6 +320,7 @@ public class UserAdminService : IUserAdminService
             Id = kullanici.Id,
             Username = kullanici.Username,
             IsActive = kullanici.IsActive,
+            IsApproved = kullanici.IsApproved,
             CreatedAt = kullanici.CreatedAt,
             ModifiedDate = kullanici.ModifiedDate,
             Roles = kullanici.UserRoles

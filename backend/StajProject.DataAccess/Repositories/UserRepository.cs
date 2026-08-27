@@ -105,6 +105,7 @@ public class UserRepository : IUserRepository
         mevcut.Username = user.Username;
         mevcut.PasswordHash = user.PasswordHash;
         mevcut.IsActive = user.IsActive;
+        mevcut.IsApproved = user.IsApproved;   // Ödev 10: yönetici onayı
 
         // ModifiedDate elle yazılmıyor — AppDbContext.ApplyAuditRules() basıyor.
         await _context.SaveChangesAsync();

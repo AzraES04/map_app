@@ -6,6 +6,7 @@ using StajProject.Business.DTOs;
 using StajProject.Business.Validation;
 using StajProject.Business.Geo;
 using StajProject.Business.Services;
+using StajProject.DataAccess.GeoServer;
 using StajProject.Entities;
 
 namespace StajProject.API.Controllers;
@@ -144,6 +145,14 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase, IEklemeY
             _logger.LogWarning(ex, "İş kuralı ihlali");
             return BadRequest(new { message = ex.Message });
         }
+        catch (GeoServerErisimException ex)
+        {
+            // Ödev 8: listeleme artık GeoServer'dan geliyor. Sunucu kapalıysa
+            // bu 500 değil 503'tür — hata bizde değil, bağımlı serviste.
+            _logger.LogError(ex, "GeoServer erişim hatası");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { message = ex.Message });
+        }
         catch (Exception ex)
         {
             // Beklenmeyen hata → 5xx. Ayrıntı log'a yazılır, istemciye sızdırılmaz.
@@ -169,6 +178,12 @@ public abstract class GeometryControllerBase<TEntity> : ControllerBase, IEklemeY
         {
             _logger.LogWarning(ex, "İş kuralı ihlali");
             return BadRequest(new { message = ex.Message });
+        }
+        catch (GeoServerErisimException ex)
+        {
+            _logger.LogError(ex, "GeoServer erişim hatası");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { message = ex.Message });
         }
         catch (Exception ex)
         {

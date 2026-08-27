@@ -9,6 +9,7 @@ import {
   kullaniciYetkileriniKaydet,
   rolleriListele,
   kendiYetkilerim,
+  kullaniciOnayla,
 } from '../adminApi'
 import { EkleIkonu, KilitIkonu, SilIkonu, YetkiIkonu, HaritaIkonu } from '../icons'
 import { YETKILER } from '../yetkiler'
@@ -173,6 +174,25 @@ export default function AdminUsers() {
       setBilgi(`"${kullanici.username}" silindi.`)
       if (yetkiPaneli?.userId === kullanici.id) setYetkiPaneli(null)
       await yukle()
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') setHata(err.message)
+    }
+  }
+
+  /**
+   * Kayıt olan kullanıcıyı onaylar (Ödev 10).
+   *
+   * Onay ROL VERMİYOR: hesap girebilir hâle geliyor ama yetkisi olmadığı için
+   * hiçbir araç görünmüyor. Rol atamak yöneticinin ayrı adımı — bu yüzden
+   * onaydan sonra kullanıcıyı doğrudan düzenleme formuna alıyoruz.
+   */
+  const onayla = async (kullanici) => {
+    setHata(null)
+    try {
+      const guncel = await kullaniciOnayla(kullanici.id, oturumBitti)
+      setBilgi(`"${kullanici.username}" onaylandı. Şimdi rol atayabilirsiniz.`)
+      await yukle()
+      duzenle(guncel)
     } catch (err) {
       if (err.message !== 'Oturum süresi doldu') setHata(err.message)
     }
@@ -371,11 +391,31 @@ export default function AdminUsers() {
                     )}
                   </td>
                   <td>
-                    <span className={`admin-durum${kullanici.isActive ? '' : ' pasif'}`}>
-                      {kullanici.isActive ? 'Aktif' : 'Pasif'}
-                    </span>
+                    {/* Ödev 10: "onay bekliyor" ile "pasif" AYRI şeyler.
+                        Onay bekleyen hesap hiç kullanılmadı; pasif hesap
+                        bir zamanlar çalışıyordu ve askıya alındı. */}
+                    {kullanici.isApproved ? (
+                      <span className={`admin-durum${kullanici.isActive ? '' : ' pasif'}`}>
+                        {kullanici.isActive ? 'Aktif' : 'Pasif'}
+                      </span>
+                    ) : (
+                      <span className="onay-rozeti">Onay bekliyor</span>
+                    )}
                   </td>
                   <td className="sag">
+                    {/* Onay düğmesi yalnızca gerekliyken görünüyor — onaylı
+                        hesaplarda duran ve hiçbir şey yapmayan bir düğme
+                        listeyi gereksiz kalabalıklaştırırdı. */}
+                    {!kullanici.isApproved && (
+                      <button
+                        type="button"
+                        className="btn-primary kucuk"
+                        onClick={() => onayla(kullanici)}
+                        title="Bu hesabın girişine izin ver"
+                      >
+                        Onayla
+                      </button>
+                    )}
                     <button type="button" className="btn-ghost" onClick={() => yetkileriAc(kullanici)}>
                       <YetkiIkonu /> Yetkiler
                     </button>

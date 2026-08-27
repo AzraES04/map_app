@@ -10,5 +10,5 @@ public class JwtSettings
     public string Audience { get; set; } = string.Empty;
 
     /// <summary>Token geçerlilik süresi (dakika). Ödev gereği kısa: 10 dk.</summary>
-    public int ExpiryMinutes { get; set; } = 10;
+    public int ExpiryMinutes { get; set; } = 15;
 }

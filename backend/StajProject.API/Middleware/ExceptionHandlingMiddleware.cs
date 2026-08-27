@@ -1,6 +1,7 @@
 using System.Text.Json;
 using StajProject.Business.Geo;
 using StajProject.Business.Validation;
+using StajProject.DataAccess.GeoServer;
 
 namespace StajProject.API.Middleware;
 
@@ -42,6 +43,15 @@ public class ExceptionHandlingMiddleware
             // Controller'lar bunu zaten yakalıyor; buradaki catch son güvenlik ağı.
             _logger.LogWarning(ex, "İş kuralı ihlali");
             await YazAsync(context, StatusCodes.Status400BadRequest, ex.Message);
+        }
+        catch (GeoServerErisimException ex)
+        {
+            // Ödev 8: bağımlı olduğumuz DIŞ servis (GeoServer) yok ya da hata verdi.
+            // 500 demek yanıltıcı olurdu ("bizim kodumuz çöktü"); doğrusu 503:
+            // "hizmet şu an verilemiyor, sebebi geçici". Mesajı istemciye
+            // GÖSTERİYORUZ çünkü eyleme dönüştürülebilir: "GeoServer'ı başlat".
+            _logger.LogError(ex, "GeoServer erişim hatası");
+            await YazAsync(context, StatusCodes.Status503ServiceUnavailable, ex.Message);
         }
         catch (Exception ex)
         {

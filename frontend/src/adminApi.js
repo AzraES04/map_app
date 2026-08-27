@@ -134,3 +134,53 @@ export const cografiYetkiSil = (id, onUnauthorized) =>
  */
 export const calismaAlanim = (onUnauthorized) =>
   istek('/api/permissions/me/geo', {}, onUnauthorized)
+
+// ============================================================================
+//  Ödev 10 — il / bölge referans verisi
+// ============================================================================
+
+/** 81 il (plaka, ad, bölge). Geometri İÇERMEZ. */
+export function illeriGetir(onUnauthorized) {
+  return istek('/api/iller', {}, onUnauthorized)
+}
+
+/** Yedi coğrafi bölge ve il sayıları. */
+export function bolgeleriGetir(onUnauthorized) {
+  return istek('/api/iller/bolgeler', {}, onUnauthorized)
+}
+
+/**
+ * İl sınırları (WKT). Cevap ~250 KB olduğu için MODÜL DÜZEYİNDE saklanıyor:
+ * coğrafi yetki modalı her açıldığında yeniden indirmenin anlamı yok, il
+ * sınırları oturum boyunca değişmiyor.
+ *
+ * Aynı anda iki çağrı gelirse ikisi de AYNI sözü (promise) bekliyor —
+ * "yükleniyor mu?" bayrağıyla uğraşmadan çift indirme önleniyor.
+ */
+let sinirSozu = null
+
+export function ilSinirlariGetir(onUnauthorized) {
+  sinirSozu ??= istek('/api/iller/sinirlar', {}, onUnauthorized)
+    .catch((err) => {
+      // Başarısız sözü saklamıyoruz; yoksa tek bir ağ hatası, sonraki tüm
+      // denemeleri de kalıcı olarak başarısız yapardı.
+      sinirSozu = null
+      throw err
+    })
+
+  return sinirSozu
+}
+
+/** Kullanıcıyı onaylar (Ödev 10 — kayıt olma). */
+export function kullaniciOnayla(id, onUnauthorized) {
+  return istek(`/api/admin/users/${id}/approve`, { method: 'POST' }, onUnauthorized)
+}
+
+/**
+ * Yetki alanı olarak seçilebilecek KAYITLI poligonlar (Ödev 11).
+ * Sahibi kim olursa olsun hepsi geliyor: yönetici herhangi bir alanı
+ * referans alabilmeli.
+ */
+export function secilebilirAlanlariGetir(onUnauthorized) {
+  return istek('/api/admin/geo-permissions/poligonlar', {}, onUnauthorized)
+}

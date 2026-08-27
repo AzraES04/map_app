@@ -1,6 +1,11 @@
+import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { clearSession, getUsername } from '../auth'
-import { KullanicilarIkonu, RolIkonu, GeriIkonu, KullaniciIkonu } from '../icons'
+import { clearSession } from '../auth'
+import { kendiYetkilerim } from '../adminApi'
+import { YONETIM_EKRANLARI } from '../yonetimMenusu'
+import { KullanicilarIkonu, RolIkonu, GeriIkonu, PoiIkonu, GuzergahIkonu } from '../icons'
+import HesapSecici from '../HesapSecici.jsx'
+import TemaDugmesi from '../TemaDugmesi.jsx'
 
 // ============================================================================
 //  Yönetim paneli çerçevesi (Ödev 6 / Madde 1)
@@ -15,24 +20,47 @@ import { KullanicilarIkonu, RolIkonu, GeriIkonu, KullaniciIkonu } from '../icons
 //  demek olurdu ve iki kopya kolayca birbirinden ayrı düşerdi.
 // ============================================================================
 
-/** Menü maddeleri tek bir listede: yeni ekran eklemek buraya bir satır. */
-const MENU = [
-  {
-    yol: '/admin/users',
-    baslik: 'Kullanıcı Listesi',
-    altyazi: 'Ekle / Güncelle / Çıkar',
-    Ikon: KullanicilarIkonu,
-  },
-  {
-    yol: '/admin/roles',
-    baslik: 'Rol Listesi',
-    altyazi: 'Ekle / Güncelle / Sil',
-    Ikon: RolIkonu,
-  },
-]
+/**
+ * Anahtar → ikon bileşeni.
+ *
+ * Menü TANIMI artık ../yonetimMenusu.js'te (harita ekranı da aynı listeye
+ * bakıyor — gerekçesi o dosyanın başında). Orada JSX olamayacağı için
+ * ikonlar metin anahtarıyla taşınıyor ve burada bileşene çevriliyor.
+ */
+const IKONLAR = {
+  kullanicilar: KullanicilarIkonu,
+  rol: RolIkonu,
+  poi: PoiIkonu,
+  guzergah: GuzergahIkonu,
+}
 
 export default function AdminLayout() {
   const navigate = useNavigate()
+
+  // Yetkisi olmayan ekranın menüde HİÇ görünmemesi kuralı (Ödev 7'den beri).
+  //
+  // null = "henüz okunmadı". O sırada bütün maddeler gösteriliyor: menüyü boş
+  // çizip bir kare sonra doldurmak, her sayfa açılışında göze çarpan bir
+  // sıçrama üretirdi. Yanlışlıkla gösterilen bir maddeye tıklandığında da
+  // ekran sunucudan 403 alıp hatayı yazar — asıl kontrol zaten orada.
+  const [yetkilerim, setYetkilerim] = useState(null)
+
+  const oturumBitti = useCallback(
+    () => navigate('/login', { replace: true, state: { expired: true } }),
+    [navigate],
+  )
+
+  useEffect(() => {
+    let iptal = false
+    kendiYetkilerim(oturumBitti)
+      .then((matris) => {
+        if (!iptal) setYetkilerim(matris.permissions.filter((y) => y.granted).map((y) => y.name))
+      })
+      .catch(() => { /* okunamadı → maddeler görünür kalır, kontrol sunucuda */ })
+    return () => { iptal = true }
+  }, [oturumBitti])
+
+  const gorunur = (yetki) => yetkilerim === null || yetkilerim.includes(yetki)
 
   const cikisYap = () => {
     clearSession()
@@ -52,7 +80,9 @@ export default function AdminLayout() {
         </div>
 
         <ul className="admin-menu">
-          {MENU.map(({ yol, baslik, altyazi, Ikon }) => (
+          {YONETIM_EKRANLARI.filter((madde) => gorunur(madde.yetki)).map(({ yol, baslik, altyazi, ikon }) => {
+            const Ikon = IKONLAR[ikon]
+            return (
             <li key={yol}>
               {/*
                 NavLink, Link'ten farklı olarak "şu an bu adrestesin" bilgisini
@@ -71,7 +101,8 @@ export default function AdminLayout() {
                 </span>
               </NavLink>
             </li>
-          ))}
+            )
+          })}
         </ul>
 
         {/* Menünün dibi: haritaya dönüş ve oturum bilgisi */}
@@ -81,8 +112,14 @@ export default function AdminLayout() {
             <span className="admin-menu-metin"><strong>Haritaya dön</strong></span>
           </NavLink>
 
+          {/* Ödev 11: hesap değiştirici burada da duruyor. Rozet haritada
+              menüye dönüşüp panelde ölü kalsaydı, kullanıcı aynı öğenin bir
+              ekranda tıklanıp diğerinde tıklanmamasını arıza sanardı. */}
           <div className="admin-oturum">
-            <span className="badge user"><KullaniciIkonu /> {getUsername()}</span>
+            <HesapSecici />
+            {/* Tema tercihi iki ekranda da aynı yerde: harita ile panel
+                arasında gidip gelen kullanıcı düğmeyi aramak zorunda kalmasın. */}
+            <TemaDugmesi />
             <button type="button" className="logout-btn" onClick={cikisYap}>Çıkış</button>
           </div>
         </div>

@@ -34,6 +34,17 @@ public class AdminGeoPermissionsController : YonetimControllerBase
     /// Tanımlı alanlar. <paramref name="userId"/> veya <paramref name="roleId"/>
     /// verilirse yalnızca o sahibin alanları döner.
     /// </summary>
+    /// <summary>
+    /// Yetki alanı olarak seçilebilecek KAYITLI poligonlar (Ödev 11).
+    ///
+    /// Yönetici zaten "Ankara metropol alanı" diye bir alan çizmişse, aynı
+    /// sınırı yetki tanımlarken yeniden çizmesin diye. Sahiplik süzgeci yok:
+    /// sistemdeki her alan referans alınabilir.
+    /// </summary>
+    [HttpGet("poligonlar")]
+    public Task<ActionResult<List<GeometryDto>>> GetSecilebilirAlanlar()
+        => Calistir<List<GeometryDto>>(async () => Ok(await _service.GetSecilebilirAlanlarAsync()));
+
     [HttpGet]
     public Task<ActionResult<List<GeoPermissionDto>>> GetAll(
         [FromQuery] int? userId, [FromQuery] int? roleId)

@@ -22,15 +22,65 @@ public class SahteVeritabani
     /// <summary>Ödev 7: kullanıcı/rol bazlı izinli çizim alanları.</summary>
     public List<GeoPermission> CografiYetkiler { get; } = new();
 
+    /// <summary>Ödev 12: hiyerarşik POI kategori sözlüğü.</summary>
+    public List<PoiCategory> PoiKategorileri { get; } = new();
+
+    /// <summary>Ödev 12: haritadaki ilgi noktaları.</summary>
+    public List<Poi> Poiler { get; } = new();
+
+    /// <summary>Ödev 16: ulaşım hatları ve durakları (1-N).</summary>
+    public List<Guzergah> Guzergahlar { get; } = new();
+    public List<Durak> Duraklar { get; } = new();
+
     private int _sonrakiKullaniciId = 1;
     private int _sonrakiRolId = 1;
     private int _sonrakiYetkiId = 1;
     private int _sonrakiCografiYetkiId = 1;
+    private int _sonrakiPoiKategoriId = 1;
+    private int _sonrakiPoiId = 1;
+    private int _sonrakiGuzergahId = 1;
+    private int _sonrakiDurakId = 1;
 
     public int SonrakiKullaniciId() => _sonrakiKullaniciId++;
     public int SonrakiRolId() => _sonrakiRolId++;
     public int SonrakiYetkiId() => _sonrakiYetkiId++;
     public int SonrakiCografiYetkiId() => _sonrakiCografiYetkiId++;
+    public int SonrakiPoiKategoriId() => _sonrakiPoiKategoriId++;
+    public int SonrakiPoiId() => _sonrakiPoiId++;
+    public int SonrakiGuzergahId() => _sonrakiGuzergahId++;
+    public int SonrakiDurakId() => _sonrakiDurakId++;
+
+    /// <summary>Testleri kısaltmak için: güzergahı ekler ve nesnesini döner.</summary>
+    public Guzergah GuzergahEkle(string ad, string renk = "#2d7dd2", bool aktif = true, int? userId = null)
+    {
+        var guzergah = new Guzergah
+        {
+            Id = SonrakiGuzergahId(),
+            Ad = ad,
+            Renk = renk,
+            IsActive = aktif,
+            UserId = userId,
+        };
+        Guzergahlar.Add(guzergah);
+        return guzergah;
+    }
+
+    /// <summary>
+    /// Testleri kısaltmak için: kategoriyi ekler ve nesnesini döner.
+    /// <paramref name="parentId"/> boşsa kök kategori olur.
+    /// </summary>
+    public PoiCategory PoiKategoriEkle(string ad, int? parentId = null, bool aktif = true)
+    {
+        var kategori = new PoiCategory
+        {
+            Id = SonrakiPoiKategoriId(),
+            Ad = ad,
+            ParentId = parentId,
+            IsActive = aktif,
+        };
+        PoiKategorileri.Add(kategori);
+        return kategori;
+    }
 
     /// <summary>Testleri kısaltmak için: yetkiyi ekler ve nesnesini döner.</summary>
     public Permission YetkiEkle(string ad, string? aciklama = null)

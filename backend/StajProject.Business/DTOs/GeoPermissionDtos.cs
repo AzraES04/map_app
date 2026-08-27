@@ -33,7 +33,19 @@ public class GeoPermissionDto
     public bool IsActive { get; set; }
 }
 
-/// <summary>Yeni coğrafi yetki isteği. UserId veya RoleId'den YALNIZCA biri dolu olmalı.</summary>
+/// <summary>
+/// Yeni coğrafi yetki isteği.
+///
+/// İKİ AYRI "yalnızca biri" kuralı var:
+///   • SAHİP  : <see cref="UserId"/> ya da <see cref="RoleId"/>
+///   • ALANIN TANIMI (Ödev 10): <see cref="Wkt"/>, <see cref="IlPlakalari"/>
+///     ya da <see cref="Bolge"/>
+///
+/// Alanın nasıl tanımlandığı SAKLANMIYOR; üçü de sonuçta aynı şeye —
+/// bir geometriye — dönüşüyor ve <c>geo_permissions.geom</c> kolonuna aynı
+/// biçimde yazılıyor. Böylece kuralı uygulayan kod (DogrulaAsync) alanın
+/// nereden geldiğini hiç bilmek zorunda kalmıyor.
+/// </summary>
 public class GeoPermissionCreateDto
 {
     [Required(ErrorMessage = "Alan adı zorunludur.")]
@@ -44,9 +56,36 @@ public class GeoPermissionCreateDto
 
     public int? RoleId { get; set; }
 
-    /// <summary>Haritada çizilen poligonun WKT karşılığı (EPSG:4326).</summary>
-    [Required(ErrorMessage = "Alan (WKT) zorunludur.")]
-    public string Wkt { get; set; } = string.Empty;
+    /// <summary>
+    /// ELLE ÇİZİM: haritada çizilen poligonun WKT karşılığı (EPSG:4326).
+    /// İl/bölge seçildiyse boş bırakılır.
+    /// </summary>
+    public string? Wkt { get; set; }
+
+    /// <summary>
+    /// İL SEÇİMİ (Ödev 10): seçilen illerin plaka kodları. Birden fazla il
+    /// seçilebilir; alan hepsinin birleşimi olur.
+    /// </summary>
+    public List<int>? IlPlakalari { get; set; }
+
+    /// <summary>
+    /// BÖLGE SEÇİMİ (Ödev 10 · Ödev 11'de çoklu): "Ege", "Karadeniz"...
+    /// Alan, seçilen bölgelerdeki TÜM illerin birleşimi olur.
+    ///
+    /// Ödev 11'de tekil <c>Bolge</c> alanı listeye çevrildi. Tek elemanlı
+    /// liste eski davranışın aynısı; çağıran taraf için kırılma yok.
+    /// </summary>
+    public List<string>? Bolgeler { get; set; }
+
+    /// <summary>
+    /// KAYITLI ALAN SEÇİMİ (Ödev 11): <c>tbl_polygon</c>'daki mevcut
+    /// çizimlerin id'leri. Alan, seçilenlerin birleşimi olur.
+    ///
+    /// Neden faydalı? Yönetici zaten "Ankara metropol alanı" diye bir poligon
+    /// çizmişse, aynı sınırı yetki tanımlarken yeniden çizmesi hem zaman kaybı
+    /// hem de iki sınırın birbirinden kayması demekti.
+    /// </summary>
+    public List<int>? PoligonIdleri { get; set; }
 }
 
 /// <summary>

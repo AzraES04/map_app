@@ -4,6 +4,8 @@ import MapPage from './pages/MapPage.jsx'
 import AdminLayout from './pages/AdminLayout.jsx'
 import AdminUsers from './pages/AdminUsers.jsx'
 import AdminRoles from './pages/AdminRoles.jsx'
+import AdminPoi from './pages/AdminPoi.jsx'
+import AdminGuzergah from './pages/AdminGuzergah.jsx'
 import { isAuthenticated } from './auth'
 
 // Korumalı rota: geçerli token yoksa login'e yönlendirir
@@ -44,6 +46,10 @@ export default function App() {
           <Route index element={<Navigate to="/admin/users" replace />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="roles" element={<AdminRoles />} />
+          {/* Ödev 12: POI listesi + kategori yönetimi tek ekranda */}
+          <Route path="poi" element={<AdminPoi />} />
+          {/* Ödev 16: güzergah tanımı + durakların sürükle-bırak sıralaması */}
+          <Route path="guzergah" element={<AdminGuzergah />} />
         </Route>
 
         {/* Kök adres: giriş yapılmışsa haritaya, yapılmamışsa login'e */}

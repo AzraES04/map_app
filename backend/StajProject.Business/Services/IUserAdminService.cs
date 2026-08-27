@@ -21,6 +21,17 @@ public interface IUserAdminService
     Task<bool> DeleteAsync(int id);
 
     /// <summary>
+    /// Kendi kaydını açmış bir kullanıcıyı ONAYLAR (Ödev 10).
+    /// Zaten onaylıysa ya da kayıt yoksa null döner.
+    ///
+    /// Onayı geri alma ucu YOK: bir hesabı kapatmanın yolu "pasife al"
+    /// (is_active) ya da silmektir. Onay, bir kereye mahsus bir kapıdır;
+    /// geri alınabilir olsaydı iki ayrı "kapalı" durumu doğar ve hangisinin
+    /// geçerli olduğu belirsizleşirdi.
+    /// </summary>
+    Task<UserDto?> OnaylaAsync(int id);
+
+    /// <summary>
     /// Kullanıcının DOĞRUDAN yetkilerini günceller ve güncel matrisi döner.
     /// Rolden gelen yetkiler bu listeye yazılmaz — zaten geçerliler.
     /// </summary>

@@ -64,6 +64,14 @@
   --taslak: #e8a13c;
   --analiz: #ff4d7d;
 
+  /* Ödev 12 — POI katmanı. MapPage.jsx'teki POI_RENGI ile AYNI olmalı:
+     biri katmanı boyuyor, diğeri paneldeki noktayı ve düğmeyi. */
+  --poi: #8e44ad;
+
+  /* Ödev 14 — konum analizi. MapPage.jsx'teki KONUM_RENGI ile AYNI olmalı:
+     biri haritadaki alan çerçevesini, diğeri paneldeki düğmeyi boyuyor. */
+  --konum: #8b5cf6;
+
   /* ---- Tipografi: viewport'a göre akıcı ölçek --------------------------- */
   /* clamp(en küçük, tercih edilen, en büyük) → dar ekranda küçülür,
      geniş ekranda büyür, ama asla okunmaz/dev olmaz. */
@@ -145,6 +153,110 @@ body {
     #08192a 0%, #04101c 32%, #01060c 62%, #000 100%);
 }
 
+/* ---------------------------------------------------------------------------
+   YILDIZ ALANI (Ödev 10)
+   Üç katman, farklı yıldız boyutu ve farklı sürüklenme hızı. Tek katman düz
+   bir desen gibi dururdu; hız farkı derinlik (paralaks) hissi veriyor.
+
+   Yıldızlar tek tek eleman DEĞİL: her katman, tekrar eden bir radial-gradient
+   deseni. 200 tane div üretmek yerine üç div ile aynı sonuç — ve tarayıcı
+   bunu tek doku olarak çizdiği için çok daha ucuz.
+--------------------------------------------------------------------------- */
+.yildiz-alani {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;   /* kartın altında kalsın, tıklamaları yutmasın */
+}
+
+.yildiz-katman {
+  position: absolute;
+  inset: -50% 0 0;        /* üstten taşır: aşağı süzülürken boşluk görünmesin */
+  background-repeat: repeat;
+  will-change: transform;
+}
+
+/* Uzak katman: minik, soluk, çok yavaş */
+.yildiz-katman.uzak {
+  background-image:
+    radial-gradient(1px 1px at 20% 12%, rgba(255,255,255,0.75) 50%, transparent 50%),
+    radial-gradient(1px 1px at 68% 27%, rgba(255,255,255,0.55) 50%, transparent 50%),
+    radial-gradient(1px 1px at 41% 63%, rgba(255,255,255,0.65) 50%, transparent 50%),
+    radial-gradient(1px 1px at 85% 78%, rgba(255,255,255,0.5) 50%, transparent 50%),
+    radial-gradient(1px 1px at 8% 88%, rgba(255,255,255,0.6) 50%, transparent 50%);
+  background-size: 260px 260px;
+  animation: yildiz-suzul 240s linear infinite, yildiz-titre 7s ease-in-out infinite;
+}
+
+/* Orta katman: biraz daha büyük ve parlak */
+.yildiz-katman.orta {
+  background-image:
+    radial-gradient(1.6px 1.6px at 33% 22%, rgba(214,238,255,0.9) 50%, transparent 50%),
+    radial-gradient(1.4px 1.4px at 77% 55%, rgba(255,255,255,0.8) 50%, transparent 50%),
+    radial-gradient(1.6px 1.6px at 14% 71%, rgba(198,228,255,0.85) 50%, transparent 50%);
+  background-size: 420px 420px;
+  animation: yildiz-suzul 160s linear infinite, yildiz-titre 5.5s ease-in-out infinite 1.2s;
+}
+
+/* Yakın katman: az sayıda, iri, hafif mavi haleli */
+.yildiz-katman.yakin {
+  background-image:
+    radial-gradient(2.2px 2.2px at 55% 18%, rgba(255,255,255,0.95) 50%, transparent 50%),
+    radial-gradient(2px 2px at 24% 47%, rgba(var(--atmosfer), 0.9) 50%, transparent 50%),
+    radial-gradient(2.2px 2.2px at 88% 82%, rgba(255,255,255,0.9) 50%, transparent 50%);
+  background-size: 680px 680px;
+  filter: drop-shadow(0 0 4px rgba(var(--atmosfer), 0.5));
+  animation: yildiz-suzul 110s linear infinite, yildiz-titre 4.5s ease-in-out infinite 0.6s;
+}
+
+/* Yıldızlar çok yavaş aşağı süzülür — sabit bir gökyüzü ölü görünüyordu. */
+@keyframes yildiz-suzul {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, 50%, 0); }
+}
+
+/* Titreşim: opaklık çok az oynuyor. Fazlası disko gibi görünürdü. */
+@keyframes yildiz-titre {
+  0%, 100% { opacity: 0.72; }
+  50%      { opacity: 1; }
+}
+
+/* KAYAN YILDIZ — ince bir ışık çizgisi. Uzun aralıklı: sürekli olsaydı
+   dikkat dağıtır, ekranın asıl işi olan giriş formunu gölgelerdi. */
+.kayan-yildiz {
+  position: absolute;
+  top: 12%;
+  left: -12%;
+  width: 130px;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.9), transparent);
+  filter: drop-shadow(0 0 6px rgba(var(--atmosfer), 0.8));
+  opacity: 0;
+  transform: rotate(14deg);
+  animation: kayan-yildiz 13s ease-in infinite;
+}
+.kayan-yildiz.ikinci {
+  top: 46%;
+  width: 90px;
+  animation-duration: 19s;
+  animation-delay: 7s;
+}
+
+@keyframes kayan-yildiz {
+  /* Görünür kısım toplam sürenin yalnızca %6'sı; gerisi bekleme. */
+  0%      { opacity: 0; transform: translate3d(0, 0, 0) rotate(14deg); }
+  2%      { opacity: 1; }
+  8%      { opacity: 0; transform: translate3d(60vw, 22vh, 0) rotate(14deg); }
+  100%    { opacity: 0; transform: translate3d(60vw, 22vh, 0) rotate(14deg); }
+}
+
+/* Hareket hassasiyeti olan kullanıcıda gökyüzü DURUR ama yıldızlar kalır:
+   dekoru tamamen silmek yerine hareketi kaldırıyoruz. */
+@media (prefers-reduced-motion: reduce) {
+  .yildiz-katman { animation: none; opacity: 0.85; }
+  .kayan-yildiz { display: none; }
+}
+
 /*
   GEZEGEN KAVSİ — devasa bir dairenin yalnızca üst kenarı ekranda.
   Bu, "uzaydan bakan bir yörünge kamerası" hissini tek elemanla verir;
@@ -194,6 +306,64 @@ body {
   margin-bottom: 10px;
   color: rgba(var(--atmosfer), 0.9);
   filter: drop-shadow(0 0 14px rgba(var(--atmosfer), 0.4));
+}
+
+/* Giriş / Kayıt sekmeleri (Ödev 10) — kartın içinde, camsı yüzeye oturan
+   ince bir seçici. Ayrı sayfa yerine sekme: kullanıcı iki adım arasında
+   sayfa değiştirmeden gidip gelebiliyor. */
+.login-sekme {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin: 4px 0 16px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius);
+}
+
+.login-card .login-sekme button {
+  /* .login-card button kuralını EZİYORUZ: o kural dolu teal zemin, büyük iç
+     boşluk ve gölge veriyor; sekme daha hafif durmalı.
+     
+     ⚠ SEÇİCİ NEDEN ".login-card" İLE BAŞLIYOR?
+     Önceden yalnızca ".login-sekme button" yazıyordu. İkisinin de
+     ÖZGÜLLÜĞÜ AYNI (bir sınıf + bir tip) ve ".login-card button" dosyada
+     DAHA SONRA geldiği için cascade'i o kazanıyordu: `all: unset` kendi
+     kuralı içinde her şeyi sıfırlıyor ama sonraki kuralın kendi
+     bildirimlerini (background, padding, box-shadow…) engelleyemiyor.
+     
+     Sonuç GÖRÜNÜR BİR HATAYDI ve tam ters yönde: SEÇİLİ sekme
+     ".login-sekme button.active" ile soluk beyaz bir zemin alıyor,
+     SEÇİLİ OLMAYAN sekme ise ".login-card button"un dolu teal zeminine
+     düşüyordu. Yani kullanıcı hangi sekmede olduğunu tam tersi okuyordu:
+     "Giriş Yap" seçiliyken ekranda "Kayıt Ol" vurgulu görünüyordu.
+     
+     Kapsayıcıyı seçiciye eklemek özgüllüğü bir sınıf artırıyor ve sıralamayı
+     anlamsız kılıyor. */
+  all: unset;
+  box-sizing: border-box;
+  text-align: center;
+  padding: 7px 10px;
+  border-radius: calc(var(--radius) - 3px);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(232, 241, 247, 0.6);
+  cursor: pointer;
+  transition: background var(--gecis), color var(--gecis);
+}
+
+.login-card .login-sekme button:hover { color: #e8f1f7; }
+
+.login-card .login-sekme button.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.login-card .login-sekme button:focus-visible {
+  outline: 2px solid rgba(var(--atmosfer), 0.9);
+  outline-offset: 1px;
 }
 
 .login-card h1 {
@@ -1408,6 +1578,459 @@ kbd {
 
 .layer-toggle:hover { color: var(--metin); }
 
+/* ---------- Ödev 8: GeoServer katmanı ve veri kaynağı rozeti ---------- */
+
+/* Üstteki üç katmandan görsel olarak ayrılsın: bunlar vektör, bu resim. */
+.wms-toggle {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kenar);
+}
+.wms-toggle:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.wms-toggle input:disabled { cursor: not-allowed; }
+
+/* Vektör katmanların noktası dolu renk; WMS'inki çizgili — "bu bir resim
+   katmanı" ayrımını renk körlüğünden bağımsız olarak da veriyor. */
+.dot.wms {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--marka-300) 0 2px,
+    transparent 2px 4px
+  );
+  border: 1px solid var(--marka-300);
+}
+
+.katman-not {
+  margin: 2px 0 0 20px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+  line-height: 1.4;
+}
+
+.veri-kaynagi {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--kenar);
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+}
+.veri-kaynagi strong { color: var(--metin-orta); font-weight: 600; }
+
+/* Bağlantı ışığı: yeşil = GeoServer cevap veriyor, kırmızı = ulaşılamıyor. */
+.kaynak-nokta {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--error);
+  flex: none;
+}
+.kaynak-nokta.ayakta { background: var(--ok); }
+
+/* ---------- Ödev 11: hesap değiştirici (üst bar) ---------- */
+
+.hesap-secici { position: relative; display: inline-flex; }
+
+/* Rozet artık düğme: .badge görünümünü koruyor ama tıklanabilir. */
+.hesap-secici > .badge.user {
+  cursor: pointer;
+  border: 1px solid var(--kenar);
+  background: none;
+  font: inherit;
+  gap: 5px;
+}
+.hesap-secici > .badge.user:hover { border-color: var(--kenar-guclu); color: var(--metin); }
+.hesap-secici > .badge.user:focus-visible { outline: 2px solid var(--marka-300); outline-offset: 2px; }
+
+.hesap-ok { font-size: 0.7em; opacity: 0.7; }
+
+/* Dışarı tıklamayı yakalayan saydam perde — menüden ALTTA, sayfanın üstünde. */
+.hesap-perde { position: fixed; inset: 0; z-index: 40; }
+
+.hesap-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 41;
+  min-width: 208px;
+  padding: 6px;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar-guclu);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  display: grid;
+  gap: 2px;
+}
+
+.hesap-baslik {
+  margin: 2px 8px 4px;
+  font-size: var(--yazi-xs);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--metin-soluk);
+  font-weight: 600;
+}
+
+.hesap-satir { display: flex; align-items: stretch; gap: 2px; }
+
+.hesap-satir > button:first-child {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius) - 3px);
+  color: var(--metin-orta);
+  font-size: var(--yazi-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--gecis), color var(--gecis);
+}
+.hesap-satir > button:first-child:hover { background: var(--yuzey-3); color: var(--metin); }
+.hesap-satir.aktif > button:first-child { color: var(--metin); cursor: default; }
+.hesap-satir.aktif > button:first-child:hover { background: transparent; }
+
+.hesap-ad { flex: 1; font-weight: 600; }
+.hesap-satir small { font-size: var(--yazi-xs); color: var(--metin-soluk); font-weight: 400; }
+
+.hesap-unut {
+  border: none;
+  background: transparent;
+  color: var(--metin-soluk);
+  cursor: pointer;
+  padding: 0 7px;
+  border-radius: calc(var(--radius) - 3px);
+  font-size: 1rem;
+  line-height: 1;
+}
+.hesap-unut:hover { color: var(--error); background: var(--yuzey-3); }
+
+.hesap-ekle {
+  margin-top: 4px;
+  padding: 7px 9px;
+  border: none;
+  border-top: 1px solid var(--kenar);
+  background: transparent;
+  color: var(--marka-300);
+  font-size: var(--yazi-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0 0 calc(var(--radius) - 3px) calc(var(--radius) - 3px);
+}
+.hesap-ekle:hover { background: var(--yuzey-3); }
+
+.hesap-menu button:focus-visible { outline: 2px solid var(--marka-300); outline-offset: -2px; }
+
+/* ---------- Ödev 10: coğrafi yetki — tanımlama yolu seçici ---------- */
+
+/* Dört yol arasında geçiş: Elle çiz / İl seç / Bölge seç / Kayıtlı alan.
+   Harita sekmelerindeki (.geom-tabs) desenin aynısı — aynı işi yapan iki
+   kontrolün farklı görünmesi için sebep yok.
+
+   2×2: dördünü tek satıra sıkıştırınca "Kayıtlı alan" yazısı sığmıyordu. */
+.mod-secici {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 3px;
+  background: var(--yuzey-2);
+  padding: 3px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+.mod-btn {
+  padding: 7px 6px;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius) - 3px);
+  color: var(--metin-orta);
+  font-size: var(--yazi-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--gecis), color var(--gecis);
+}
+.mod-btn:hover { color: var(--metin); }
+.mod-btn.active { background: var(--yuzey-3); color: var(--metin); }
+.mod-btn:focus-visible { outline: 2px solid var(--marka-300); outline-offset: 1px; }
+
+/* Yedi bölge — iki sütun. Tek sütunda liste uzayıp haritayı aşağı itiyordu. */
+.bolge-listesi {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.bolge-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 7px 9px;
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  background: var(--yuzey-2);
+  color: var(--metin-orta);
+  font-size: var(--yazi-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--gecis), background var(--gecis), color var(--gecis);
+}
+.bolge-btn small { font-weight: 400; font-size: var(--yazi-xs); color: var(--metin-soluk); }
+.bolge-btn:hover { border-color: var(--kenar-guclu); color: var(--metin); }
+.bolge-btn.active {
+  border-color: var(--taslak);
+  background: color-mix(in srgb, var(--taslak) 16%, var(--yuzey-2));
+  color: var(--metin);
+}
+.bolge-btn:focus-visible { outline: 2px solid var(--marka-300); outline-offset: 1px; }
+
+/* Kayıtlı alan listesi — bölge düğmeleriyle aynı desen, tek sütun
+   (alan adları uzun olabiliyor, iki sütunda kırpılırdı). */
+.kayitli-alan-listesi {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 12px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+/* Seçili iller — kaldırılabilir etiketler (chip). Haritada turuncu boyanan
+   illerin metin karşılığı; kullanıcı ne seçtiğini listeden de görebilsin. */
+.secili-iller {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+.secili-iller li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--taslak) 18%, var(--yuzey-2));
+  border: 1px solid color-mix(in srgb, var(--taslak) 45%, transparent);
+  font-size: var(--yazi-xs);
+  color: var(--metin);
+}
+.secili-iller button {
+  border: none;
+  background: transparent;
+  color: var(--metin-orta);
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 3px;
+  border-radius: var(--radius-full);
+}
+.secili-iller button:hover { color: var(--error); }
+
+/* Tablo satırındaki birincil düğme — normal boyutu satırı şişiriyordu. */
+.btn-primary.kucuk {
+  padding: 4px 11px;
+  font-size: var(--yazi-xs);
+}
+
+/* Onay bekleyen kullanıcı rozeti (Ödev 10) */
+.onay-rozeti {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--uyari) 18%, transparent);
+  color: var(--uyari);
+  border: 1px solid color-mix(in srgb, var(--uyari) 40%, transparent);
+  font-size: var(--yazi-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- Ödev 9: Isı haritası aracı ve lejantı ---------- */
+
+/* Isı aracı açıkken sıcak bir vurgu — "analiz" aracının soğuk vurgusundan
+   ayrılsın; ikisi yan yana duruyor ve farklı işler yapıyor. */
+.tool-btn.isi.active {
+  border-color: color-mix(in srgb, var(--analiz) 55%, transparent);
+  background: color-mix(in srgb, var(--analiz) 14%, var(--yuzey-2));
+  color: var(--metin);
+}
+
+/* Sağ alt köşe yığını: termometre + lejant (Ödev 9-11) */
+.isi-panel {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;   /* bilgi verir, tıklanmaz — haritayı engellemesin */
+  max-width: 46%;
+}
+
+/* Termometre: tıklanan noktanın yoğunluk okuması (Ödev 11) */
+.termometre {
+  background: var(--kart);
+  border: 1px solid var(--kart-kenar);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 8px 10px;
+  min-width: 156px;
+}
+
+.termometre-ust {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.termometre-etiket {
+  font-size: var(--yazi-xs);
+  font-weight: 600;
+  color: var(--kart-metin);
+}
+.termometre-deger {
+  font-family: ui-monospace, monospace;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--kart-metin);
+}
+
+/* Sıfır okuması: sayı yerine söz. Rakamla aynı ağırlıkta olmasın —
+   "burada ölçülecek bir şey yok" daha sakin bir bilgi. */
+.termometre-deger.bos {
+  font-family: inherit;
+  font-size: var(--yazi-sm);
+  font-weight: 600;
+  color: var(--kart-metin-soluk);
+}
+
+/* Çubuk, lejantla AYNI rampayı kullanıyor. Gradyan burada DEĞİL, wms.js →
+   ISI_GRADYANI'da tanımlı ve inline style ile geliyor: rampa tek yerde dursun,
+   CSS ile SLD arasında üçüncü bir kopya olmasın. */
+.termometre-cubuk {
+  position: relative;
+  height: 8px;
+  margin: 6px 0 4px;
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06);
+}
+
+.termometre-isaret {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 14px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--kart-metin);
+  box-shadow: 0 0 0 1.5px var(--kart);
+  transition: left var(--gecis);
+}
+
+.termometre-konum {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+  font-size: var(--yazi-xs);
+  color: var(--kart-metin-soluk);
+  font-variant-numeric: tabular-nums;
+  /* Henüz ölçüm yokken burada tek cümlelik yönerge duruyor; koordinat
+     satırından uzun olduğu için sarması gerekiyor. */
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+/* Ölçüm yokken çubuk boş kalıyor — soluklaştırıp "henüz veri yok" diyoruz. */
+.termometre-cubuk:not(:has(.termometre-isaret)) { opacity: 0.4; }
+
+/* Değerin bağlamı: kaç nokta yakında, en yakını ne kadar uzakta.
+   Koordinat satırından bir tık daha soluk — asıl bilgi değerin kendisi. */
+.termometre-cevre {
+  margin: 4px 0 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--kart-kenar);
+  display: grid;
+  gap: 1px;
+  font-size: var(--yazi-xs);
+  line-height: 1.35;
+  color: var(--kart-metin-soluk);
+}
+.termometre-cevre strong { color: var(--kart-metin); font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .termometre-isaret { transition: none; }
+}
+
+/* Lejant: haritanın SAĞ ALT köşesi (ödevin istediği yer).
+   Harita üstündeki diğer kartlarla aynı "aydınlık içerik" görünümünde. */
+.isi-lejant {
+  position: relative;
+  margin: 0;
+  padding: 8px 10px 6px;
+  background: var(--kart);
+  border: 1px solid var(--kart-kenar);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.isi-lejant figcaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+  font-size: var(--yazi-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--kart-metin);
+}
+.isi-lejant figcaption span {
+  font-weight: 500;
+  color: var(--kart-metin-soluk);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Gradyan çubuğu — GeoServer'ın PNG lejantının yerini aldı.
+   Genişlik sabit değil: kutu içeriğe göre daralıp genişleyebilsin. */
+.isi-lejant-cubuk {
+  height: 10px;
+  min-width: 168px;
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+
+.isi-lejant-etiket {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: var(--yazi-xs);
+  color: var(--kart-metin-soluk);
+}
+/* Ortadaki etiket gerçekten ortada dursun; uçtakiler kenarlara yaslı. */
+.isi-lejant-etiket span:nth-child(2) { flex: 1; text-align: center; }
+.isi-lejant-etiket span:last-child { text-align: right; }
+
+@media (max-width: 640px) {
+  .isi-panel { right: 8px; bottom: 8px; max-width: 60%; }
+  .isi-lejant { padding: 6px 8px 4px; }
+}
+
 /* ---------- ④ Kayıtlı geometriler ---------- */
 
 .geom-tabs {
@@ -1828,6 +2451,15 @@ kbd {
 }
 
 .admin-oturum .logout-btn { padding: 5px 11px; flex-shrink: 0; }
+
+/* Hesap menüsü panelde YUKARI açılıyor: rozet kenar çubuğunun dibinde
+   duruyor, aşağı açılsaydı menü ekranın altından taşar ve görünmezdi. */
+.admin-oturum .hesap-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+  right: auto;
+  left: 0;
+}
 
 /* Üst bardaki "Yönetim" düğmesi — marka tonuyla ayrışsın */
 .logout-btn.yonetim {
@@ -2410,3 +3042,1819 @@ kbd {
   font-size: var(--yazi-xs);
   white-space: nowrap;
 }
+
+
+/* ==========================================================================
+   Ödev 12 — POI (ilgi noktası) ve kategori yönetimi
+   ========================================================================== */
+
+/* ---------- Harita: POI ekleme aracı ---------- */
+
+/* Analiz düğmesindeki desenin aynısı: aracın rengi katmanın rengiyle aynı
+   olsun ki "hangi düğme hangi katmanı üretiyor?" sorusu sorulmasın. */
+.tool-btn.poi.active {
+  background: color-mix(in oklab, var(--poi) 22%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--poi) 60%, transparent);
+  color: #f3e6f9;
+  box-shadow: var(--isik-ust),
+              0 6px 18px -10px color-mix(in oklab, var(--poi) 70%, transparent);
+}
+
+.tool-btn.poi.active .tool-icon { color: var(--poi); }
+
+/* ---------- POI formu: kategori seçimi ve mesai saatleri ---------- */
+
+/* Popup içindeki açılır liste, aynı popup'taki metin kutularıyla aynı
+   görünmeli — tarayıcının varsayılan <select> stili yanlarında yamalı duruyor. */
+.popup-form select,
+.popup-duzenle select {
+  padding: 7px 9px;
+  margin-bottom: 9px;
+  border: 1px solid #cfd9e2;
+  border-radius: var(--radius);
+  font-size: 0.83rem;
+  font-family: inherit;
+  background: #fff;
+  color: var(--kart-metin);
+}
+
+.popup-form select:focus,
+.popup-duzenle select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(35, 96, 110, 0.15);
+}
+
+/* Kategori hiç yoksa form çalışmaz; sebebini forma yakın söylüyoruz. */
+.popup-uyari {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: #8a5a00;
+  background: #fff6e2;
+  border: 1px solid #f0d9a8;
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  margin-bottom: 9px;
+}
+
+.mesai-alanlari {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.mesai-surekli {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--kart-metin);
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.mesai-saatler { display: flex; align-items: center; gap: 8px; }
+
+.mesai-saatler input[type='time'] {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #cfd9e2;
+  border-radius: var(--radius);
+  font-size: 0.83rem;
+  font-family: inherit;
+}
+
+.mesai-saatler span { color: var(--kart-metin-soluk); }
+
+/* Veritabanına yazılacak METNİ gösteriyor: kullanıcı iki ayrı saat kutusunun
+   tek bir kolona nasıl dönüştüğünü tahmin etmek zorunda kalmasın. */
+.mesai-onizleme {
+  font-size: 0.72rem;
+  color: var(--kart-metin-soluk);
+}
+
+.mesai-onizleme code {
+  background: var(--kart-2);
+  border: 1px solid var(--kart-kenar);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* ---------- Sağ panel: POI listesi ---------- */
+
+.poi-list .poi-kategori {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--poi) 16%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--poi) 35%, transparent);
+  font-size: var(--yazi-xs);
+  color: var(--metin-orta);
+}
+
+.poi-list .poi-alt { display: block; margin-top: 3px; font-size: var(--yazi-xs); }
+
+/* ---------- Yönetim paneli: POI Yönetimi ekranı ---------- */
+
+/* Sekmeler haritadaki .geom-tabs deseninin panel karşılığı; aynı işi yapan
+   iki kontrolün farklı görünmesi için sebep yok. */
+.admin-sekmeler {
+  display: flex;
+  gap: 4px;
+  background: var(--yuzey-2);
+  padding: 3px;
+  border-radius: var(--radius);
+  align-self: flex-start;
+}
+
+.admin-sekme {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius) - 3px);
+  font-size: var(--yazi-sm);
+  font-weight: 600;
+  color: var(--metin-soluk);
+  cursor: pointer;
+  transition: background var(--gecis), color var(--gecis);
+}
+
+.admin-sekme:hover { color: var(--metin-orta); }
+
+.admin-sekme.active {
+  background: var(--yuzey-3);
+  color: var(--metin);
+  box-shadow: var(--isik-ust), var(--shadow-sm);
+}
+
+.admin-sekme .sayi {
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--yuzey-0);
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+}
+
+.admin-suzgec {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--yazi-sm);
+  color: var(--metin-orta);
+  margin-bottom: 12px;
+}
+
+.admin-suzgec select,
+.admin-suzgec input[type="search"] {
+  padding: 6px 9px;
+  border-radius: var(--radius);
+  border: 1px solid var(--kenar-guclu);
+  background: var(--yuzey-2);
+  color: var(--metin);
+  font-family: inherit;
+  font-size: var(--yazi-sm);
+}
+
+/* Arama kutusu, yanındaki açılır listeden daha geniş: yazılan metin
+   kesilmesin (Ödev 14 — liste binlerce satıra çıktı). */
+.admin-suzgec input[type="search"] { min-width: 240px; }
+
+/* "N kayıttan ilk 200'ü gösteriliyor" satırı — tablonun hemen altında,
+   listenin kesildiğini söyleyen tek yer (Ödev 14). */
+.liste-siniri {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kenar);
+}
+
+/* Pasif POI satırı listede KALIR (silinmiş değil), sadece söner. */
+.admin-tablo tr.pasif-satir td { opacity: 0.55; }
+
+/* Kategori ağacının girinti işareti — hiyerarşiyi tek bakışta gösterir. */
+.agac-dal {
+  color: var(--metin-soluk);
+  margin-right: 4px;
+  font-weight: 400;
+}
+
+/* Bildirim şeridine gömülü "Geri al" düğmesi (soft delete'in karşılığı). */
+.banner-eylem {
+  margin-left: 10px;
+  padding: 2px 10px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.banner-eylem:hover { background: rgba(255, 255, 255, 0.1); }
+
+/* ==========================================================================
+   ÖDEV 13 — POI stilleri, arama barı ve gün gün mesai
+   ========================================================================== */
+
+/* ---------- Madde 2: haritanın üstündeki arama barı ----------
+   Sağ paneldeki kutudan buraya taşındı: aranan şey haritada bir yer olduğu
+   için arama kutusunun da haritanın üstünde durması bekleniyor (Google Maps,
+   Yandex, OSM — hepsinde böyle).
+
+   Ortalanmış ve GENİŞLİĞİ SINIRLI: tam genişlik olsaydı geniş ekranda satır
+   uzunluğu okunmaz hâle gelirdi. Solda değil ortada: OpenLayers'ın kendi zoom
+   düğmeleri sol üst köşede duruyor. */
+.arama-bari {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(440px, calc(100% - 110px));
+  /* Harita üstündeki diğer katmanların (ölçek çubuğu, lejant) üstünde. */
+  z-index: 30;
+}
+
+.arama-bari .arama-kutusu input {
+  width: 100%;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar-guclu);
+  border-radius: var(--radius-full);
+  padding: 10px 34px 10px 16px;
+  box-shadow: var(--shadow-md);
+}
+
+.arama-bari .arama-temizle { right: 10px; }
+
+/* Sonuç listesi kutunun ALTINA açılıyor; haritayı ittirmiyor, üstüne biniyor. */
+.arama-panel {
+  margin-top: 8px;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  /* Çok sonuçta ekranı doldurmasın; kendi içinde kaysın. */
+  max-height: min(58vh, 460px);
+  overflow-y: auto;
+}
+
+/* İki kaynağı (kayıtlı POI / haritadaki yer) ayıran başlık. Kullanıcı hangi
+   sonucun ne yapacağını başlıktan anlıyor. */
+.arama-grup {
+  font-size: var(--yazi-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--metin-soluk);
+  padding: 6px 8px 2px;
+}
+
+.arama-panel .arama-sonuclari { margin-top: 0; }
+
+/* Satır artık iki şey taşıyor: sonucun kendisi ve (yer sonuçlarında)
+   "POI ekle" kestirmesi. */
+.arama-panel .arama-sonuclari li { display: flex; align-items: center; gap: 4px; }
+.arama-panel .arama-sonuclari button { flex: 1; }
+
+/* Kategori rengini taşıyan nokta — haritadaki SLD simgesiyle aynı renk,
+   sonucun hangi kategoriye ait olduğu listede de görünsün. */
+.arama-nokta {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 3px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+.arama-poi-ekle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border: 1px solid var(--kenar-guclu);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--poi);
+  font: inherit;
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  cursor: pointer;
+  transition: background var(--gecis);
+}
+
+.arama-poi-ekle:hover { background: var(--yuzey-3); }
+
+.pasif-etiket { color: var(--metin-soluk); font-style: normal; font-weight: 500; }
+
+/* ---------- Madde 1: POI kategori lejandı ----------
+   Renk/simge eşlemesi wms.js → POI_LEJANTI'den geliyor; o da SLD dosyalarıyla
+   elle eşleniyor (iki dosyada da birbirine işaret eden uyarı var). */
+.poi-lejant {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+.poi-lejant li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-orta);
+}
+
+/* SLD'deki WellKnownName şekillerinin CSS karşılıkları. Birebir aynı çizim
+   değil ama AYNI AYRIMI veriyor: renge ek olarak biçim de farklı, böylece
+   renk körlüğünde de okunabiliyor. */
+.poi-simge {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.16);
+}
+
+.poi-simge.daire { border-radius: 50%; }
+.poi-simge.kare { border-radius: 2px; }
+.poi-simge.ucgen { clip-path: polygon(50% 0, 100% 100%, 0 100%); box-shadow: none; }
+.poi-simge.arti {
+  clip-path: polygon(38% 0, 62% 0, 62% 38%, 100% 38%, 100% 62%, 62% 62%,
+                     62% 100%, 38% 100%, 38% 62%, 0 62%, 0 38%, 38% 38%);
+  box-shadow: none;
+}
+.poi-simge.yildiz {
+  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%,
+                     50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  box-shadow: none;
+}
+
+/* ---------- Madde 3: gün gün mesai planı ----------
+   Popup açık zeminli (kart) olduğu için renkler --kart-* ailesinden. */
+
+/* Üç kip: Haftalık / 7-24 / Resmî kurum. Segment düğme görünümü, radyo
+   davranışı — seçim tek olduğu için görsel olarak da tek blok. */
+.mesai-kipler {
+  display: flex;
+  gap: 4px;
+  background: var(--kart-2);
+  border: 1px solid var(--kart-kenar);
+  border-radius: var(--radius);
+  padding: 3px;
+}
+
+.mesai-kipler label {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 4px;
+  border-radius: 6px;
+  font-size: var(--yazi-xs);
+  font-weight: 600;
+  color: var(--kart-metin-soluk);
+  cursor: pointer;
+  margin-bottom: 0;
+  transition: background var(--gecis), color var(--gecis);
+}
+
+.mesai-kipler label.secili {
+  background: var(--kart);
+  color: var(--kart-metin);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Radyo düğmesinin kendisi görünmüyor: tıklama alanı etiketin tamamı olsun.
+   display:none DEĞİL — o durumda klavye odağı alamaz ve Tab ile
+   seçilemezdi. */
+.mesai-kipler input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mesai-kipler label:focus-within { outline: 2px solid var(--marka-500); outline-offset: 1px; }
+
+.mesai-gunler { display: flex; flex-direction: column; gap: 3px; }
+
+.mesai-gun {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 5px;
+  border-radius: 6px;
+}
+
+.mesai-gun.kapali { background: var(--kart-2); }
+
+/* Gün adı sabit genişlikte: yedi satırın saat kutuları aynı hizada başlasın. */
+.mesai-gun-ad {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 62px;
+  flex-shrink: 0;
+  margin-bottom: 0;
+  font-size: var(--yazi-xs);
+  font-weight: 600;
+  color: var(--kart-metin);
+  cursor: pointer;
+}
+
+.mesai-gun.kapali .mesai-gun-ad { color: var(--kart-metin-soluk); }
+
+.mesai-kapali-yazi { font-size: var(--yazi-xs); color: var(--kart-metin-soluk); }
+
+/* Yedi satırı tek tek doldurmak yerine hafta içine toplu uygulama. */
+.mesai-toplu {
+  align-self: flex-start;
+  font-size: var(--yazi-xs);
+  padding: 4px 10px;
+}
+
+.mesai-tatil {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--yazi-xs);
+  font-weight: 600;
+  color: var(--kart-metin);
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.mesai-tatil input:disabled { cursor: not-allowed; }
+.mesai-tatil em { font-weight: 500; color: var(--kart-metin-soluk); font-style: normal; }
+
+/* Tatil listesi katlanır duruyor: 15+ satır formu ikiye katlardı, oysa çoğu
+   kullanıcı için "kapalı olacağım" bilgisi yeterli. */
+.mesai-tatiller { font-size: var(--yazi-xs); }
+
+.mesai-tatiller summary {
+  cursor: pointer;
+  color: var(--kart-metin-soluk);
+  font-weight: 600;
+  padding: 2px 0;
+}
+
+.mesai-tatiller ul {
+  list-style: none;
+  margin-top: 5px;
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid var(--kart-kenar);
+  border-radius: var(--radius);
+  padding: 5px;
+}
+
+.mesai-tatiller li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 3px;
+  color: var(--kart-metin);
+}
+
+.tatil-tarih {
+  width: 54px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--kart-metin-soluk);
+}
+
+.tatil-yarim { margin-left: auto; color: var(--kart-metin-soluk); font-style: normal; }
+
+/* POI bilgi kartında "bugün tatil, kapalı" rozeti. */
+.tatil-rozet {
+  display: block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: #fff6e2;
+  border: 1px solid #f0d9a8;
+  color: #8a5a00;
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  width: fit-content;
+}
+
+/* ---------- Madde 4: otomatik ad/kategori ipucu ---------- */
+.popup-ipucu {
+  font-size: var(--yazi-xs);
+  line-height: 1.5;
+  color: var(--kart-metin-soluk);
+  margin-bottom: 8px;
+}
+
+/* Otomatik seçilen kategori: sessizce dolan bir alan "ben mi seçtim?"
+   dedirtir, o yüzden gerekçesiyle birlikte ve görünür bir kutuda. */
+.popup-ipucu.oneri {
+  background: #eef7f4;
+  border: 1px solid #cfe6dd;
+  border-radius: var(--radius);
+  padding: 6px 9px;
+  color: #1f5a49;
+}
+
+.popup-ipucu.oneri small { color: #4c7d70; }
+
+/* ==========================================================================
+   ÖDEV 13 İYİLEŞTİRMELERİ — açık/kapalı durumu, stil yönetimi, duyarlılık
+   ========================================================================== */
+
+/* ---------- "Şu an açık / kapalı" ----------
+   Mesai planını yapısal bir kolona taşımanın ekrandaki karşılığı. Özet metin
+   ("Pzt-Cum 09:00-18:00") insana bilgi verir ama "şimdi gidebilir miyim?"
+   sorusunu cevaplamaz; bu rozet onu cevaplıyor.
+
+   Renk TEK BAŞINA taşımıyor: yanındaki metin durumu zaten yazıyor
+   ("Açık · 18:00 kapanıyor"). Renk körlüğünde de okunur kalıyor. */
+.mesai-durum {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  border: 1px solid transparent;
+}
+
+.mesai-durum.acik {
+  background: #e8f6ee;
+  border-color: #bfe3cd;
+  color: #1c6b3f;
+}
+
+.mesai-durum.kapali {
+  background: var(--kart-2);
+  border-color: var(--kart-kenar);
+  color: var(--kart-metin-soluk);
+}
+
+.mesai-durum-nokta {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
+}
+
+/* Açık durumda nokta nefes alıyor — bilginin CANLI olduğunu (tarayıcı
+   saatiyle hesaplandığını) ima ediyor. Hareketi azaltma tercihi olanlarda
+   duruyor; aşağıdaki prefers-reduced-motion bloğu kapatıyor. */
+.mesai-durum.acik .mesai-durum-nokta { animation: nabiz 2.2s ease-in-out infinite; }
+
+@keyframes nabiz {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mesai-durum.acik .mesai-durum-nokta { animation: none; }
+}
+
+/* Arama sonucu satırındaki küçük durum rozeti. Burada renk daha kısıtlı
+   kullanılıyor: satır zaten yoğun, yalnızca ad hizasında bir işaret yeterli. */
+.durum-rozet {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 650;
+  vertical-align: middle;
+}
+
+.durum-rozet.acik { background: rgba(63, 191, 136, 0.16); color: var(--ok); }
+.durum-rozet.kapali { background: rgba(255, 255, 255, 0.07); color: var(--metin-soluk); }
+
+/* ---------- Yönetim başlığındaki eylem grubu ---------- */
+.admin-baslik-eylemler {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Duyarlılık: arama barı dar ekranda ----------
+   820px altında harita alanı 45vh'ye düşüyor ama açılır liste 58vh'ye kadar
+   uzayabiliyordu — panelin üstüne taşıyordu. Listeyi haritanın kendi yüksekliğine
+   bağlıyoruz. */
+@media (max-width: 820px) {
+  .arama-bari {
+    top: 10px;
+    width: calc(100% - 96px);
+  }
+
+  .arama-panel { max-height: 32vh; }
+
+  /* Dar ekranda ipucu satırı yer kaplıyor, sonuçlar için yer kalsın. */
+  .arama-panel .arama-ipucu { display: none; }
+}
+
+/* Çok dar ekranda (telefon) zoom düğmeleriyle çakışmasın diye bar aşağıya
+   iniyor: OpenLayers'ın kendi düğmeleri sol üstte sabit. */
+@media (max-width: 480px) {
+  .arama-bari {
+    top: auto;
+    bottom: 12px;
+    width: calc(100% - 24px);
+  }
+
+  /* Aşağıdayken liste YUKARI açılmalı, yoksa ekranın dışına taşar. */
+  .arama-bari { display: flex; flex-direction: column-reverse; }
+  .arama-panel { margin-top: 0; margin-bottom: 8px; }
+}
+
+/* ---------- Lejant: kategori sayısı arttıkça ----------
+   Kategori tablosundan üretildiği için liste artık sabit beş satır değil;
+   ondört kategorili bir kurulumda paneli doldurmasın. */
+.poi-lejant {
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+/* ==========================================================================
+   AYDINLIK TEMA
+   ==========================================================================
+
+   Varsayılan palet KARANLIK (yukarıdaki :root). Aydınlık tema onu ezen bir
+   katman: yalnızca RENK DEĞİŞKENLERİ yeniden tanımlanıyor, tek bir bileşen
+   kuralı bile tekrarlanmıyor.
+
+   Bunun mümkün olmasının sebebi, renklerin en baştan iki katmanda
+   tanımlanmış olması:
+       ham renkler   --murekkep-900, --marka-300 …
+       ROL renkleri  --yuzey-0 (zemin), --metin (yazı), --kenar (çizgi) …
+   Bileşen kuralları hep ROL adını kullanıyor. Tema değiştirmek, rollere
+   başka ham renkler bağlamaktan ibaret.
+
+   ⚠ Sabit renk yazan yerler bu mekanizmanın DIŞINDA kalır. Bu yüzden
+   aydınlık temada da doğru görünmesi gereken kutular (uyarı, öneri, tatil
+   rozeti) aşağıda ayrıca ele alınıyor.
+
+   Giriş ekranı BİLEREK karanlık kalıyor: uzay sahnesi, yıldız alanı ve
+   gezegen o palete göre tasarlandı; aydınlık zeminde yıldızlar görünmez.
+   Kural en altta (.login-wrapper).
+*/
+:root[data-tema='aydinlik'] {
+  /* ---- Zeminler: koyudan açığa, aynı SIRAYLA ----
+     --yuzey-0 en arkada, --yuzey-3 en önde/vurgulu. Karanlık temada bu
+     "gittikçe açılan gri", aydınlıkta "gittikçe koyulaşan gri" oluyor;
+     yükseklik hissi korunuyor. */
+  --yuzey-0: #eef2f5;   /* uygulama zemini */
+  --yuzey-1: #ffffff;   /* panel, üst bar */
+  --yuzey-2: #f4f7f9;   /* kart, girdi, sekme yuvası */
+  --yuzey-3: #e4ebf0;   /* hover / seçili */
+
+  --kenar: rgba(15, 34, 45, 0.12);
+  --kenar-guclu: rgba(15, 34, 45, 0.22);
+
+  --metin: #14212a;
+  --metin-orta: #455966;
+  --metin-soluk: #64798a;
+
+  /* ---- Marka tonu ----
+     Karanlıkta --marka-300 (açık turkuaz) okunuyordu; beyaz zeminde
+     kontrastı 2:1'e düşüyor. Aydınlıkta rolü koyu ton üstleniyor. */
+  --primary: var(--marka-500);
+
+  /* ---- Gölgeler ----
+     Koyu zeminde gölge "derinlik" verir; açık zeminde aynı opaklık kir gibi
+     görünür. Aynı geometri, çok daha düşük opaklık. */
+  --shadow-sm: 0 1px 2px rgba(15, 34, 45, 0.10);
+  --shadow-md: 0 8px 22px -10px rgba(15, 34, 45, 0.22);
+  --shadow-lg: 0 18px 40px -18px rgba(15, 34, 45, 0.28);
+
+  /* Film greni koyu yüzeydeki bantlaşmayı kırmak içindi; açık zeminde
+     yapacağı tek şey yüzeyi kirletmek. */
+  --grain: none;
+
+  /* Ödev 14: açık mor beyaz zeminde 2:1 kontrasta düşüyor; aynı renk
+     ailesinin koyu tonu metin ve kenarlarda okunur kalıyor. Haritadaki
+     çerçeve rengi değişmiyor — o zaten haritanın üstünde duruyor. */
+  --konum: #6d3fd4;
+}
+
+/* Aydınlıkta seçim vurgusu: koyu metin üzerinde açık zemin. */
+:root[data-tema='aydinlik'] ::selection {
+  background: color-mix(in oklab, var(--marka-300) 55%, transparent);
+  color: var(--metin);
+}
+
+/* Üst bar ve panel karanlıkta yarı saydam koyu cam efekti kullanıyor;
+   aydınlıkta o katman beyazın üstünde gri bir sis bırakıyor. */
+:root[data-tema='aydinlik'] .topbar,
+:root[data-tema='aydinlik'] .side-panel,
+:root[data-tema='aydinlik'] .admin-navbar {
+  background: var(--yuzey-1);
+  backdrop-filter: none;
+}
+
+/* Rozet ve "ghost" düğmelerin hover zemini karanlıkta beyaz alfa;
+   aydınlıkta görünmez oluyor, siyah alfaya çeviriyoruz. */
+:root[data-tema='aydinlik'] .banner-eylem:hover,
+:root[data-tema='aydinlik'] .arama-poi-ekle:hover {
+  background: rgba(15, 34, 45, 0.06);
+}
+
+:root[data-tema='aydinlik'] .durum-rozet.kapali {
+  background: rgba(15, 34, 45, 0.07);
+}
+
+/* Simgelerin beyaz halkası aydınlık zeminde kayboluyor. */
+:root[data-tema='aydinlik'] .poi-simge,
+:root[data-tema='aydinlik'] .arama-nokta {
+  box-shadow: 0 0 0 1px rgba(15, 34, 45, 0.15);
+}
+
+/* Giriş ekranı her iki temada da KARANLIK: uzay sahnesi buna göre tasarlandı.
+   Rol değişkenlerini bu ağacın içinde geri çeviriyoruz — sayfanın geri kalanı
+   etkilenmiyor. */
+:root[data-tema='aydinlik'] .login-wrapper {
+  --yuzey-0: var(--murekkep-900);
+  --yuzey-1: var(--murekkep-850);
+  --yuzey-2: var(--murekkep-800);
+  --yuzey-3: var(--murekkep-700);
+  --kenar: rgba(255, 255, 255, 0.08);
+  --kenar-guclu: rgba(255, 255, 255, 0.15);
+  --metin: #e9f1f3;
+  --metin-orta: #a3b7bf;
+  --metin-soluk: #8aa3ac;
+  --primary: var(--marka-300);
+
+  background: var(--murekkep-900);
+  color: var(--metin);
+}
+
+/* ==========================================================================
+   ARAMA BARI — yazı rengi
+   ==========================================================================
+
+   Girdi stilleri .side-panel altına yazılmıştı; arama kutusu Ödev 13'te
+   haritanın üstüne taşınınca o kapsamın DIŞINDA kaldı ve rengini kaybetti.
+   Tarayıcının varsayılanı siyah olduğu için koyu zeminde yazılan metin
+   okunmuyordu. Kuralları burada, kutunun kendi kapsamında tekrar veriyoruz.
+*/
+.arama-bari .arama-kutusu input {
+  color: var(--metin);
+  caret-color: var(--primary);
+}
+
+.arama-bari .arama-kutusu input::placeholder {
+  color: var(--metin-soluk);
+}
+
+.arama-bari .arama-kutusu input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--primary) 60%, transparent);
+  box-shadow: var(--shadow-md), 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent);
+}
+
+/* Sonuç listesindeki başlık, karanlıkta --nokta (turkuaz) rengini alıyordu.
+   Ad SATIRI zaten --metin; düğmenin devraldığı rengi de metne çekiyoruz ki
+   ikon ve ad aynı okunurlukta olsun. */
+.arama-panel .arama-sonuclari button { color: var(--metin); }
+.arama-panel .arama-ad strong { color: var(--metin); }
+.arama-panel .arama-ad small { color: var(--metin-orta); }
+
+/* ==========================================================================
+   AKORDİYONLAR — panel ve form yüksekliğini kontrol altına almak
+   ==========================================================================
+
+   İki liste ekranı dolduruyordu: mesai formundaki yedi gün satırı ve POI
+   lejandındaki (artık kategori başına üretilen) on dört satır. İkisi de
+   <details> ile katlanıyor.
+
+   NEDEN <details>, kendi state'imiz DEĞİL?
+   Açılıp kapanma tarayıcının kendi işi: klavye erişimi, ekran okuyucu
+   duyurusu ve "aç/kapa" semantiği bedava geliyor. React state'iyle yazsaydık
+   üçünü de elle kurmak gerekirdi.
+*/
+.akordiyon {
+  border: 1px solid var(--kart-kenar);
+  border-radius: var(--radius);
+  background: var(--kart-2);
+  overflow: hidden;
+}
+
+.akordiyon > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  color: var(--kart-metin);
+  list-style: none;
+  user-select: none;
+}
+
+/* Tarayıcının varsayılan üçgenini gizleyip kendi okumuzu koyuyoruz:
+   varsayılan işaretçi Safari/Firefox/Chrome'da farklı çiziliyor. */
+.akordiyon > summary::-webkit-details-marker { display: none; }
+
+.akordiyon > summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--gecis);
+}
+
+.akordiyon[open] > summary::before { transform: rotate(45deg); }
+
+.akordiyon > summary:hover { background: var(--kart); }
+
+.akordiyon > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* Katlıyken bile bilgi versin: özet satırının sağında mevcut durum yazıyor.
+   "Günler" yazan boş bir kutu, açmadan hiçbir şey söylemezdi. */
+.akordiyon-ozet {
+  margin-left: auto;
+  font-weight: 500;
+  font-size: 0.68rem;
+  color: var(--kart-metin-soluk);
+  max-width: 58%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.akordiyon-govde {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--kart-kenar);
+}
+
+/* Mesai günleri akordiyonun içinde: kendi kenarlığı zaten var, tekrar etmesin */
+.akordiyon-govde .mesai-gunler { margin-bottom: 8px; }
+
+/* ---- Panel akordiyonu (POI lejandı) ----
+   Popup'takinden farklı bir zeminde duruyor: panel koyu (--yuzey-*),
+   popup açık (--kart-*). */
+.panel-akordiyon {
+  border-color: var(--kenar);
+  background: var(--yuzey-2);
+}
+
+.panel-akordiyon > summary { color: var(--metin); }
+.panel-akordiyon > summary:hover { background: var(--yuzey-3); }
+.panel-akordiyon .akordiyon-ozet { color: var(--metin-soluk); }
+.panel-akordiyon .akordiyon-govde { border-top-color: var(--kenar); }
+
+/* Lejant artık akordiyonun içinde; kendi yükseklik sınırı kalabilir ama
+   daha cömert olabilir çünkü katlı duruyor. */
+.panel-akordiyon .poi-lejant {
+  max-height: 210px;
+  margin: 0;
+}
+
+/* ---------- Tema düğmesi ----------
+   Üst bardaki diğer rozetlerle (saat, hesap seçici) aynı ölçüde: yan yana
+   dururken hiçbiri diğerinden daha "ağır" görünmemeli. */
+.tema-dugmesi {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--kenar-guclu);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--metin-orta);
+  font: inherit;
+  font-size: var(--yazi-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--gecis), color var(--gecis), border-color var(--gecis);
+}
+
+.tema-dugmesi:hover {
+  background: var(--yuzey-2);
+  color: var(--metin);
+  border-color: var(--primary);
+}
+
+.tema-dugmesi:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Dar ekranda etiket düşüyor, ikon kalıyor — diğer üst bar düğmeleriyle
+   aynı davranış (bkz. .harita-btn span). */
+@media (max-width: 820px) {
+  .tema-etiket { display: none; }
+  .tema-dugmesi { padding: 5px 7px; }
+}
+
+
+/* ==========================================================================
+   ÖDEV 14 — KONUM ANALİZİ PANELİ
+   Alan seçimi (il listesi / poligon), ağırlıklı kriterler, uygunluk yüzeyi.
+
+   Bölüm kendi rengiyle (--konum) işaretli: soldaki mor şerit, panelde aşağı
+   kaydırırken "burası analiz bölümü" demenin en ucuz yolu. Aynı numara
+   envanter analizinde de kullanılıyor (orada pembe şerit).
+   ========================================================================== */
+
+.tool-btn.konum.active {
+  background: color-mix(in oklab, var(--konum) 22%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--konum) 60%, transparent);
+  color: #f1e9ff;
+  box-shadow: var(--isik-ust),
+              0 6px 18px -10px color-mix(in oklab, var(--konum) 70%, transparent);
+}
+
+.tool-btn.konum.active .tool-icon { color: color-mix(in oklab, var(--konum) 65%, #fff); }
+
+.konum-analizi {
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--konum) 8%, var(--yuzey-1)) 0%,
+    var(--yuzey-1) 100%);
+  border-left: 2px solid var(--konum);
+  animation: acil 0.18s ease-out;
+}
+
+/* Adım başlıkları: panelin h2'si zaten seyrek harfli ve soluk; adımlar
+   ondan bir tık daha belirgin ki "1 → 2 → 3" sırası okunsun. */
+.analiz-adim {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--yazi-sm);
+  font-weight: 700;
+  color: var(--metin);
+  margin: 14px 0 8px;
+}
+
+.konum-analizi > .analiz-adim:first-of-type { margin-top: 0; }
+
+/* ---------- Alan seçimi: iki yol, segmentli anahtar ---------- */
+
+.analiz-sekme {
+  display: flex;
+  gap: 3px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  padding: 3px;
+  margin-bottom: 10px;
+}
+
+.analiz-sekme button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--metin-orta);
+  font: inherit;
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  padding: 6px 8px;
+  border-radius: calc(var(--radius) - 3px);
+  cursor: pointer;
+  transition: background var(--gecis), color var(--gecis);
+}
+
+.analiz-sekme button:hover { color: var(--metin); }
+
+.analiz-sekme button.aktif {
+  background: color-mix(in oklab, var(--konum) 26%, var(--yuzey-1));
+  color: var(--metin);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- İl listesi ---------- */
+
+.il-secici input[type="search"] { padding: 7px 10px; margin-bottom: 8px; }
+
+.il-rozetleri {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.il-rozet {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: color-mix(in oklab, var(--konum) 20%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--konum) 45%, transparent);
+  color: var(--metin);
+  border-radius: var(--radius-full);
+  padding: 2px 9px;
+  font: inherit;
+  font-size: var(--yazi-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--gecis), border-color var(--gecis);
+}
+
+.il-rozet:hover { background: color-mix(in oklab, var(--konum) 34%, var(--yuzey-2)); }
+
+.il-rozet.temizle {
+  background: transparent;
+  border-color: var(--kenar-guclu);
+  color: var(--metin-soluk);
+}
+
+.il-rozet.temizle:hover { color: var(--metin); background: var(--yuzey-2); }
+
+/* 81 il tek ekrana sığmaz: kendi içinde kayan, sınırlı yükseklikte bir kutu.
+   Panelin tamamını uzatmak, altındaki katman ve kayıt bölümlerini
+   erişilemez kılardı. */
+.il-listesi {
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  background: var(--yuzey-2);
+  padding: 4px;
+}
+
+.il-satiri {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: var(--yazi-sm);
+  cursor: pointer;
+  transition: background var(--gecis);
+}
+
+.il-satiri:hover { background: var(--yuzey-3); }
+
+.il-satiri input { width: auto; margin: 0; accent-color: var(--konum); }
+
+.il-plaka {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--yazi-xs);
+  font-weight: 700;
+  color: var(--metin-soluk);
+  min-width: 20px;
+}
+
+.il-ad { flex: 1; min-width: 0; }
+
+.il-bolge { font-size: var(--yazi-xs); }
+
+/* ---------- Çizim yolu ---------- */
+
+.analiz-durum {
+  font-size: var(--yazi-xs);
+  margin-top: 8px;
+  padding: 6px 9px;
+  border-radius: var(--radius);
+  border: 1px solid var(--kenar);
+  background: var(--yuzey-2);
+  color: var(--metin-orta);
+}
+
+.analiz-durum.ok {
+  border-color: color-mix(in oklab, var(--ok) 45%, transparent);
+  background: color-mix(in oklab, var(--ok) 12%, var(--yuzey-2));
+  color: color-mix(in oklab, var(--ok) 70%, var(--metin));
+}
+
+/* ---------- Kriter satırları ---------- */
+
+.kriter-listesi { display: flex; flex-direction: column; gap: 9px; }
+
+.kriter-satiri {
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  padding: 8px 9px 6px;
+}
+
+.kriter-ust {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.kriter-ust select {
+  flex: 1;
+  min-width: 0;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar);
+  border-radius: 7px;
+  color: var(--metin);
+  font: inherit;
+  font-size: var(--yazi-sm);
+  padding: 5px 7px;
+}
+
+.kriter-ust select:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--konum) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--konum) 18%, transparent);
+}
+
+/* Puan kutusu dar ve sayısal: yan yana dizilen puanlar aynı genişlikte
+   dursun, göz toplamı tararken hizalanabilsin. */
+.kriter-puan {
+  width: 54px;
+  flex: 0 0 54px;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar);
+  border-radius: 7px;
+  color: var(--metin);
+  font: inherit;
+  font-size: var(--yazi-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: center;
+  padding: 5px 4px;
+}
+
+.kriter-puan:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--konum) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--konum) 18%, transparent);
+}
+
+.kriter-sil {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 1px solid var(--kenar);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--metin-soluk);
+  cursor: pointer;
+  transition: color var(--gecis), background var(--gecis), border-color var(--gecis);
+}
+
+.kriter-sil:hover:not(:disabled) {
+  color: var(--error);
+  border-color: color-mix(in oklab, var(--error) 50%, transparent);
+  background: color-mix(in oklab, var(--error) 12%, transparent);
+}
+
+.kriter-sil:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.kriter-satiri input[type="range"] {
+  width: 100%;
+  margin-top: 7px;
+  accent-color: var(--konum);
+  cursor: pointer;
+}
+
+.kriter-araclar {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.kriter-araclar .btn-ghost { flex: 1; font-size: var(--yazi-xs); }
+
+/* ---------- Puan toplamı: ödevin en katı kuralı ---------- */
+
+.puan-toplami {
+  margin: 11px 0;
+  font-size: var(--yazi-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--metin-orta);
+}
+
+.puan-toplami strong { font-size: var(--yazi-lg); }
+
+.puan-toplami.tamam strong { color: var(--ok); }
+.puan-toplami.gecersiz strong { color: var(--uyari); }
+
+.puan-cubugu {
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.puan-cubugu span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width var(--gecis), background var(--gecis);
+}
+
+.puan-toplami.tamam .puan-cubugu span { background: var(--ok); }
+.puan-toplami.gecersiz .puan-cubugu span { background: var(--uyari); }
+
+/* ---------- Uyarılar ---------- */
+
+.analiz-engel,
+.analiz-hata {
+  font-size: var(--yazi-xs);
+  margin-top: 7px;
+  padding: 6px 9px;
+  border-radius: var(--radius);
+  line-height: 1.45;
+}
+
+.analiz-engel {
+  background: color-mix(in oklab, var(--uyari) 12%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--uyari) 40%, transparent);
+  color: color-mix(in oklab, var(--uyari) 65%, var(--metin));
+}
+
+.analiz-hata {
+  background: color-mix(in oklab, var(--error) 12%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--error) 40%, transparent);
+  color: color-mix(in oklab, var(--error) 60%, var(--metin));
+}
+
+/* ---------- Sonuç ---------- */
+
+.konum-sonuc {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--kenar);
+}
+
+.konum-sonuc .analiz-toplam { font-size: var(--yazi-sm); }
+.konum-sonuc .analiz-toplam strong { font-size: var(--yazi-md); color: var(--metin); }
+
+.kriter-ozet {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0;
+}
+
+.kriter-ozet li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--yazi-sm);
+}
+
+.kriter-ad { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.kriter-agirlik {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--metin);
+}
+
+.kriter-sayi {
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+  font-variant-numeric: tabular-nums;
+  min-width: 58px;
+  text-align: right;
+}
+
+/* Alanda hiç POI'si olmayan kriter: sessizce geçmesin, görünür olsun. */
+.kriter-sayi.bos { color: var(--uyari); font-weight: 700; }
+
+/* ---------- Lejant ---------- */
+
+.uygunluk-lejanti { margin: 12px 0; }
+
+.lejant-cubugu {
+  height: 9px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--kenar);
+}
+
+.lejant-etiketler {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+  margin-top: 4px;
+}
+
+.lejant-etiketler span:nth-child(2) { flex: 1; text-align: center; }
+.lejant-etiketler span:last-child { text-align: right; }
+
+.uygunluk-lejanti .muted { margin-top: 5px; font-size: var(--yazi-xs); }
+
+/* ---------- Aday konumlar ---------- */
+
+.analiz-alt-baslik {
+  font-size: var(--yazi-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--metin-soluk);
+  margin: 12px 0 7px;
+}
+
+.aday-listesi {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.aday-listesi button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 5px 6px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--gecis), border-color var(--gecis);
+}
+
+.aday-listesi button:hover {
+  background: var(--yuzey-2);
+  border-color: var(--kenar);
+}
+
+/* Madalyon: haritadaki işaretçinin aynı sıra numarası ve aynı rengi.
+   Kullanıcı listedeki satırla haritadaki noktayı gözüyle eşleştiriyor. */
+.aday-sira {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  font-size: var(--yazi-xs);
+  font-weight: 800;
+  color: #15202b;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.75);
+}
+
+.aday-govde { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+.aday-govde strong {
+  font-size: var(--yazi-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.aday-govde small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 9px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+}
+
+/* Dar ekranda panel daralıyor: il listesi ve kriter satırları önce kısalsın,
+   panelin tamamı yatay kaymasın. */
+@media (max-width: 900px) {
+  .il-listesi { max-height: 150px; }
+  .kriter-puan { width: 46px; flex-basis: 46px; }
+}
+
+
+/* ==========================================================================
+   ÖDEV 15 — KATEGORİYE ÖZGÜ POI SİMGELERİ
+
+   Simgelerin çizimi burada DEĞİL: yolları sunucudan geliyor ve React
+   `dangerouslySetInnerHTML` ile inline <svg> basıyor. Buradaki kurallar
+   yalnızca o SVG'lerin yerleşimi ve seçicinin görünümü.
+   ========================================================================== */
+
+/* Paneldeki lejant satırında simge — eski renkli kare/dairenin yerini aldı.
+   Ölçü .poi-simge ile paylaşılıyor ki iki gösterim (ikonlu ve ikonsuz yedek)
+   satırda aynı yüksekliği kaplasın, liste zıplamasın. */
+.poi-simge.ikon {
+  background: none;
+  border-radius: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.poi-simge.ikon svg { display: block; }
+
+/* ---------- Yönetim panelindeki kategori tablosu ---------- */
+
+.kategori-simge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
+  margin-right: 2px;
+}
+
+.kategori-simge svg { display: block; }
+
+/* Miras alınan simge SOLUK: "bu kategoriye simge seçilmedi, üstünden
+   geliyor" bilgisini satırdan okunur kılıyor. Rozet ya da ek bir sütun
+   koymak tabloyu uzatırdı; opaklık aynı şeyi yer kaplamadan söylüyor. */
+.kategori-simge.miras { opacity: 0.45; }
+
+/* ---------- Simge seçici ---------- */
+
+.ikon-secici {
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  padding: 10px 12px 12px;
+  margin: 0;
+}
+
+.ikon-secici legend {
+  font-size: var(--yazi-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--metin-soluk);
+  padding: 0 6px;
+}
+
+/* auto-fill + minmax: pencere daraldıkça sütun sayısı kendiliğinden düşüyor,
+   kırılma noktası yazmaya gerek kalmıyor. */
+.ikon-izgara {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ikon-kutu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px 6px;
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  background: var(--yuzey-2);
+  color: var(--metin-orta);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--gecis), background var(--gecis), color var(--gecis);
+}
+
+.ikon-kutu:hover {
+  background: var(--yuzey-3);
+  border-color: var(--kenar-guclu);
+  color: var(--metin);
+}
+
+.ikon-kutu.secili {
+  background: color-mix(in oklab, var(--primary) 16%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--primary) 65%, transparent);
+  color: var(--metin);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--primary) 35%, transparent);
+}
+
+.ikon-kutu svg { display: block; }
+
+.ikon-kutu small {
+  font-size: 0.66rem;
+  line-height: 1.15;
+  text-align: center;
+  /* Uzun adlar ("Alışveriş sepeti") kutuyu genişletmesin: iki satıra sarıp
+     kesiyoruz, tam adı title özniteliği zaten taşıyor. */
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* "Miras" kutusundaki ok, simgelerle aynı yüksekliği kaplasın diye
+   ızgaradaki 24 pikselik SVG'lerle eşleştirildi. */
+.ikon-miras {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.ikon-secici .muted { font-size: var(--yazi-xs); line-height: 1.45; }
+
+
+/* ==========================================================================
+   ÖDEV 16 — AKILLI ULAŞIM MODÜLÜ
+   Durak Ekle aracı, harita paneli lejantı ve Güzergah Yönetimi ekranı
+   (sürükle-bırak listesi dahil).
+   ========================================================================== */
+
+/* Ulaşım rengi: hatların kendi renkleri var, bu yalnızca ARACIN rengi —
+   çizim (mavi), POI (mor), analiz (pembe), konum (menekşe) ailesine
+   katılan beşinci ton. */
+:root { --ulasim: #0f8c8c; }
+
+:root[data-tema='aydinlik'] { --ulasim: #0b6f6f; }
+
+.tool-btn.durak.active {
+  background: color-mix(in oklab, var(--ulasim) 22%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--ulasim) 60%, transparent);
+  color: #e6fbfb;
+  box-shadow: var(--isik-ust),
+              0 6px 18px -10px color-mix(in oklab, var(--ulasim) 70%, transparent);
+}
+
+.tool-btn.durak.active .tool-icon { color: color-mix(in oklab, var(--ulasim) 65%, #fff); }
+
+/* ---------- Harita panelindeki hat lejantı ---------- */
+
+.guzergah-lejant {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 0;
+}
+
+.guzergah-lejant li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--yazi-sm);
+}
+
+/* Pasif hat listede KALIR (silinmiş değil), sadece söner. */
+.guzergah-lejant li.pasif { opacity: 0.5; }
+
+/* Renk kutusu değil ÇİZGİ: haritada hattı temsil eden şey bir çizgi,
+   lejant da onu taklit etmeli. */
+.guzergah-cizgi {
+  width: 22px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.guzergah-ad {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Durak bilgi kutucuğu ---------- */
+
+.durak-hat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: var(--yazi-sm);
+  margin-bottom: 8px;
+}
+
+.durak-sira-rozet {
+  color: #fff;
+  font-size: var(--yazi-xs);
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  margin-left: auto;
+}
+
+/* ==========================================================================
+   Güzergah Yönetimi ekranı
+   ========================================================================== */
+
+/* İki sütun: solda hatlar, sağda seçilen hattın durakları.
+   minmax(0, …) ŞART — grid öğeleri varsayılan olarak min-content genişliğinde
+   kalır ve uzun durak adları sütunu taşırırdı. */
+.ulasim-duzen {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .ulasim-duzen { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------- Güzergah listesi ---------- */
+
+.guzergah-listesi {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.guzergah-listesi li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  transition: background var(--gecis), border-color var(--gecis);
+}
+
+.guzergah-listesi li:hover { background: var(--yuzey-2); }
+
+.guzergah-listesi li.secili {
+  background: color-mix(in oklab, var(--primary) 12%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--primary) 45%, transparent);
+}
+
+.guzergah-satir {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 8px 9px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Hattın rengi kalın bir dikey şerit: satırın solunda durup "bu hat bu
+   renk" bilgisini listede taramayı kolaylaştırıyor. */
+.guzergah-renk {
+  width: 6px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.guzergah-govde { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+.guzergah-govde strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guzergah-govde small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+}
+
+.guzergah-eylem { display: flex; gap: 2px; padding-right: 6px; }
+
+/* ---------- Renk seçici (güzergah formu) ---------- */
+
+.renk-secici {
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  padding: 10px 12px 12px;
+  margin: 0;
+}
+
+.renk-secici legend {
+  font-size: var(--yazi-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--metin-soluk);
+  padding: 0 6px;
+}
+
+.renk-izgara { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 8px; }
+
+.renk-kutu {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform var(--gecis), box-shadow var(--gecis);
+}
+
+.renk-kutu:hover { transform: scale(1.08); }
+
+/* Seçili renk: beyaz halka + dış gölge. Kenarlığı rengin KENDİSİYLE
+   göstermek işe yaramaz — koyu renkte görünmez. */
+.renk-kutu.secili {
+  box-shadow: 0 0 0 2px var(--yuzey-1), 0 0 0 4px var(--metin);
+}
+
+.renk-serbest {
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--kenar-guclu);
+  border-radius: var(--radius);
+  background: var(--yuzey-2);
+  cursor: pointer;
+}
+
+.renk-secici .muted { font-size: var(--yazi-xs); }
+
+/* ---------- Durak listesi (sürükle-bırak) ---------- */
+
+.surukle-ipucu { margin-bottom: 10px; font-size: var(--yazi-xs); }
+
+.durak-listesi {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+}
+
+.durak-listesi li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  /* grab: "bu satır taşınabilir" imleçle de söyleniyor; sürükleme
+     ipucu metnini okumayan kullanıcı da anlıyor. */
+  cursor: grab;
+  transition: background var(--gecis), border-color var(--gecis), opacity var(--gecis);
+}
+
+.durak-listesi li:hover { border-color: var(--kenar-guclu); }
+
+.durak-listesi li:active { cursor: grabbing; }
+
+/* Sürüklenen satır soluyor: kullanıcı hangi öğeyi taşıdığını görüyor. */
+.durak-listesi li.suruklenen {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+.durak-tutamac {
+  display: flex;
+  color: var(--metin-soluk);
+  flex-shrink: 0;
+}
+
+/* Sıra numarası hattın renginde — haritadaki durak simgesinin içindeki
+   numarayla AYNI görünüm, ikisi gözle eşleştirilebilsin. */
+.durak-sira {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: var(--yazi-xs);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
+.durak-govde { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+
+.durak-govde strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.durak-govde small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+}
+
+.durak-eylem { display: flex; gap: 2px; flex-shrink: 0; }
+
+.durak-eylem .btn-ghost { padding: 4px 7px; min-width: 0; }

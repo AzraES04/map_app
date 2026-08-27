@@ -30,6 +30,14 @@ public class CografiYetkiTests
     private const string UzakKare = "POLYGON ((20 20, 30 20, 30 30, 20 30, 20 20))";
 
     private static (SahteVeritabani db, GeoPermissionService servis) Kur(int? girisYapan = Ayse)
+        => KurIllerle(new FakeIlRepository(), girisYapan);
+
+    /// <summary>
+    /// Ödev 10: il/bölge seçimini sınayan testler kendi il listesini veriyor.
+    /// Diğer testler boş bir liste alıyor — o yolu hiç kullanmıyorlar.
+    /// </summary>
+    private static (SahteVeritabani db, GeoPermissionService servis) KurIllerle(
+        FakeIlRepository iller, int? girisYapan = Ayse)
     {
         var db = new SahteVeritabani();
         var oturum = new FakeCurrentUserService(girisYapan);
@@ -38,6 +46,8 @@ public class CografiYetkiTests
             new FakeGeoPermissionRepository(db),
             new FakeUserRepository(db),
             new FakeRoleRepository(db),
+            iller,
+            new FakeGeometryRepository<PolygonEntity>(),
             oturum);
 
         return (db, servis);

@@ -4,6 +4,7 @@ using StajProject.Business.Geo;
 using StajProject.Business.Validation;
 using StajProject.DataAccess.Repositories;
 using StajProject.Entities;
+using Bolgeler = StajProject.Business.Geo.Bolgeler;
 
 namespace StajProject.Business.Services;
 
@@ -12,19 +13,49 @@ public class GeoPermissionService : IGeoPermissionService
     private readonly IGeoPermissionRepository _repository;
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
+    private readonly IIlRepository _ilRepository;
+    private readonly IGeometryRepository<PolygonEntity> _poligonRepository;
     private readonly ICurrentUserService _currentUser;
 
     public GeoPermissionService(
         IGeoPermissionRepository repository,
         IUserRepository userRepository,
         IRoleRepository roleRepository,
+        IIlRepository ilRepository,
+        IGeometryRepository<PolygonEntity> poligonRepository,
         ICurrentUserService currentUser)
     {
         _repository = repository;
         _userRepository = userRepository;
         _roleRepository = roleRepository;
+        _ilRepository = ilRepository;
+        _poligonRepository = poligonRepository;
         _currentUser = currentUser;
     }
+
+    /// <summary>
+    /// Yetki alanı olarak seçilebilecek KAYITLI poligonlar (Ödev 11).
+    ///
+    /// Sahiplik süzgeci UYGULANMIYOR (userId: null): yönetici, yetkiyi
+    /// tanımlarken sistemdeki herhangi bir alanı referans alabilmeli.
+    /// Kendi çizimleriyle sınırlasaydık, başka bir yöneticinin çizdiği
+    /// "İstanbul metropol alanı" kullanılamazdı.
+    /// </summary>
+    public Task<List<GeometryDto>> GetSecilebilirAlanlarAsync()
+        => _poligonRepository.GetAllAsync().ContinueWith(t => t.Result
+            .Select(p => new GeometryDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Description = p.Description,
+                Wkt = WktConverter.Write(p.Geometry),
+                GeometryType = p.Geometry.GeometryType,
+                Color = p.Color,
+                InsertedDate = p.InsertedDate,
+                InsertedUserId = p.InsertedUserId,
+                IsActive = p.IsActive,
+            })
+            .ToList());
 
     // ------------------------------------------------------------------
     //  Yönetim tarafı
@@ -65,9 +96,9 @@ public class GeoPermissionService : IGeoPermissionService
             throw new IsKuraliException("Alan tanımlanacak rol bulunamadı.");
         }
 
-        // WKT → Polygon. Tip uyuşmazlığı ve bozuk metin burada yakalanır;
-        // ayrıca SRID 4326'ya sabitlenir (bkz. WktConverter).
-        var alan = WktConverter.Read<Polygon>(dto.Wkt);
+        // Ödev 10: alan üç yoldan tanımlanabiliyor. Hangisi geldiyse ondan
+        // geometriyi üret; sonrası her üçü için aynı.
+        var alan = await AlanGeometrisiAsync(dto);
 
         var kayit = await _repository.AddAsync(new GeoPermission
         {
@@ -85,6 +116,135 @@ public class GeoPermissionService : IGeoPermissionService
     }
 
     public Task<bool> DeleteAsync(int id) => _repository.SoftDeleteAsync(id);
+
+    /// <summary>
+    /// İsteğe göre alan geometrisini üretir (Ödev 10).
+    ///
+    /// Üç yol var ve YALNIZCA BİRİ dolu olmalı. "Hepsini kabul edip birleştirsek
+    /// olmaz mıydı?" — olurdu ama kullanıcı ne tanımladığını göremezdi:
+    /// haritada çizim yapıp sonra bir de il seçen yöneticinin beklentisi
+    /// belirsiz olurdu. Belirsizliği kabul etmek yerine reddediyoruz.
+    /// </summary>
+    private async Task<Geometry> AlanGeometrisiAsync(GeoPermissionCreateDto dto)
+    {
+        var cizim = !string.IsNullOrWhiteSpace(dto.Wkt);
+        var ilSecimi = dto.IlPlakalari is { Count: > 0 };
+        var bolgeSecimi = dto.Bolgeler is { Count: > 0 };
+        var poligonSecimi = dto.PoligonIdleri is { Count: > 0 };
+
+        var secilenYolSayisi = (cizim ? 1 : 0) + (ilSecimi ? 1 : 0)
+                             + (bolgeSecimi ? 1 : 0) + (poligonSecimi ? 1 : 0);
+
+        if (secilenYolSayisi == 0)
+        {
+            throw new IsKuraliException(
+                "Alan tanımlanmadı. Haritaya bir alan çizin; il, bölge ya da kayıtlı alan seçin.");
+        }
+
+        if (secilenYolSayisi > 1)
+        {
+            throw new IsKuraliException(
+                "Alan tek bir yolla tanımlanmalı: çizim, il, bölge ya da kayıtlı alan.");
+        }
+
+        if (cizim)
+        {
+            // Elle çizimde tip kısıtı hâlâ geçerli: kullanıcı bir ALAN çiziyor,
+            // çizgi ya da nokta değil. WktConverter tipi doğrular ve SRID'yi
+            // 4326'ya sabitler.
+            return WktConverter.Read<Polygon>(dto.Wkt);
+        }
+
+        if (ilSecimi)
+        {
+            // Distinct: arayüz aynı ili iki kez göndermiş olsa bile birleşim
+            // aynı; ama gereksiz geometri taşımanın anlamı yok.
+            var plakalar = dto.IlPlakalari!.Distinct().ToList();
+
+            return await _ilRepository.IllerinBirlesimiAsync(plakalar)
+                ?? throw new IsKuraliException(
+                    "Seçilen iller bulunamadı. İl sınırları yüklenmiş mi?");
+        }
+
+        if (bolgeSecimi)
+        {
+            return await BolgeleriBirlestirAsync(dto.Bolgeler!);
+        }
+
+        return await PoligonlariBirlestirAsync(dto.PoligonIdleri!);
+    }
+
+    /// <summary>
+    /// Seçilen bölgelerin illerini tek bir alanda birleştirir (Ödev 11 — çoklu bölge).
+    ///
+    /// Bölgeler AYRIK olduğu için sonuç neredeyse her zaman MultiPolygon olur;
+    /// <c>geo_permissions.geom</c> bu yüzden <c>geometry(Geometry, 4326)</c>.
+    /// </summary>
+    private async Task<Geometry> BolgeleriBirlestirAsync(List<string> istenen)
+    {
+        var adlar = new List<string>();
+
+        foreach (var ham in istenen.Select(b => b.Trim()).Where(b => b.Length > 0).Distinct())
+        {
+            if (!Bolgeler.Gecerli(ham))
+            {
+                throw new IsKuraliException(
+                    $"Bilinmeyen bölge: \"{ham}\". Geçerli bölgeler: {string.Join(", ", Bolgeler.Tumu)}.");
+            }
+
+            adlar.Add(Bolgeler.Normalize(ham));
+        }
+
+        if (adlar.Count == 0)
+        {
+            throw new IsKuraliException("Hiç bölge seçilmedi.");
+        }
+
+        Geometry? birlesim = null;
+
+        foreach (var ad in adlar.Distinct())
+        {
+            var bolge = await _ilRepository.BolgeGeometrisiAsync(ad)
+                ?? throw new IsKuraliException(
+                    $"\"{ad}\" bölgesinde il bulunamadı. İl sınırları yüklenmiş mi?");
+
+            birlesim = birlesim is null ? bolge : birlesim.Union(bolge);
+        }
+
+        birlesim!.SRID = WktConverter.Srid;
+        return birlesim;
+    }
+
+    /// <summary>
+    /// Seçilen KAYITLI poligonları birleştirir (Ödev 11).
+    ///
+    /// Geometri veritabanındaki kayıttan okunuyor, istemcinin gönderdiği
+    /// WKT'den değil: yönetici listeden bir alan seçtiğinde kaydedilen sınır,
+    /// ekranda gördüğü kaydın sınırının BİREBİR aynısı olmalı.
+    /// </summary>
+    private async Task<Geometry> PoligonlariBirlestirAsync(List<int> idler)
+    {
+        var istenen = idler.Distinct().ToHashSet();
+
+        // Sahiplik süzgeci yok: yönetici herhangi bir kayıtlı alanı referans alabilir.
+        var poligonlar = (await _poligonRepository.GetAllAsync())
+            .Where(p => istenen.Contains(p.Id))
+            .ToList();
+
+        if (poligonlar.Count == 0)
+        {
+            throw new IsKuraliException("Seçilen kayıtlı alanlar bulunamadı.");
+        }
+
+        Geometry birlesim = poligonlar[0].Geometry;
+        for (var i = 1; i < poligonlar.Count; i++)
+        {
+            birlesim = birlesim.Union(poligonlar[i].Geometry);
+        }
+
+        birlesim.SRID = WktConverter.Srid;
+        return birlesim;
+    }
 
     // ------------------------------------------------------------------
     //  Uygulama tarafı — asıl kural

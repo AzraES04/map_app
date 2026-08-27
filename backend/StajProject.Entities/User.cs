@@ -32,6 +32,23 @@ public class User : IAuditableEntity
     /// </summary>
     public DateTime? ModifiedDate { get; set; }
 
+    /// <summary>
+    /// Hesap YÖNETİCİ ONAYINDAN geçti mi? (Ödev 10 — kayıt olma)
+    ///
+    /// Giriş ekranından kendi kaydını açan kullanıcı bu alan <c>false</c> ile
+    /// oluşur ve onaylanana kadar giriş yapamaz.
+    ///
+    /// NEDEN <see cref="IsActive"/> yetmedi? İkisi farklı şey söylüyor:
+    /// <c>IsActive=false</c> "bu hesap askıya alındı" (bir zamanlar
+    /// çalışıyordu), <c>IsApproved=false</c> ise "bu hesap hiç onaylanmadı".
+    /// Aynı kolona bindirseydik yönetici listede yeni kaydı askıya alınmış
+    /// eski bir kullanıcıdan ayırt edemezdi.
+    ///
+    /// Seed'le gelen ve yöneticinin panelden açtığı kullanıcılar doğrudan
+    /// onaylı sayılır — onları zaten bir yönetici oluşturmuş oluyor.
+    /// </summary>
+    public bool IsApproved { get; set; } = true;
+
     // ---------- Ödev 6 / Madde 2: dinamik yetkilendirme ----------
 
     /// <summary>Kullanıcının rolleri (user_roles). Yetkilerin ASIL kaynağı budur.</summary>

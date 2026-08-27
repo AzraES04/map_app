@@ -25,17 +25,26 @@ namespace StajProject.API.Authorization;
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
 public class YetkiGerekliAttribute : Attribute, IAsyncAuthorizationFilter
 {
-    private readonly string _yetkiAdi;
+    /// <summary>
+    /// Aranan yetkinin adı.
+    ///
+    /// Salt okunur ve PUBLIC: yapısal denetim testi
+    /// (<c>YetkilendirmeDenetimiTests</c>) yansımayla "bu uç hangi yetkiyi
+    /// istiyor?" diye soruyor. Alan private kalsaydı test yalnızca
+    /// özniteliğin VARLIĞINI görebilir, DOĞRU yetkiyi istediğini
+    /// doğrulayamazdı.
+    /// </summary>
+    public string YetkiAdi { get; }
 
     public YetkiGerekliAttribute(string yetkiAdi)
     {
-        _yetkiAdi = yetkiAdi;
+        YetkiAdi = yetkiAdi;
     }
 
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
         // Sonuç doldurulursa boru hattı burada kesilir, controller hiç çalışmaz.
-        context.Result = await YetkiKontrolu.DogrulaAsync(context.HttpContext, _yetkiAdi)
+        context.Result = await YetkiKontrolu.DogrulaAsync(context.HttpContext, YetkiAdi)
                          ?? context.Result;
     }
 }

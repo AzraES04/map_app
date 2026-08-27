@@ -34,11 +34,16 @@ public class GeoPermission : IAuditableEntity
     public Role? Role { get; set; }
 
     /// <summary>
-    /// İzinli alan (EPSG:4326). Poligon seçildi çünkü ödev "poligon alan çizilsin"
-    /// diyor; ayrıca çok parçalı alan gerekiyorsa aynı sahibe birden fazla satır
-    /// eklemek yeter — MultiPolygon'a gerek kalmıyor, arayüz de basit kalıyor.
+    /// İzinli alan (EPSG:4326).
+    ///
+    /// Tip <see cref="Geometry"/>, <see cref="Polygon"/> DEĞİL. Ödev 10'a kadar
+    /// alan yalnızca elle çizilen tek parça bir poligondu ve Polygon yetiyordu.
+    /// Artık il ve bölge seçimiyle de tanımlanabiliyor: seçilen illerin
+    /// birleşimi çoğu zaman <b>MultiPolygon</b> oluyor (bitişik olmayan iller,
+    /// adalar). Polygon dayatsaydık "Ege + İç Anadolu" gibi bir seçim
+    /// kaydedilemezdi.
     /// </summary>
-    public Polygon Geom { get; set; } = default!;
+    public Geometry Geom { get; set; } = default!;
 
     /// <summary>Kaydın oluşturulma anı (UTC).</summary>
     public DateTime InsertedDate { get; set; } = DateTime.UtcNow;

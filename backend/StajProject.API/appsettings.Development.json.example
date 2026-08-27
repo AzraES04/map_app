@@ -16,5 +16,8 @@
   },
   "Jwt": {
     "Key": "EN-AZ-32-KARAKTERLIK-KENDI-GIZLI-ANAHTARINIZ"
+  },
+  "GeoServer": {
+    "Password": "geoserver"
   }
 }

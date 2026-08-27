@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using StajProject.Business.Auth;
 using StajProject.Business.DTOs;
+using StajProject.Business.Validation;
 using StajProject.DataAccess.Repositories;
 using StajProject.Entities;
 
@@ -52,6 +53,20 @@ public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
             return null;
         }
 
+        // 4.5) Hesap yönetici onayından geçti mi? (Ödev 10)
+        //
+        // Bu kontrol ŞİFRE DOĞRULANDIKTAN SONRA yapılıyor — sırası önemli.
+        // Önce yapsaydık, şifreyi bilmeyen biri de "onay bekliyor" cevabını
+        // alır ve o kullanıcı adının sistemde var olduğunu öğrenirdi
+        // (user enumeration). Şimdi bu bilgiyi yalnızca şifreyi zaten bilen,
+        // yani hesabın gerçek sahibi görüyor — ve onun bilmeye hakkı var:
+        // aksi hâlde "kayıt oldum ama giremiyorum" diye sebepsiz beklerdi.
+        if (!user.IsApproved)
+        {
+            throw new IsKuraliException(
+                "Hesabınız henüz yönetici onayından geçmedi. Onaylandığında giriş yapabilirsiniz.");
+        }
+
         // 5) Token ne zaman geçersiz olacak?
         var expiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiryMinutes);
 
@@ -81,6 +96,51 @@ public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
             Token = new JwtSecurityTokenHandler().WriteToken(token),
             ExpiresAt = expiresAt,
             Username = user.Username
+        };
+    }
+
+    /// <summary>
+    /// Yeni hesap açar (Ödev 10 — giriş ekranındaki "Kayıt Ol").
+    ///
+    /// NEDEN ONAY GEREKİYOR? Kayıt ucu herkese açık. Onay olmasaydı internetten
+    /// gelen herkes anında giriş yapıp haritayı ve envanteri görürdü. Onayla
+    /// birlikte akış şu oluyor: kullanıcı kaydolur → yönetici panelde "onay
+    /// bekliyor" rozetini görür → onaylar ve rol atar → kullanıcı girebilir.
+    ///
+    /// Kayıt olan kullanıcıya ROL VERİLMİYOR: yetkisiz bir hesap giriş yapsa
+    /// bile hiçbir şey ekleyip silemez. Yetki dağıtımı yöneticinin işi (Ödev 6).
+    /// </summary>
+    public async Task<RegisterResponseDto> RegisterAsync(RegisterRequestDto request)
+    {
+        var kullaniciAdi = request.Username.Trim();
+
+        if (kullaniciAdi.Length == 0)
+        {
+            throw new IsKuraliException("Kullanıcı adı boş olamaz.");
+        }
+
+        // Kullanıcı adı dolu mu? Burada "bu ad alınmış" demek zorundayız —
+        // aksi hâlde kullanıcı neden kaydolamadığını anlayamaz. Kayıt
+        // ekranında bu bilgi kaçınılmaz; bu yüzden uç hız sınırına tabi.
+        if (await _userRepository.GetByUsernameAsync(kullaniciAdi) is not null)
+        {
+            throw new IsKuraliException($"\"{kullaniciAdi}\" kullanıcı adı zaten alınmış.");
+        }
+
+        var yeni = new User
+        {
+            Username = kullaniciAdi,
+            IsActive = true,
+            IsApproved = false,   // asıl kural burada
+        };
+        yeni.PasswordHash = _passwordHasher.HashPassword(yeni, request.Password);
+
+        await _userRepository.AddAsync(yeni);
+
+        return new RegisterResponseDto
+        {
+            Username = kullaniciAdi,
+            Message = "Kaydınız alındı. Yönetici onayından sonra giriş yapabilirsiniz.",
         };
     }
 }

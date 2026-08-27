@@ -15,6 +15,24 @@ echo.
 echo  StajProject baslatiliyor...
 echo.
 
+REM ---- Odev 8: GeoServer ayakta mi? -------------------------------------
+REM Backend'in listeleme uclari veriyi GeoServer'dan cekiyor; kapaliysa
+REM harita bos gelir ve sebebi ilk bakista anlasilmaz. Once kontrol edip
+REM gerekirse baslatiyoruz.
+REM
+REM 401 de "ayakta" sayilir: sunucu cevap veriyor, sadece giris istiyor.
+powershell -NoProfile -Command "try { $null = Invoke-WebRequest -Uri 'http://localhost:8080/geoserver/web/' -UseBasicParsing -TimeoutSec 3; exit 0 } catch { if ($_.Exception.Response) { exit 0 } else { exit 1 } }"
+
+if errorlevel 1 (
+    echo  GeoServer calismiyor - baslatiliyor...
+    start "StajProject - GEOSERVER (kapatmayin)" powershell -ExecutionPolicy Bypass -File "%~dp0geoserver\gs-baslat.ps1"
+    echo  GeoServer penceresi acildi. Ilk acilis 30-60 saniye surebilir.
+    echo.
+) else (
+    echo  GeoServer calisiyor: http://localhost:8080/geoserver
+    echo.
+)
+
 REM %~dp0 = bu .bat dosyasinin bulundugu klasor (sonunda ters bolu var)
 start "StajProject - BACKEND (kapatmayin)" cmd /k "cd /d "%~dp0backend" && dotnet run --project StajProject.API --urls http://localhost:5000"
 
@@ -24,10 +42,11 @@ timeout /t 4 /nobreak >nul
 
 start "StajProject - FRONTEND (kapatmayin)" cmd /k "cd /d "%~dp0frontend" && npm run dev"
 
-echo  Iki pencere acildi.
+echo  Pencereler acildi.
 echo.
-echo   Backend  : http://localhost:5000/swagger
-echo   Frontend : http://localhost:5173
+echo   Backend   : http://localhost:5000/swagger
+echo   Frontend  : http://localhost:5173
+echo   GeoServer : http://localhost:8080/geoserver   (admin / geoserver)
 echo.
 echo   Giris    : admin / staj123   veya   ayse / staj123
 echo.

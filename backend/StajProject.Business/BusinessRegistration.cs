@@ -26,6 +26,9 @@ public static class BusinessRegistration
         services.AddScoped<IDatabaseSeeder, DatabaseSeeder>();
         services.AddScoped<IAnalysisService, AnalysisService>();
 
+        // Ödev 14: konum analizi — alan seçimi + ağırlıklı kriterlerle ısı haritası
+        services.AddScoped<IKonumAnaliziService, KonumAnaliziService>();
+
         // Ödev 6: yönetim paneli ve dinamik yetkilendirme
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IRoleService, RoleService>();
@@ -33,6 +36,22 @@ public static class BusinessRegistration
 
         // Ödev 7: coğrafi yetki — hem yönetim hem çizim sırasındaki alan kontrolü
         services.AddScoped<IGeoPermissionService, GeoPermissionService>();
+
+        // Ödev 10: il / bölge referans verisi
+        services.AddScoped<IIlService, IlService>();
+
+        // Ödev 12: POI yönetimi ve hiyerarşik kategori sözlüğü
+        services.AddScoped<IPoiService, PoiService>();
+        services.AddScoped<IPoiCategoryService, PoiCategoryService>();
+
+        // Ödev 16: akıllı ulaşım modülü — güzergah ve durak yönetimi
+        services.AddScoped<IUlasimService, UlasimService>();
+
+        // Ödev 13 iyileştirmesi: POI stilleri kategori tablosundan üretiliyor.
+        // PoiCategoryService bunu isteğe bağlı bağımlılık olarak alıyor —
+        // kayıtlı olduğu için üretimde her zaman geliyor, testlerde
+        // verilmediğinde kategori yönetimi GeoServer'sız çalışmaya devam ediyor.
+        services.AddScoped<IPoiStyleService, PoiStyleService>();
 
         // Geometri servisleri: aynı generic sınıf, üç farklı tip çifti.
         // Controller "IGeometryService<PointEntity>" isteyince konteyner

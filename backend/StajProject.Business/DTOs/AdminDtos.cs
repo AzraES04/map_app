@@ -67,6 +67,13 @@ public class UserDto
     public int Id { get; set; }
     public string Username { get; set; } = string.Empty;
     public bool IsActive { get; set; }
+
+    /// <summary>
+    /// Yönetici onayından geçti mi? (Ödev 10) Kendi kaydını açan kullanıcılar
+    /// <c>false</c> gelir ve listede "onay bekliyor" olarak işaretlenir.
+    /// </summary>
+    public bool IsApproved { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? ModifiedDate { get; set; }
 

@@ -20,6 +20,12 @@ export const YETKILER = {
   kullaniciYonetimi: 'Kullanıcı Yönetimi',
   rolYonetimi: 'Rol Yönetimi',
   cografiYetkiTanimlama: 'Coğrafi Yetki Tanımlama',
+  poiEkleme: 'POI Ekleme',
+  poiYonetimi: 'POI Yönetimi',
+
+  // Ödev 16 — ulaşım modülü
+  durakEkleme: 'Durak Ekleme',
+  guzergahYonetimi: 'Güzergah Yönetimi',
 }
 
 /**

@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.RateLimiting;
 using StajProject.Business.DTOs;
 using StajProject.Business.Services;
+using StajProject.Business.Validation;
 
 namespace StajProject.API.Controllers;
 
@@ -40,11 +41,45 @@ public class AuthController : ControllerBase
 
             return Ok(response);
         }
+        catch (IsKuraliException ex)
+        {
+            // Ödev 10: şifre doğru ama hesap onay bekliyor. Bu mesajı
+            // göstermek gerekiyor — kullanıcı aksi hâlde neden giremediğini
+            // bilemezdi. 403: kimlik doğru, erişim henüz açık değil.
+            _logger.LogInformation(ex, "Onaylanmamış hesap giriş denedi");
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Giriş sırasında beklenmeyen hata");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { message = "Giriş yapılamadı. Lütfen tekrar deneyin." });
+        }
+    }
+
+    /// <summary>
+    /// Yeni hesap açar (Ödev 10). Hesap yönetici onayına düşer, token DÖNMEZ.
+    /// Giriş ucuyla aynı hız sınırına tabidir: kayıt ucu da kullanıcı adı
+    /// taraması için kötüye kullanılabilir.
+    /// </summary>
+    [HttpPost("register")]
+    [EnableRateLimiting("giris")]
+    public async Task<ActionResult<RegisterResponseDto>> Register([FromBody] RegisterRequestDto request)
+    {
+        try
+        {
+            return Ok(await _authService.RegisterAsync(request));
+        }
+        catch (IsKuraliException ex)
+        {
+            _logger.LogWarning(ex, "Kayıt reddedildi");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Kayıt sırasında beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "Kayıt yapılamadı. Lütfen tekrar deneyin." });
         }
     }
 }

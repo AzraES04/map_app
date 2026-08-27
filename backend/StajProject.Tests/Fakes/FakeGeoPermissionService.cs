@@ -37,6 +37,7 @@ public class FakeGeoPermissionService : IGeoPermissionService
     public Task<List<GeoPermissionDto>> GetForUserAsync(int userId) => GetAllAsync();
     public Task<List<GeoPermissionDto>> GetForRoleAsync(int roleId) => GetAllAsync();
     public Task<GeoPermissionDto> CreateAsync(GeoPermissionCreateDto dto) => throw new NotSupportedException();
+    public Task<List<GeometryDto>> GetSecilebilirAlanlarAsync() => Task.FromResult(new List<GeometryDto>());
     public Task<bool> DeleteAsync(int id) => Task.FromResult(false);
     public Task<CalismaAlaniDto> GetCalismaAlanimAsync() => Task.FromResult(new CalismaAlaniDto());
 }

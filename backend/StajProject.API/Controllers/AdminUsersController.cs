@@ -72,6 +72,21 @@ public class AdminUsersController : YonetimControllerBase
         });
 
     /// <summary>
+    /// Kayıt olan kullanıcıyı ONAYLAR (Ödev 10).
+    ///
+    /// Ayrı bir uç, güncelleme ucunun parçası değil: onay tek yönlü ve tek
+    /// seferlik bir karar. Güncelleme gövdesine bir alan olarak koysaydık
+    /// yönetici adı düzeltirken farkında olmadan onayı geri alabilirdi.
+    /// </summary>
+    [HttpPost("{id:int}/approve")]
+    public Task<ActionResult<UserDto>> Approve(int id)
+        => Calistir<UserDto>(async () =>
+        {
+            var guncel = await _service.OnaylaAsync(id);
+            return guncel is null ? Bulunamadi(id) : Ok(guncel);
+        });
+
+    /// <summary>
     /// Kullanıcının YETKİ MATRİSİ: sistemdeki tüm yetkiler ve her birinin kaynağı
     /// (rolden mi geliyor, doğrudan mı verilmiş). Arayüz rolden gelenleri
     /// işaretli ve kilitli gösterir.
