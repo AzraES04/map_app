@@ -2778,6 +2778,45 @@ metinlerini çözümletir hem de **hangi CQL süzgeciyle** çağrıldığını k
 
 ---
 
+## Denetimler (CI)
+
+393 test yazıp bunları "unutmadıkça" elle çalıştırmak, korumayı insan
+hafızasına bağlamak demek. İki yol var, ikisi de **aynı dört adımı** çalıştırır:
+
+| | Nerede | Ne zaman |
+|---|---|---|
+| `.github/workflows/ci.yml` | GitHub Actions (ubuntu) | her push ve pull request |
+| `dogrula.bat` | kendi makinenizde | itmeden önce, elle |
+
+Dört adım: backend derleme (Release) → backend testleri → frontend testleri →
+frontend üretim derlemesi.
+
+**Veritabanı gerekmiyor.** Testlerin tamamı EF Core'un bellek içi sağlayıcısını
+kullanıyor; PostGIS'e bağlanan tek satır yok. Bu yüzden CI'de PostgreSQL servisi
+tanımlanmadı (boşuna bir konteyner her koşuya dakikalar eklerdi) ve `dogrula.bat`
+sunucular kapalıyken de çalışıyor.
+
+Birkaç ayrıntı bilerek böyle:
+
+- **İki iş ayrı** (backend / frontend). Tek işte birleştirseydik backend'deki bir
+  hata frontend testlerinin hiç çalışmamasına yol açar, "ikisi birden mi bozuldu?"
+  sorusu cevapsız kalırdı.
+- **`npm ci`**, `npm install` değil: kilit dosyasına birebir uyar, uymuyorsa hata
+  verir. `install` olsaydı CI farklı sürümler kurup "bende çalışıyordu" durumunu
+  sessizce üretebilirdi.
+- **Testler geçse de derleme kırılabilir** (kullanılmayan import, çözülemeyen yol),
+  o yüzden üretim derlemesi de bir adım.
+- `dogrula.bat` içinde `npm test` **`call` ile** çağrılıyor. `call` olmadan .bat
+  dosyası npm'in hata kodunu kaybeder ve betik kırmızıyı yutup "hepsi geçti" derdi.
+
+> **Not:** Depoda henüz uzak sunucu (`git remote`) tanımlı değil, bu yüzden
+> Actions iş akışı GitHub'a itilene kadar çalışmaz. `dogrula.bat` bugün çalışıyor.
+
+Betiğin gerçekten kırmızı yakabildiği doğrulandı: bir teste kasıtlı hata eklenince
+`SONUC: BASARISIZ` yazdı ve **çıkış kodu 1** döndü; geri alınınca yeniden yeşil.
+
+---
+
 ## Oturum: kısa ömürlü token, uzun ömürlü oturum
 
 **Sorun.** Erişim token'ı (JWT) 10 dakika yaşıyor. Bu bilinçli bir seçim: JWT

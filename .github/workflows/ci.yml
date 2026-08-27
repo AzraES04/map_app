@@ -1,0 +1,86 @@
+# ============================================================================
+#  Sürekli Entegrasyon (CI)
+#
+#  NEDEN GEREKLİ? Testler yalnızca çalıştırıldıklarında koruyor. 393 test
+#  yazıp bunları "unutmadıkça" elle çalıştırmak, korumayı insan hafızasına
+#  bağlamak demek. Bu iş makinenin işi.
+#
+#  İki iş AYRI tutuldu (backend / frontend). Tek işte birleştirseydik
+#  backend'deki bir hata frontend testlerinin hiç çalışmamasına yol açardı ve
+#  "ikisi birden mi bozuldu, yoksa sadece biri mi?" sorusu cevapsız kalırdı.
+#  Ayrı olunca ikisi paralel koşuyor ve rapor da ayrı geliyor.
+#
+#  Veritabanı servisi TANIMLANMADI — bilerek. Testlerin hepsi EF Core'un
+#  bellek içi sağlayıcısını kullanıyor; PostGIS'e bağlanan tek satır yok.
+#  Boşuna bir PostgreSQL konteyneri açmak her koşuya dakikalar eklerdi.
+# ============================================================================
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  # Elle de çalıştırılabilsin (Actions sekmesindeki "Run workflow").
+  workflow_dispatch:
+
+# Aynı dal üst üste itilirse eskisini iptal et: sonucu artık kimsenin
+# beklemediği bir koşuyu bitirmek boşa kaynak.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (.NET 8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Paketleri ayrı adımda geri yükleyip önbelleğe alıyoruz: bağımlılık
+      # hatası ile derleme hatası aynı adımda karışmasın.
+      - name: Paketleri geri yükle
+        run: dotnet restore backend/StajProject.sln
+
+      - name: Derle
+        # --no-restore: bir önceki adımın işini tekrarlamasın.
+        # TreatWarningsAsErrors AÇILMADI: XML belge uyarıları (CS1573 vb.)
+        # kodu bozmuyor ve CI'yi kırmızıya boyaması, gerçek hataların
+        # görünürlüğünü azaltırdı.
+        run: dotnet build backend/StajProject.sln --no-restore --configuration Release
+
+      - name: Testler
+        run: dotnet test backend/StajProject.sln --no-build --configuration Release --verbosity normal
+
+  frontend:
+    name: Frontend (React + Vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # package-lock.json'a göre npm önbelleği.
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm ci (npm install DEĞİL): kilit dosyasına birebir uyar ve uymuyorsa
+      # HATA verir. install olsaydı CI, geliştiricinin makinesinden farklı
+      # sürümler kurup "bende çalışıyordu" durumunu sessizce üretebilirdi.
+      - name: Bağımlılıklar
+        run: npm ci
+
+      - name: Testler
+        run: npm test
+
+      # Test geçse de derleme kırılabilir (kullanılmayan import, çözülemeyen
+      # yol...). Yayına giden çıktının üretilebildiğini de doğruluyoruz.
+      - name: Üretim derlemesi
+        run: npm run build
