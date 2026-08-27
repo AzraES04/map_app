@@ -157,7 +157,7 @@ public class UserStatusTests
             ExpiryMinutes = 10
         };
 
-        return new AuthService(new UserRepository(db), Options.Create(settings));
+        return new AuthService(new UserRepository(db), new RefreshTokenRepository(db), Options.Create(settings));
     }
 
     /// <summary>Testte de gerçek hash algoritmasını kullanıyoruz ki doğrulama gerçekten çalışsın.</summary>

@@ -2778,11 +2778,90 @@ metinlerini çözümletir hem de **hangi CQL süzgeciyle** çağrıldığını k
 
 ---
 
+## Oturum: kısa ömürlü token, uzun ömürlü oturum
+
+**Sorun.** Erişim token'ı (JWT) 10 dakika yaşıyor. Bu bilinçli bir seçim: JWT
+**iptal edilemiyor** — sunucu onu doğrularken veritabanına bakmaz, yalnızca imzayı
+kontrol eder. Yani çalınan bir token, kullanıcıyı pasife alsanız bile süresi dolana
+kadar çalışır; o pencereyi dar tutmak gerekir.
+
+Ama tek başına 10 dakika, kullanıcıyı yarım kalan poligonun üstünde giriş ekranına
+atıyordu. "Süreyi uzatalım" yanlış çözüm olurdu: çalınan token'ın ömrünü uzatmak demek.
+
+**Çözüm — iki anahtarı ayırmak:**
+
+| | Erişim token'ı (JWT) | Yenileme anahtarı |
+|---|---|---|
+| Ömür | 10 dakika | 7 gün |
+| Doğrulama | yalnızca imza (veritabanı yok) | **her kullanımda veritabanı** |
+| İptal edilebilir mi | ❌ | ✅ |
+| Nerede kullanılır | her istekte | yalnızca `/api/auth/refresh` |
+
+### Döndürme ve yeniden kullanım tespiti
+
+Her yenilemede eski anahtar **iptal edilir** ve yenisi verilir. Yani her anahtar tek
+kullanımlık. Bunun asıl kazancı hırsızlığı **görünür** kılmasıdır:
+
+> Anahtar çalındıysa aynı değer iki kez kullanılır — biri gerçek kullanıcı, biri
+> hırsız. İkincisi geldiğinde artık iptal edilmiş bir anahtar sunulmuş olur. Bu
+> normal kullanımda **asla** olmaz; tek açıklaması kopyalanmadır. O anda kullanıcının
+> **bütün** oturumları kapatılır.
+
+Döndürme olmasaydı hırsız da gerçek kullanıcı da aynı anahtarı yedi gün boyunca
+sessizce paylaşırdı ve kimse fark etmezdi.
+
+**Canlı kanıt** (`refresh_tokens` tablosu, gerçek çalıştırma):
+
+```
+ id |  olusma  |  iptal   |      sebep       | zincir
+----+----------+----------+------------------+--------
+  1 | 11:29:49 | 11:30:20 | yeniden-kullanim | f
+  2 | 11:30:17 | 11:30:17 | dondurme         | t
+  3 | 11:30:17 | 11:30:20 | yeniden-kullanim | f
+  4 | 11:30:21 | 11:30:21 | cikis            | f
+```
+
+`2` yenilendi ve `3` ile değiştirildi (`zincir = t`). Sonra `2` **tekrar** sunuldu:
+alarm çaldı ve o an açık olan **her iki** oturum — taze `3` ve ilgisiz, çok daha eski
+`1` — birlikte kapandı. "Bütün oturumları kapat" garantisi verinin kendisinde görünüyor.
+
+### Anahtar veritabanında düz metin durmuyor
+
+Saklanan şey SHA-256 özeti (64 karakter). Bu tablo şifre tablosunun ikizi: içindeki
+değer sahibinin yerine geçmeye yetiyor. Düz metin saklasaydık, veritabanını okuyabilen
+biri (yedek dosyası, SQL enjeksiyonu, bakış yetkisi olan bir çalışan) o an açık olan
+**tüm** oturumları devralırdı.
+
+Şifrelerde PBKDF2 kullanılıyor ama burada SHA-256 yetiyor: şifreyi insan seçer, tahmin
+edilebilir ve yavaş hash gerekir; bu anahtar ise 32 baytlık kriptografik rastgele veri —
+denenecek bir sözlük yok.
+
+### Arayüz tarafı
+
+- Erişim token'ı süresi dolmadan **bir dakika önce** sessizce yenileniyor.
+- Buna rağmen 401 gelirse (uyuyan sekme, ağ kesintisi) istek **bir kez** tekrarlanıyor.
+- Eşzamanlı 401'ler için **tek uçuş**: harita açılışında onlarca istek birden yenilemeye
+  kalkarsa, ilki dışındakiler ölmüş anahtarı sunar ve sunucu bunu hırsızlık sayardı —
+  yani koruma kendi kullanıcımızı dışarı atardı. Uçuştaki söz paylaşılıyor, sunucuya
+  tek istek gidiyor.
+- Üst çubuktaki sayaç artık **oturumu** gösteriyor (7 gün), erişim token'ını değil;
+  aksi hâlde her 10 dakikada bir sebepsiz "1 dakika kaldı" uyarısı yanardı.
+
+**Bilinen sınır:** yenileme anahtarı `localStorage`'da duruyor. Doğrusu `httpOnly`
+çerez olurdu (JavaScript okuyamaz, XSS çalamaz); burada kullanılmadı çünkü arayüz
+(5173) ile API (5000) ayrı kaynaklar — çapraz kaynak çerez `SameSite=None`, o da HTTPS
+istiyor. Yayına alınırken doğru adım bu anahtarı çereze taşımaktır. Bu arada döndürme
+ve yeniden kullanım tespiti, çalınan bir kopyanın ömrünü tek kullanıma indiriyor.
+
+---
+
 ## API Uçları
 
 | Metot | Yol | Açıklama |
 |---|---|---|
-| POST | `/api/auth/login` | JWT alır (10 dk geçerli, IP başına **5 deneme/dk**) |
+| POST | `/api/auth/login` | Erişim token'ı (10 dk) + yenileme anahtarı (7 gün) — IP başına **5 deneme/dk** |
+| POST | `/api/auth/refresh` | `{ refreshToken }` → yeni token **ve yeni anahtar** (döndürme) — **30 istek/dk** |
+| POST | `/api/auth/logout` | `{ refreshToken }` → oturumu iptal eder (204) |
 | GET | `/api/points` · `/api/lines` · `/api/polygons` | Kayıtları WKT olarak listeler |
 | GET | `/api/points/{id}` | Tek kayıt |
 | POST | `/api/points` | `{ name, color, description?, imageUrl?, wkt }` — **Point Ekleme** yetkisi |

@@ -47,6 +47,17 @@ public class YetkilendirmeDenetimiTests
         ["AuthController.Login"] = "Kimlik doğrulamadan önce çalışır; hız sınırı ile korunuyor.",
         ["AuthController.Register"] = "Kayıt olma herkese açık; hesap yönetici onayı bekler.",
 
+        // Eksik 5 — yenileme ve çıkış. İkisi de kimlik doğrulamadan ÖNCE
+        // çalışıyor ve kanıt olarak YETKİ değil ANAHTARIN KENDİSİ kabul
+        // ediliyor: onu bilen zaten oturumun sahibidir.
+        //
+        // Çıkışta [Authorize] bilerek yok — erişim token'ının süresi dolmuşken
+        // de çıkabilmek gerekiyor; aksi hâlde tam da oturumu bırakmak isteyen
+        // kullanıcı, bunu yapamadığı için yenileme anahtarını sunucuda açık
+        // bırakırdı.
+        ["AuthController.Refresh"] = "Anahtarın kendisi kanıt; hız sınırı ile korunuyor (AuthYenilemeTests).",
+        ["AuthController.Logout"] = "Süresi dolmuş token'la da çıkılabilmeli; anahtarın kendisi kanıt (AuthYenilemeTests).",
+
         // POI ve durak GÜNCELLEME/SİLME: gereken yetki
         // "X Yönetimi" VEYA ("X Ekleme" + kaydın sahibi olmak).
         // Bu VEYA'yı tek yetki adı alan [YetkiGerekli] ifade edemiyor;

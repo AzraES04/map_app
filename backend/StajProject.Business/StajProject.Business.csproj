@@ -29,4 +29,18 @@
     <ProjectReference Include="..\StajProject.DataAccess\StajProject.DataAccess.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Test derlemesi 'internal' uyeleri gorebilsin.
+
+         Neden bu yol? AuthService.Ozetle bir IC DETAY: yenileme anahtarinin
+         nasil ozetlendigi servisin sozlesmesinin parcasi degil, disaridan
+         cagrilmamali. Ama testin veritabanindaki dogru satiri bulabilmesi
+         icin ayni ozeti hesaplamasi gerekiyor.
+
+         Uyeyi public yapmak, sirf test icin genel API'yi genisletmek olurdu.
+         InternalsVisibleTo tam olarak "gizli, ama testler gorebilir"
+         demenin yolu. -->
+    <InternalsVisibleTo Include="StajProject.Tests" />
+  </ItemGroup>
+
 </Project>

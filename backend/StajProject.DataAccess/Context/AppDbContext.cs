@@ -13,6 +13,9 @@ public class AppDbContext : DbContext
     public DbSet<Location> Locations => Set<Location>();
     public DbSet<User> Users => Set<User>();
 
+    /// <summary>Eksik 5: yenileme anahtarları (kısa ömürlü JWT'nin arkasındaki oturum).</summary>
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     // Ödev 3 / Görev 2: her çizim tipi kendi tablosuna
     public DbSet<PointEntity> Points => Set<PointEntity>();
     public DbSet<LineEntity> Lines => Set<LineEntity>();
@@ -228,6 +231,47 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Permission>(entity =>
         {
             ConfigureLookupTable(entity, "permissions");
+        });
+
+        // ---------- Eksik 5: yenileme anahtarları ----------
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("refresh_tokens");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+
+            // SHA-256 hex çıktısı her zaman tam 64 karakter — sabit uzunluk
+            // kolonun yanlış bir şey (örn. anahtarın kendisi) taşımasını zorlaştırır.
+            entity.Property(e => e.TokenHash)
+                  .HasColumnName("token_hash").HasMaxLength(64).IsRequired();
+
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.RevokedAt).HasColumnName("revoked_at");
+            entity.Property(e => e.ReplacedByHash)
+                  .HasColumnName("replaced_by_hash").HasMaxLength(64);
+            entity.Property(e => e.RevokedReason)
+                  .HasColumnName("revoked_reason").HasMaxLength(40);
+
+            // Her istekte "bu özet kimin?" diye aranıyor: benzersiz indeks hem
+            // aramayı hızlandırıyor hem de aynı özetin iki satırda durmasını
+            // veritabanı düzeyinde imkânsız kılıyor — yeniden kullanım tespiti
+            // "tek eşleşme" varsayımına dayandığı için bu bir güvenlik kısıtı.
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+
+            // "Bu kullanıcının açık oturumlarını kapat" sorgusu için.
+            entity.HasIndex(e => e.UserId);
+
+            // Kullanıcı FİZİKSEL olarak silinirse anahtarları da gitsin:
+            // sahipsiz kalan bir anahtar, kime ait olduğu bilinmeyen bir
+            // oturum demektir.
+            entity.HasOne(e => e.User).WithMany()
+                  .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+
+            // Soft delete edilmiş kullanıcının anahtarları görünmesin: hesabı
+            // silinen biri, elindeki anahtarla oturumunu yenileyememeli.
+            entity.HasQueryFilter(e => !e.User!.IsDeleted);
         });
 
         modelBuilder.Entity<UserRole>(entity =>

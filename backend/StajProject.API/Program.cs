@@ -65,6 +65,15 @@ builder.Services.AddAuthorization();
 // dakikada 5 deneme ile sınırlıyoruz.
 const string GirisPolitikasi = "giris";
 
+// Yenileme ucu AYRI politikada. Giriş sınırı (5/dk) burada yanlış olurdu:
+// yenileme bir "deneme" değil, açık oturumun rutin işi — kullanıcı birkaç
+// sekme açtığında meşru istekler birbirini kilitlerdi.
+//
+// Peki kaba kuvvete açık kalmıyor mu? Hayır: denenecek şey 256 bitlik
+// rastgele bir anahtar, tahmin edilmesi mümkün değil. Buradaki sınır
+// tahmine karşı değil, kötüye kullanıma karşı bir tavan.
+const string YenilemePolitikasi = "yenileme";
+
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy(GirisPolitikasi, httpContext =>
@@ -79,6 +88,16 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,   // sıraya alma, doğrudan reddet
             }));
 
+    options.AddPolicy(YenilemePolitikasi, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "bilinmeyen",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
     // Reddedilen isteğe, frontend'in beklediği { message } biçiminde cevap ver.
     options.OnRejected = async (context, iptal) =>
     {
@@ -91,10 +110,20 @@ builder.Services.AddRateLimiter(options =>
             : 60;
         context.HttpContext.Response.Headers.RetryAfter = saniye.ToString();
 
+        // Mesaj uca göre değişiyor: yenileme reddedildiğinde "çok fazla giriş
+        // denemesi yaptınız" demek kullanıcıyı yanıltırdı — o hiç giriş
+        // denemedi, sadece açık oturumu sürüyordu.
+        var girisUcu = context.HttpContext.Request.Path
+            .StartsWithSegments("/api/auth/login", StringComparison.OrdinalIgnoreCase)
+            || context.HttpContext.Request.Path
+                .StartsWithSegments("/api/auth/register", StringComparison.OrdinalIgnoreCase);
+
         await context.HttpContext.Response.WriteAsync(
             JsonSerializer.Serialize(new
             {
-                message = $"Çok fazla giriş denemesi yaptınız. {saniye} saniye sonra tekrar deneyin."
+                message = girisUcu
+                    ? $"Çok fazla giriş denemesi yaptınız. {saniye} saniye sonra tekrar deneyin."
+                    : $"Çok fazla istek gönderildi. {saniye} saniye sonra tekrar deneyin."
             }),
             iptal);
     };

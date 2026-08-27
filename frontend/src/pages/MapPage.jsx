@@ -26,7 +26,7 @@ import PolygonGeom from 'ol/geom/Polygon'
 import LineStringGeom from 'ol/geom/LineString'
 
 import {
-  clearSession, getExpiresAt, scheduleAutoLogout,
+  clearSession, kalanOturumMetni, scheduleAutoLogout,
   GIRIS_ANIMASYON_ANAHTARI, girisAnimasyonuOynasinMi,
 } from '../auth'
 import { yerAra, yeriCoz } from '../geocode'
@@ -2081,15 +2081,13 @@ export default function MapPage() {
   useEffect(() => {
     scheduleAutoLogout(goLogin)
 
-    const interval = setInterval(() => {
-      const expiresAt = getExpiresAt()
-      if (!expiresAt) return
-      const ms = expiresAt.getTime() - Date.now()
-      if (ms <= 0) { setRemaining('0:00'); return }
-      const m = Math.floor(ms / 60000)
-      const s = Math.floor((ms % 60000) / 1000)
-      setRemaining(`${m}:${s.toString().padStart(2, '0')}`)
-    }, 1000)
+    // Sayaç artık ERİŞİM token'ını değil OTURUMU gösteriyor (Eksik 5).
+    //
+    // Eskisi 10 dakikadan geriye sayıyordu; token sessizce yenilendiği için
+    // o sayaç her 10 dakikada bir 0:00'a inip başa dönecek ve "1 dakika
+    // kaldı" uyarısını sebepsiz yere yakacaktı. Oysa kullanıcı için anlamlı
+    // olan tek süre, yeniden giriş yapması gereken an.
+    const interval = setInterval(() => setRemaining(kalanOturumMetni()), 1000)
 
     return () => clearInterval(interval)
   }, [goLogin])
@@ -3360,7 +3358,10 @@ export default function MapPage() {
 
 
   const toplamKayit = DRAW_TYPE_KEYS.reduce((t, k) => t + records[k].length, 0)
-  const sureAzaldi = remaining !== '' && Number(remaining.split(':')[0]) < 1
+  // Uyarı yalnızca m:ss biçiminde ve son dakikada yanar. "3 gün" / "5 sa"
+  // gibi değerlerde ':' yok; Number(...) NaN döner ve karşılaştırma zaten
+  // false olur — yine de niyeti kodda açıkça yazıyoruz.
+  const sureAzaldi = remaining.includes(':') && Number(remaining.split(':')[0]) < 1
 
   // ------------------------------------------------------------------------
   //  Arayüz

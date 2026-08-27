@@ -43,6 +43,7 @@ public static class DataAccessRegistration
 
         services.AddScoped<ILocationRepository, LocationRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
         // Ödev 6: dinamik yetkilendirme tabloları
         services.AddScoped<IRoleRepository, RoleRepository>();
