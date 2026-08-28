@@ -5330,3 +5330,74 @@ kbd {
 /* Yetkisi olmayan kullanıcıda düğme KAYBOLMUYOR, sönüyor: kaydın geri
    alınabilir olduğunu ama bunu yapacak yetkisi olmadığını görmeli. */
 .cop-listesi button[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- Ödev 18: rota alternatifleri (durak kutucuğu) ---------- */
+
+.alternatif-bolum {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kart-kenar);
+}
+
+.alternatif-bolum h4 {
+  margin: 0 0 8px;
+  font-size: var(--yazi-sm);
+  color: var(--kart-metin-soluk);
+  font-weight: 600;
+}
+
+.alternatif-listesi {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+/* Satırın TAMAMI düğme: kullanıcı küçük bir radyo düğmesi aramasın. */
+.alternatif-satir {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  background: var(--kart-2);
+  border: 1px solid var(--kart-kenar);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  color: var(--kart-metin);
+  transition: border-color var(--gecis), background var(--gecis);
+}
+
+.alternatif-satir:hover { border-color: var(--taslak); }
+
+/* Seçili olan, haritadaki canlı turuncu çizgiyle AYNI renkte çerçeveleniyor:
+   listedeki satır ile haritadaki yol arasındaki bağ renkten kuruluyor. */
+.alternatif-satir.secili {
+  border-color: var(--taslak);
+  background: color-mix(in srgb, var(--taslak) 14%, transparent);
+}
+
+.alternatif-no {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--kart-kenar);
+  color: var(--kart-metin-soluk);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.alternatif-satir.secili .alternatif-no {
+  background: var(--taslak);
+  color: #23180a;
+}
+
+.alternatif-govde { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.alternatif-govde strong { font-size: var(--yazi-sm); }
+.alternatif-govde small { font-size: 11px; color: var(--kart-metin-soluk); }

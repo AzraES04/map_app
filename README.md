@@ -3242,6 +3242,105 @@ ve istek arka kapıdan delinirdi.
 
 ---
 
+## Bir durağa giden yol alternatifleri
+
+**İstek:** *"bana işaretlediğimiz durağa giden yollardan alternatifler sunun,
+en iyi alternatif otomatik olarak seçilsin, fakat alternatifler de
+tıklanabilir olsun ben seçebileyim."*
+
+### Alternatif "neyin" alternatifi?
+
+Bir hattın rotası uçtan uca tek bir çizgi. Kullanıcı bir durağa tıklayıp
+"buraya nasıl gidiliyor?" diye sorduğunda sorduğu şey rotanın tamamı değil,
+**bir önceki duraktan bu durağa uzanan bacak**. Alternatifler o bacak için
+hesaplanıyor.
+
+İlk durağa tıklanırsa alternatif yok — öncesinde bacak yok — ve arayüz bunu
+açıkça söylüyor. Boş liste dönüp susmak, "alternatif bulunamadı" ile
+"burada alternatif diye bir şey yok"u aynı kefeye koyardı.
+
+### En iyisi nasıl seçiliyor?
+
+Seçmiyoruz: **OSRM'in kendi sıralamasına güveniyoruz.** `alternatives=3` ile
+istenen rotalarda ilk sıradaki, motorun en iyi bulduğu yol. Kendi ölçütümüzü
+(örneğin "en kısa") koysaydık, en kısa yol çoğu zaman en hızlı yol olmadığı
+için kullanıcıya kötü bir öneriyi "en iyi" diye sunardık.
+
+Sunucu ilk sıradakini `enIyi = true` ile işaretliyor, arayüz de onu **açılır
+açılmaz seçili** getiriyor. Diğerlerinin yanında "+3 dk daha uzun" yazıyor;
+karşılaştırma yapabilmek için mutlak süre değil **farkın kendisi** gerekiyor.
+
+### Seçim iki yerden yapılabiliyor
+
+Listeden ve **doğrudan haritadaki çizgiden**. Harita tıklaması bilgi
+kutucuğunu değiştirmiyor: kullanıcı hâlâ aynı durağa bakıyor, yalnızca hangi
+yolu incelediği değişiyor. Kutucuğu kapatıp yeniden açsaydık liste kaybolur,
+karşılaştırma imkânsızlaşırdı.
+
+Alternatifler haritada **kesikli** çiziliyor. Hattın kayıtlı rotası düz
+çizgi; aynı görünümü verseydik hangisinin gerçek olduğu anlaşılmazdı. Seçili
+olan kalın ve canlı turuncu, diğerleri ince ve soluk.
+
+Seçim **görsel**: kalıcı olması için "Bu yolu kullan" gerekiyor. Tıklamayı
+doğrudan kaydetseydik, karşılaştırmak için gezinen kullanıcı farkında olmadan
+hattın rotasını değiştirirdi.
+
+### Kaydederken geometri değil, ARA NOKTA gönderiliyor
+
+Seçilen alternatifin çizgisini olduğu gibi veritabanına yazmıyoruz. Onun
+**orta noktası**, bütün rota yeniden hesaplanırken bir *via* (ara nokta)
+olarak OSRM'e gidiyor; motor oradan geçmek zorunda kaldığı için sonuç seçilen
+yolu izliyor.
+
+Yalnızca bacağın geometrisini saklasaydık ek yerlerinde kopukluk oluşurdu:
+bacak kendi başına en iyi, ama komşularıyla birleştiği noktada rota
+zıplardı. Via noktası tek parça bir rota üretiyor.
+
+### Canlıda yakalanan hata: via yanlış bacağa düşüyordu
+
+İlk sürümde ara noktanın hangi iki durak arasına gireceğini **geometriden
+tahmin** ediyordum: "iki durağa uzaklıklarının toplamı en küçük olan bacak".
+Bütün birim testler yeşildi. Ankara verisinde ölçtüğümde yanıldığı ortaya
+çıktı:
+
+| Bacak | Uzaklık toplamı |
+|---|---|
+| Batıkent → Kızılay *(via'nın gerçek bacağı)* | 7014 + 6061 = **13075 m** |
+| Kızılay → Ulus | 6061 + 4706 = **10767 m** ← kazanıyor |
+
+Uzaklık toplamı "doğru parçasına yakınlık" ölçmüyor: uçları birbirine yakın
+kısa bir bacak, via ondan uzakta olsa bile küçük toplam veriyor. Sonuç, via
+komşu bacağa düşüyor ve rota seçilen yolu izlemek yerine dolanıyordu.
+
+**Hatayı gösteren ölçüm.** En iyi alternatifi uygulamak rotayı hiç
+değiştirmemeli — o zaten OSRM'in kendi seçtiği yol:
+
+| | tahminle (hatalı) | durak kimliğiyle (düzeltilmiş) |
+|---|---|---|
+| via'sız | 1 863 032 m | 1 863 032 m |
+| en iyi alternatif | 1 872 735 m *(+9,7 km)* | **1 863 032 m** *(fark yok)* |
+| 2. alternatif | 1 874 252 m | 1 863 610 m *(+578 m)* |
+
+**Çözüm tahmini iyileştirmek değil, tahmini kaldırmak oldu.** Bacak zaten
+biliniyordu: alternatifler tek bir durağa gelen yol için hesaplanmıştı. Artık
+ara nokta, ait olduğu durağın kimliğiyle birlikte gidiyor
+(`{ durakId, wkt }`) ve sunucu onu o durağın hemen önüne koyuyor.
+
+> Bildiğimiz bir şeyi geometriden yeniden tahmin etmek, tahminin
+> yanılabileceği her yerde hata üretmekten başka işe yaramıyor.
+
+Hatayı kilitleyen test: `VIA_KOMSUBACAKDAHAYAKINGORUNSEBILE_DOGRUBACAGAGiriyor`.
+Eski tahmin mantığı geri konduğunda **2 test kırmızıya dönüyor**.
+
+### Sıra değişince seçim korunmuyor
+
+Duraklar yeniden dizildiğinde otomatik yenileme devreye giriyor ve ara nokta
+**bilinçli olarak** atılıyor. Bir alternatif, o anki durak dizilimi için
+anlamlıydı; dizilim başkalaştığında eski ara noktayı zorlamak, artık ilgisi
+kalmamış bir yerden geçen tuhaf bir rota üretirdi.
+
+---
+
 ## API Uçları
 
 | Metot | Yol | Açıklama |
@@ -3289,7 +3388,8 @@ ve istek arka kapıdan delinirdi.
 | **GET** | **`/api/ulasim/guzergahlar`** | Güzergahlar, durakları SIRALI hâlde — **yetki istemez** (Ödev 16) |
 | **POST/PUT/DELETE** | **`/api/ulasim/guzergahlar[/{id}]`** | Hat tanımı — **Güzergah Yönetimi** |
 | **PUT** | **`/api/ulasim/guzergahlar/{id}/sira`** | `{ durakIdleri: […] }` → sürükle-bırak sıralaması — **Güzergah Yönetimi** |
-| **POST** | **`/api/ulasim/guzergahlar/{id}/rota`** | "Rota Oluştur" — OSRM'den hesaplayıp kaydeder (Ödev 17) — **Güzergah Yönetimi** |
+| **POST** | **`/api/ulasim/guzergahlar/{id}/rota`** | "Rota Oluştur" — OSRM'den hesaplayıp kaydeder (Ödev 17). Gövde: `{ viaNoktalar: [{ durakId, wkt }] }` — boş bırakılırsa OSRM serbest — **Güzergah Yönetimi** |
+| **GET** | **`/api/ulasim/duraklar/{id}/alternatifler`** | Bu durağa gelen bacağın alternatif yolları; ilki en iyi — **yetki istemez** (salt okuma) |
 | **GET** | **`/api/ulasim/duraklar`** | Bütün duraklar — **yetki istemez** |
 | **POST** | **`/api/ulasim/duraklar`** | `{ ad, guzergahId, wkt, aciklama? }` — **Durak Ekleme** |
 | **PUT/DELETE** | **`/api/ulasim/duraklar/{id}`** | Sahibi (Durak Ekleme) **veya** Güzergah Yönetimi |

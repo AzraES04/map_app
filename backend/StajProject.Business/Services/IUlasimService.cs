@@ -75,5 +75,16 @@ public interface IUlasimService
     /// (Otomatik yenileme aynı işi SESSİZCE yapıyor: orada kullanıcı başka
     /// bir iş yapıyordu ve OSRM'in arızası o işi engellememeli.)
     /// </summary>
-    Task<GuzergahDto?> RotaHesaplaAsync(int guzergahId);
+    Task<GuzergahDto?> RotaHesaplaAsync(
+        int guzergahId,
+        IReadOnlyList<RotaViaDto>? viaNoktalar = null);
+
+    /// <summary>
+    /// Ödev 18 — seçilen durağa GİDEN yolların alternatifleri.
+    ///
+    /// Bacak = bir önceki durak → seçilen durak. Durak yoksa null; alternatif
+    /// üretilemediyse liste boş ve <c>Mesaj</c> sebebini söylüyor (hattın ilk
+    /// durağı / OSRM kapalı / tek makul yol var — üçü de farklı durumlar).
+    /// </summary>
+    Task<RotaAlternatifleriDto?> DurakAlternatifleriAsync(int durakId);
 }

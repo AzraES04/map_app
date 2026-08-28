@@ -118,11 +118,37 @@ public class UlasimController : YonetimControllerBase
     /// </summary>
     [HttpPost("guzergahlar/{id:int}/rota")]
     [YetkiGerekli(Yetkiler.GuzergahYonetimi)]
-    public Task<ActionResult<GuzergahDto>> RotaOlustur(int id)
+    public Task<ActionResult<GuzergahDto>> RotaOlustur(int id, [FromBody] RotaOlusturDto? dto = null)
         => Calistir<GuzergahDto>(async () =>
         {
-            var guncel = await _service.RotaHesaplaAsync(id);
+            // Gövde İSTEĞE BAĞLI: ara nokta verilmezse OSRM serbest, kendi en
+            // iyi bulduğu yolu çiziyor. Gövdeyi zorunlu yapsaydık, alternatif
+            // seçmeyen her çağrının boş bir nesne göndermesi gerekirdi.
+            var guncel = await _service.RotaHesaplaAsync(id, dto?.ViaNoktalar);
             return guncel is null ? Bulunamadi(id) : Ok(guncel);
+        });
+
+    /// <summary>
+    /// Ödev 18 — bir durağa GİDEN yolların alternatifleri.
+    ///
+    /// Kullanıcı haritada bir durağa tıklayıp "bu durağa nasıl gidilir?" diye
+    /// soruyor. Cevap, bir önceki duraktan bu durağa uzanan BACAĞIN farklı
+    /// güzergahları.
+    ///
+    /// GET ve YETKİ İSTEMİYOR: hiçbir şeyi değiştirmiyor, yalnızca hesaplayıp
+    /// gösteriyor. Değiştiren adım, seçilen alternatifi kaydeden
+    /// <see cref="RotaOlustur"/> ve o "Güzergah Yönetimi" istiyor.
+    ///
+    /// Alternatif ÜRETİLEMEDİĞİNDE de 200 dönüyor: liste boş, <c>mesaj</c>
+    /// sebebini söylüyor. 404 dönmek "durak yok" ile "alternatif yok"u aynı
+    /// cevaba indirgerdi.
+    /// </summary>
+    [HttpGet("duraklar/{id:int}/alternatifler")]
+    public Task<ActionResult<RotaAlternatifleriDto>> DurakAlternatifleri(int id)
+        => Calistir<RotaAlternatifleriDto>(async () =>
+        {
+            var sonuc = await _service.DurakAlternatifleriAsync(id);
+            return sonuc is null ? Bulunamadi(id) : Ok(sonuc);
         });
 
     // ==================================================================

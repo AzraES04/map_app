@@ -132,6 +132,68 @@ public class OsrmClient : IOsrmClient
         }
     }
 
+    public async Task<IReadOnlyList<OsrmRotaSonucu>> AlternatifRotalarAsync(
+        IReadOnlyList<Coordinate> noktalar,
+        int enFazla = 3,
+        CancellationToken iptal = default)
+    {
+        var bos = Array.Empty<OsrmRotaSonucu>();
+
+        if (!_ayarlar.Enabled || noktalar.Count < 2 || noktalar.Count > _ayarlar.MaxNokta)
+        {
+            return bos;
+        }
+
+        // alternatives=N — OSRM'e "en fazla N seçenek üret" demek.
+        // continue_straight=false ile birlikte kullanılıyor: ara noktalarda
+        // U dönüşü zorlamasın (gerekçe sınıf başlığında).
+        var adres = AdresKur(noktalar) + $"&alternatives={Math.Max(1, enFazla)}";
+
+        try
+        {
+            using var cevap = await _http.GetAsync(adres, iptal);
+            if (!cevap.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("OSRM alternatif isteği {Kod} döndü.", (int)cevap.StatusCode);
+                return bos;
+            }
+
+            var govde = await cevap.Content.ReadFromJsonSafeAsync(iptal);
+            if (govde is null
+                || !string.Equals(govde.Code, BasariKodu, StringComparison.OrdinalIgnoreCase)
+                || govde.Routes is null)
+            {
+                _logger.LogWarning("OSRM alternatif bulamadı: {Kod}", govde?.Code);
+                return bos;
+            }
+
+            // SIRA KORUNUYOR: OSRM listeyi maliyete göre sıralıyor ve ilk
+            // sıradaki en iyisi. Kendi sıralamamızı yapmıyoruz — en KISA yol,
+            // en HIZLI yol değildir ve bunu bilen taraf yol ağını tanıyan
+            // taraftır.
+            return govde.Routes
+                .Where(r => r.Geometry?.Coordinates is { Count: >= 2 })
+                .Select(r => new OsrmRotaSonucu(
+                    new LineString(r.Geometry!.Coordinates!
+                        .Select(c => new Coordinate(c[0], c[1]))
+                        .ToArray())
+                    { SRID = OsrmGeoJson.Srid },
+                    r.Distance,
+                    r.Duration))
+                .ToList();
+        }
+        catch (TaskCanceledException) when (!iptal.IsCancellationRequested)
+        {
+            _logger.LogWarning("OSRM alternatif isteği zaman aşımına uğradı.");
+            return bos;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            _logger.LogWarning(ex, "OSRM alternatif isteği başarısız.");
+            return bos;
+        }
+    }
+
     public async Task<bool> AyaktaMiAsync(CancellationToken iptal = default)
     {
         if (!_ayarlar.Enabled)

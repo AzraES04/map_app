@@ -357,7 +357,9 @@ public class UlasimService : IUlasimService
     /// "Güzergah Yönetimi" yetkisi ister: rota hattın kalıcı bir özelliği ve
     /// hesaplatmak dış bir servise yük bindiriyor.
     /// </summary>
-    public async Task<GuzergahDto?> RotaHesaplaAsync(int guzergahId)
+    public async Task<GuzergahDto?> RotaHesaplaAsync(
+        int guzergahId,
+        IReadOnlyList<RotaViaDto>? viaNoktalar = null)
     {
         // Yetki denetimi CONTROLLER'da: [YetkiGerekli(Yetkiler.GuzergahYonetimi)].
         // GuzergahEkle/Guncelle/Sil de aynı deseni izliyor — servis, yetkiyi
@@ -383,8 +385,16 @@ public class UlasimService : IUlasimService
                 $"{duraklar.Count} durak var.");
         }
 
-        var sonuc = await _osrm.RotaHesaplaAsync(
-            duraklar.Select(d => d.Geom.Coordinate).ToList());
+        // ARA NOKTALAR (Ödev 18) — kullanıcının seçtiği alternatifi zorlamak için.
+        //
+        // Nokta listesi, duraklarla ARA NOKTALARIN birleşimi. Sıra önemli:
+        // ara nokta, ait olduğu bacağın İKİ DURAĞI ARASINA giriyor. Sona
+        // eklesek rota önce bütün durakları dolaşır, sonra oraya giderdi.
+        var noktalar = viaNoktalar is { Count: > 0 }
+            ? DuraklaraViaSerpistir(duraklar, viaNoktalar)
+            : duraklar.Select(d => d.Geom.Coordinate).ToList();
+
+        var sonuc = await _osrm.RotaHesaplaAsync(noktalar);
 
         if (sonuc is null)
         {
@@ -466,6 +476,16 @@ public class UlasimService : IUlasimService
             return;   // dizilim değişmemiş, rota zaten güncel
         }
 
+        // OTOMATİK YENİLEME ARA NOKTA KULLANMIYOR — bilerek.
+        //
+        // Kullanıcı bir alternatif seçtiğinde o seçim, O ANKİ durak dizilimi
+        // için anlamlı. Durak eklenip taşındığında ya da sıra değiştiğinde
+        // dizilim başkalaşıyor; eski ara noktayı zorlamak, artık ilgisi
+        // kalmamış bir yerden geçmeye çalışan tuhaf bir rota üretirdi.
+        //
+        // Bu yüzden dizilim değişince rota, OSRM'in varsayılan en iyi yoluna
+        // dönüyor ve kullanıcı isterse alternatifi yeniden seçiyor. Sessizce
+        // yanlış bir rotayı korumaktansa, doğru bir varsayılana dönmek.
         var sonuc = await _osrm.RotaHesaplaAsync(
             duraklar.Select(d => d.Geom.Coordinate).ToList());
 
@@ -476,6 +496,195 @@ public class UlasimService : IUlasimService
 
         await _repository.RotaYazAsync(
             guzergahId, sonuc.Cizgi, sonuc.MesafeMetre, sonuc.SureSaniye, imza);
+    }
+
+
+    /// <summary>
+    /// Seçilen durağa GİDEN yolların alternatifleri.
+    ///
+    /// Bacak = bir önceki durak → seçilen durak. Gerekçe:
+    /// <see cref="RotaAlternatifleriDto"/>.
+    /// </summary>
+    public async Task<RotaAlternatifleriDto?> DurakAlternatifleriAsync(int durakId)
+    {
+        var durak = await _repository.DurakGetirAsync(durakId);
+        if (durak is null)
+        {
+            return null;
+        }
+
+        var guzergah = await _repository.GuzergahGetirAsync(durak.GuzergahId);
+        if (guzergah is null)
+        {
+            return null;
+        }
+
+        var sirali = SiraliDuraklar(guzergah);
+        var yeri = sirali.FindIndex(d => d.Id == durakId);
+
+        var sonuc = new RotaAlternatifleriDto
+        {
+            GuzergahId = guzergah.Id,
+            DurakId = durak.Id,
+            DurakAdi = durak.Ad,
+        };
+
+        // İLK DURAK: öncesinde durak yok, dolayısıyla "buraya giden yol" diye
+        // bir şey de yok. Boş liste dönüp susmak yerine sebebini söylüyoruz.
+        if (yeri <= 0)
+        {
+            sonuc.Mesaj = sirali.Count < 2
+                ? "Alternatif için hatta en az iki durak gerekiyor."
+                : $"\"{durak.Ad}\" hattın ilk durağı — öncesinde bir durak yok.";
+            return sonuc;
+        }
+
+        var onceki = sirali[yeri - 1];
+        sonuc.OncekiDurakAdi = onceki.Ad;
+
+        if (!_osrm.Etkin)
+        {
+            sonuc.Mesaj = "Rota servisi (OSRM) kapalı; alternatif hesaplanamıyor.";
+            return sonuc;
+        }
+
+        var rotalar = await _osrm.AlternatifRotalarAsync(
+            new[] { onceki.Geom.Coordinate, durak.Geom.Coordinate },
+            enFazla: AlternatifSayisi);
+
+        if (rotalar.Count == 0)
+        {
+            sonuc.Mesaj = "OSRM bu iki durak arasında yol bulamadı.";
+            return sonuc;
+        }
+
+        // Fark, EN İYİYE göre hesaplanıyor: kullanıcı "bu yolu seçersem ne
+        // kaybederim?" sorusunun cevabını görsün. Mutlak süreleri yan yana
+        // koymak aynı bilgiyi vermiyor — 14 dk ile 17 dk arasındaki farkı
+        // kullanıcının kafadan çıkarması gerekirdi.
+        var enIyiSure = rotalar[0].SureSaniye;
+
+        sonuc.Alternatifler = rotalar.Select((r, i) => new RotaAlternatifiDto
+        {
+            Sira = i,
+            EnIyi = i == 0,
+            Wkt = WktConverter.Write(r.Cizgi),
+            MesafeMetre = r.MesafeMetre,
+            SureSaniye = r.SureSaniye,
+            ViaWkt = WktConverter.Write(OrtaNokta(r.Cizgi)),
+            SureFarkiSaniye = r.SureSaniye - enIyiSure,
+        }).ToList();
+
+        if (sonuc.Alternatifler.Count == 1)
+        {
+            // Bu bir hata DEĞİL: iki nokta arasında gerçekten tek makul yol
+            // olabiliyor. Söylemezsek kullanıcı "alternatifler nerede?" diye
+            // düğmeye tekrar tekrar basar.
+            sonuc.Mesaj = "OSRM bu bacak için tek makul yol buldu.";
+        }
+
+        return sonuc;
+    }
+
+    /// <summary>Kaç alternatif istenecek. Üçten fazlası listede okunmuyor.</summary>
+    private const int AlternatifSayisi = 3;
+
+    /// <summary>
+    /// Çizginin ORTASINDAKİ nokta — alternatifi seçmek için kullanılan via.
+    ///
+    /// Uzunluğa göre değil, KÖŞE SAYISINA göre ortası alınıyor. Uzunluğa göre
+    /// hesaplamak daha "doğru" görünürdü ama pratikte fark yok: via noktasının
+    /// tek işi, o alternatifi diğerlerinden ayıran bir yere düşmek. Köşe
+    /// ortası bunu sağlıyor ve ek bir uzunluk hesabı gerektirmiyor.
+    /// </summary>
+    private static Point OrtaNokta(LineString cizgi)
+    {
+        var k = cizgi.Coordinates;
+        var orta = k[k.Length / 2];
+        return new Point(orta.X, orta.Y) { SRID = WktConverter.Srid };
+    }
+
+    /// <summary>
+    /// Ara noktaları, AİT OLDUKLARI BACAĞIN içine yerleştirir.
+    ///
+    /// Bir ara nokta "şu durağa gelirken buradan geç" demek. Hangi bacağa
+    /// gireceği <see cref="RotaViaDto.DurakId"/> ile AÇIKÇA söyleniyor: via,
+    /// o durağın HEMEN ÖNÜNE giriyor.
+    ///
+    /// ---- NEDEN GEOMETRİDEN TAHMİN ETMİYORUZ? ----
+    ///
+    /// İlk yazdığımda bacağı, via'nın iki durağa uzaklıklarının toplamı en
+    /// küçük olan bacak diye buluyordum. Kulağa makul geliyor ama YANLIŞ
+    /// çalışıyor ve canlıda yakaladım:
+    ///
+    ///   Batıkent(1) → Kızılay(2) → Ulus(3) hattında, Batıkent-Kızılay
+    ///   bacağından alınmış bir via noktası için toplamlar
+    ///     bacak 1→2 : 7014 + 6061 = 13075 m
+    ///     bacak 2→3 : 6061 + 4706 = 10767 m   ← daha küçük!
+    ///   çıkıyordu. Yani via, alındığı bacağa değil KOMŞU bacağa düşüyor ve
+    ///   rota, seçilen alternatifi izlemek yerine 10 km dolanıyordu.
+    ///
+    /// Sebep basit: uzaklık toplamı, "doğru parçasına yakınlık" ölçüsü DEĞİL.
+    /// Uçları birbirine yakın kısa bir bacak, via uzağında bile olsa küçük
+    /// toplam verir. Doğru ölçü noktanın parçaya dik uzaklığıdır — ama onu
+    /// yazmaya da gerek yok:
+    ///
+    /// BACAK ZATEN BİLİNİYOR. Alternatifler tek bir bacak için hesaplandı ve
+    /// cevapta <c>DurakId</c> olarak gönderildi. Bildiğimiz bir şeyi
+    /// geometriden yeniden tahmin etmek, tahminin yanılabileceği her yerde
+    /// hata üretmekten başka bir işe yaramıyor.
+    ///
+    /// Sıra korunmadan sona eklenseydi rota önce bütün durakları dolaşır,
+    /// sonra ara noktaya giderdi — yani seçilen alternatif değil, saçma bir
+    /// zikzak çizilirdi.
+    /// </summary>
+    private static List<Coordinate> DuraklaraViaSerpistir(
+        List<Durak> duraklar,
+        IReadOnlyList<RotaViaDto> viaNoktalar)
+    {
+        // Durak id → o durağın ÖNÜNE girecek ara noktalar
+        var oncesine = new Dictionary<int, List<Coordinate>>();
+
+        foreach (var via in viaNoktalar)
+        {
+            Coordinate nokta;
+            try
+            {
+                nokta = WktConverter.Read<Point>(via.Wkt).Coordinate;
+            }
+            catch (WktFormatException)
+            {
+                continue;   // bozuk ara nokta rotayı bozmasın, sessizce atlansın
+            }
+
+            // Hattın İLK durağı için via anlamsız: öncesinde bacak yok.
+            // Yine de gelirse sessizce atlıyoruz — istisna fırlatmak,
+            // kullanıcının göremediği bir ayrıntı yüzünden bütün rota
+            // hesabını iptal etmek olurdu.
+            var indeks = duraklar.FindIndex(d => d.Id == via.DurakId);
+            if (indeks <= 0)
+            {
+                continue;
+            }
+
+            if (!oncesine.TryGetValue(via.DurakId, out var liste))
+            {
+                oncesine[via.DurakId] = liste = new List<Coordinate>();
+            }
+            liste.Add(nokta);
+        }
+
+        var sonuc = new List<Coordinate>();
+        foreach (var durak in duraklar)
+        {
+            if (oncesine.TryGetValue(durak.Id, out var araNoktalar))
+            {
+                sonuc.AddRange(araNoktalar);
+            }
+            sonuc.Add(durak.Geom.Coordinate);
+        }
+
+        return sonuc;
     }
 
     /// <summary>Güzergahın duraklarını sırasıyla verir.</summary>

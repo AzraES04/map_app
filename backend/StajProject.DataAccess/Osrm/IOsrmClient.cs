@@ -61,6 +61,43 @@ public interface IOsrmClient
         CancellationToken iptal = default);
 
     /// <summary>
+    /// Aynı iki nokta arasında BİRDEN ÇOK yol önerir (Ödev 18).
+    ///
+    /// ---- NEDEN AYRI METOT? ----
+    ///
+    /// <see cref="RotaHesaplaAsync"/> tek bir rota döndürüyor ve çağıranların
+    /// çoğu (durak ekleme, sıralama değişikliği) tam olarak bunu istiyor —
+    /// onlara üç seçenek verip "hangisi?" diye sormanın anlamı yok, kullanıcı
+    /// o an başka bir iş yapıyor.
+    ///
+    /// Alternatifler yalnızca kullanıcı AÇIKÇA sorduğunda hesaplanıyor. Aynı
+    /// metoda bayrak eklemek, her çağrının bu soruyu yeniden düşünmesini
+    /// gerektirirdi.
+    ///
+    /// ---- OSRM HER ZAMAN ÇOK YOL VERMEZ ----
+    ///
+    /// <c>alternatives</c> bir İSTEK, garanti değil: OSRM yalnızca yeterince
+    /// FARKLI ve makul uzunlukta bir yol bulabilirse ikinci/üçüncü seçeneği
+    /// döndürüyor. İki nokta arasında tek makul yol varsa liste tek elemanlı
+    /// gelir — bu bir hata değil, doğru cevaptır. Çağıran taraf bunu
+    /// kullanıcıya söylemek zorunda.
+    /// </summary>
+    /// <param name="noktalar">En az 2 nokta (boylam/enlem, EPSG:4326).</param>
+    /// <param name="enFazla">Kaç alternatif istensin (OSRM'in üst sınırı yok ama pratikte 3).</param>
+    /// <returns>
+    /// EN İYİSİ BAŞTA olacak şekilde rotalar. OSRM listeyi kendi sıralıyor:
+    /// ilk sıradaki, sürüş maliyeti en düşük olan. Biz yeniden sıralamıyoruz —
+    /// "en iyi" tanımını yol ağını bilen tarafa bırakmak, mesafeye göre kendi
+    /// sıralamamızı yapmaktan daha doğru (en kısa yol, en hızlı yol değildir).
+    ///
+    /// OSRM kapalıysa ya da yol bulunamazsa BOŞ liste.
+    /// </returns>
+    Task<IReadOnlyList<OsrmRotaSonucu>> AlternatifRotalarAsync(
+        IReadOnlyList<Coordinate> noktalar,
+        int enFazla = 3,
+        CancellationToken iptal = default);
+
+    /// <summary>
     /// OSRM ayakta mı? Durum ekranı ve "Rota Oluştur" düğmesinin ipucu için.
     /// </summary>
     Task<bool> AyaktaMiAsync(CancellationToken iptal = default);

@@ -132,5 +132,32 @@ export const durakSil = (id, onUnauthorized) =>
  * SIRA değiştiğinde rota sunucuda kendiliğinden yenileniyor; arayüzün ayrıca
  * bu fonksiyonu çağırmasına gerek yok.
  */
-export const rotaOlustur = (guzergahId, onUnauthorized) =>
-  istek(`/api/ulasim/guzergahlar/${guzergahId}/rota`, { method: 'POST' }, onUnauthorized)
+/**
+ * `viaNoktalar`: `[{ durakId, wkt }]` — rotanın geçmesi zorunlu ara
+ * noktalar. `durakId`, noktanın HANGİ DURAĞA GELİRKEN kullanılacağını
+ * söylüyor; sunucu onu o durağın hemen önüne yerleştiriyor. Boş liste =
+ * OSRM serbest (Ödev 17 davranışı).
+ */
+export const rotaOlustur = (guzergahId, viaNoktalar = [], onUnauthorized) =>
+  istek(
+    `/api/ulasim/guzergahlar/${guzergahId}/rota`,
+    jsonGovde('POST', { viaNoktalar }),
+    onUnauthorized,
+  )
+
+/**
+ * Ödev 18 — bir durağa GİDEN yolların alternatifleri.
+ *
+ * Bacak = bir önceki durak → bu durak. Kullanıcı haritada bir durağa tıklayıp
+ * "buraya nasıl gidilir?" diye soruyor; cevap hattın tamamının değil, o
+ * durağa varan parçanın alternatifleri.
+ *
+ * Yetki İSTEMEZ: hiçbir şeyi değiştirmiyor, yalnızca hesaplayıp gösteriyor.
+ * Değiştiren adım seçimi kaydeden `rotaOlustur` ve o "Güzergah Yönetimi"
+ * istiyor.
+ *
+ * Alternatif üretilemediğinde de 200 döner: `alternatifler` boş, `mesaj`
+ * sebebini söyler (hattın ilk durağı / OSRM kapalı / tek makul yol var).
+ */
+export const durakAlternatifleri = (durakId, onUnauthorized) =>
+  istek(`/api/ulasim/duraklar/${durakId}/alternatifler`, {}, onUnauthorized)

@@ -224,7 +224,10 @@ export default function AdminGuzergah() {
     setHata(null)
     setRotaHesaplanan(g.id)
     try {
-      const guncel = await rotaOlustur(g.id, oturumBitti)
+      // Ara nokta YOK: yonetim ekranindan hesaplanan rota, OSRM'in kendi
+      // en iyi buldugu yol. Alternatif secimi harita ekraninda, duraga
+      // tiklayarak yapiliyor.
+      const guncel = await rotaOlustur(g.id, [], oturumBitti)
       const km = ((guncel.rotaMesafeMetre ?? 0) / 1000).toFixed(1)
       const dk = Math.round((guncel.rotaSureSaniye ?? 0) / 60)
       setBilgi(`"${g.ad}" rotası hesaplandı: ${km} km · ~${dk} dk sürüş.`)

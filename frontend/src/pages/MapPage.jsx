@@ -64,6 +64,7 @@ import {
 import {
   guzergahlariListele, durakEkle as durakEkleIstek, durakSil as durakSilIstek,
   durakGuncelle as durakGuncelleIstek,
+  durakAlternatifleri as durakAlternatifleriIstek, rotaOlustur,
 } from '../ulasimApi'
 import { YETKILER, EKLEME_YETKISI } from '../yetkiler'
 // Ödev 16: "Yönetim" düğmesi artık menünün TANIMINA bakıyor
@@ -664,6 +665,42 @@ function yonOklari(cizgi, renk, guncel) {
   }))
 }
 
+/**
+ * ALTERNATİF ROTA ÇİZGİLERİ (Ödev 18).
+ *
+ * Üç durum, üç görünüm:
+ *   seçili   → kalın, canlı turuncu. Kullanıcının şu an baktığı yol.
+ *   diğerler → ince, soluk. Var oldukları görünüyor ama seçiliyle
+ *              yarışmıyorlar.
+ *   hepsi    → KESİKLİ. Bunlar henüz KAYDEDİLMEMİŞ öneriler; hattın gerçek
+ *              rotası düz çizgiyle çiziliyor. Aynı görünümü verseydik
+ *              kullanıcı hangisinin kayıtlı olduğunu ayırt edemezdi.
+ *
+ * Beyaz taban yalnızca SEÇİLİDE var: üç çizgiye birden taban koymak, hepsi
+ * kalınlaşınca haritayı okunmaz hâle getiriyordu.
+ */
+function alternatifStili() {
+  const taban = new Style({
+    stroke: new Stroke({ color: 'rgba(255,255,255,0.75)', width: 9, lineCap: 'round' }),
+  })
+
+  return (feature) => {
+    const secili = feature.get('secili')
+
+    const cizgi = new Style({
+      stroke: new Stroke({
+        color: secili ? '#e8a13c' : 'rgba(232, 161, 60, 0.42)',
+        width: secili ? 5 : 3,
+        lineDash: [9, 7],
+        lineCap: 'round',
+        lineJoin: 'round',
+      }),
+    })
+
+    return secili ? [taban, cizgi] : [cizgi]
+  }
+}
+
 /** Henüz kaydedilmemiş çizim: kesikli turuncu — "bu geçici" mesajını verir. */
 const taslakStili = new Style({
   image: new Circle({
@@ -1069,6 +1106,48 @@ export default function MapPage() {
    */
   const [durakDuzenle, setDurakDuzenle] = useState(null)
   const [durakDuzenleKaydediliyor, setDurakDuzenleKaydediliyor] = useState(false)
+
+  // ---- Ödev 18: bir durağa giden yolların alternatifleri ----
+  //
+  // Kullanıcı bir durağa tıklayıp "buraya nasıl gidilir?" diye soruyor.
+  // Cevap, bir önceki duraktan bu durağa uzanan BACAĞIN farklı güzergahları.
+  const [alternatifler, setAlternatifler] = useState(null)   // sunucu cevabı
+  const [seciliAlternatif, setSeciliAlternatif] = useState(0)
+  const [alternatifYukleniyor, setAlternatifYukleniyor] = useState(false)
+  const [alternatifKaydediliyor, setAlternatifKaydediliyor] = useState(false)
+
+  /** Alternatif çizgilerinin kaynağı — geçici, kaydedilmemiş öneriler. */
+  const alternatifKaynagiRef = useRef(null)
+
+  // Bu iki yardımcı, DURUMUN HEMEN ALTINDA duruyor — dosyanın ilerisindeki
+  // diğer alternatif eylemleriyle birlikte değil. Sebebi teknik: ikisi de
+  // harita tıklamasını kuran effect'in BAĞIMLILIK DİZİSİNDE geçiyor ve o dizi
+  // render sırasında okunuyor. Aşağıda tanımlansalardı diziye yazamazdık
+  // ("before initialization" hatası); yazmasaydık de eslint haklı olarak
+  // eksik bağımlılık uyarısı verirdi.
+
+  /** Alternatif çizgilerini haritadan sil. */
+  const alternatifleriTemizle = useCallback(() => {
+    alternatifKaynagiRef.current?.clear()
+    setAlternatifler(null)
+    setSeciliAlternatif(0)
+  }, [])
+
+  /**
+   * Listeden ya da haritadan bir alternatif seç.
+   *
+   * Seçim yalnızca GÖRSEL: hangi yolun vurgulanacağını belirliyor. Kalıcı
+   * olması için kullanıcının "Bu yolu kullan" demesi gerekiyor — tıklamayı
+   * doğrudan kaydetseydik, karşılaştırmak için gezinen kullanıcı farkında
+   * olmadan rotayı değiştirirdi.
+   */
+  const alternatifSec = useCallback((sira) => {
+    setSeciliAlternatif(sira)
+    alternatifKaynagiRef.current?.getFeatures().forEach((f) => {
+      f.set('secili', f.get('alternatifSira') === sira)
+    })
+  }, [])
+
 
   // ---- Ödev 16: ulaşım modülü ----
   //
@@ -1914,6 +1993,12 @@ export default function MapPage() {
     const guzergahSource = new VectorSource()
     guzergahKaynagiRef.current = guzergahSource
 
+    // Ödev 18: alternatif rota önerileri. AYRI kaynak, çünkü bunlar
+    // KAYDEDİLMEMİŞ geçici çizimler — hattın gerçek rotasıyla aynı kaynağa
+    // koysaydık, ekranı temizlemek için gerçek rotayı da silmek gerekirdi.
+    const alternatifSource = new VectorSource()
+    alternatifKaynagiRef.current = alternatifSource
+
     // Ödev 12: POI katmanı. Üç çizim katmanından AYRI çünkü ayrı bir tablo,
     // ayrı bir uç ve ayrı bir görünüm. Aynı kaynağa koysaydık "bu nokta
     // çizim mi POI mi?" sorusu her tıklamada yeniden sorulurdu.
@@ -1967,6 +2052,15 @@ export default function MapPage() {
         // Ödev 16: önce HAT (altta), sonra DURAKLAR (üstte). Ters sırada
         // kalın çizgi durak simgelerinin üzerinden geçer ve numaraları örterdi.
         new VectorLayer({ source: guzergahSource, style: guzergahStili(), zIndex: 320 }),
+
+        // Alternatifler hattın ÜSTÜNDE (325 > 320): kullanıcı onları
+        // karşılaştırmak için açtı, mevcut rotanın altında kalırlarsa
+        // karşılaştırma yapamaz.
+        new VectorLayer({
+          source: alternatifSource,
+          style: alternatifStili(),
+          zIndex: 325,
+        }),
         (durakKatmanRef.current = new VectorLayer({
           source: durakSource,
           style: durakStili(),
@@ -2885,6 +2979,27 @@ export default function MapPage() {
       const isiAcikMi = isiKatmanRef.current?.getVisible()
       if (isiAcikMi) setSabitOlcum(olcumOku(evt.coordinate))
 
+      // Ödev 18: alternatif çizgilerine tıklamak onu SEÇİYOR.
+      //
+      // Bilgi kutucuğunu değiştirmiyor — kullanıcı hâlâ aynı durağa bakıyor,
+      // yalnızca hangi yolu incelediğini değiştiriyor. Popup'ı kapatıp
+      // yeniden açsaydık liste kaybolur, karşılaştırma imkânsızlaşırdı.
+      let alternatifSirasi = null
+      map.forEachFeatureAtPixel(
+        evt.pixel,
+        (f) => {
+          if (alternatifSirasi === null && f.get('alternatifSira') !== undefined) {
+            alternatifSirasi = f.get('alternatifSira')
+          }
+        },
+        { hitTolerance: 8 },
+      )
+
+      if (alternatifSirasi !== null) {
+        alternatifSec(alternatifSirasi)
+        return
+      }
+
       const feature = pikseldekiFeature(evt.pixel)
 
       if (feature) {
@@ -2916,7 +3031,7 @@ export default function MapPage() {
       map.getViewport().removeEventListener('pointerleave', fareCikti)
       map.getViewport().style.cursor = ''
     }
-  }, [activeTool, popupAc, popupKapat, vurgulaFeature, izinliMi, bildir])
+  }, [activeTool, popupAc, popupKapat, vurgulaFeature, izinliMi, bildir, alternatifSec])
 
   // ------------------------------------------------------------------------
   //  Klavye kısayolları
@@ -3512,6 +3627,97 @@ export default function MapPage() {
       setDurakDuzenleKaydediliyor(false)
     }
   }
+
+  // ------------------------------------------------------------------
+  //  Ödev 18 — bir durağa GİDEN yolların alternatifleri
+  // ------------------------------------------------------------------
+
+  /**
+   * Seçili durağa giden alternatifleri getirip haritaya çiz.
+   *
+   * EN İYİSİ OTOMATİK SEÇİLİ geliyor (sunucu onu `enIyi` ile işaretliyor ve
+   * listenin başında gönderiyor). Ödevin açık isteği bu; kullanıcı hiçbir şey
+   * yapmadan makul bir yol görmeli, seçim ancak isterse değişmeli.
+   */
+  const alternatifleriGetir = async (durakDto) => {
+    setAlternatifYukleniyor(true)
+    try {
+      const cevap = await durakAlternatifleriIstek(durakDto.id, goLogin)
+      setAlternatifler(cevap)
+      setSeciliAlternatif(0)
+
+      const kaynak = alternatifKaynagiRef.current
+      if (kaynak) {
+        kaynak.clear()
+        cevap.alternatifler.forEach((alt, i) => {
+          const feature = wktToFeature(alt.wkt)
+          feature.setId(`alternatif-${i}`)
+          feature.set('alternatifSira', i)
+          feature.set('secili', i === 0)     // en iyisi baştan seçili
+          kaynak.addFeature(feature)
+        })
+      }
+
+      if (cevap.mesaj && cevap.alternatifler.length === 0) {
+        bildir('uyari', cevap.mesaj)
+      }
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    } finally {
+      setAlternatifYukleniyor(false)
+    }
+  }
+
+  /**
+   * Seçili alternatifi hattın rotasına uygula.
+   *
+   * Alternatifin geometrisi DOĞRUDAN kaydedilmiyor; onun ORTA NOKTASI, tüm
+   * rota yeniden hesaplanırken bir ara nokta (via) olarak gönderiliyor. OSRM
+   * o noktadan geçmek zorunda kaldığı için sonuç seçilen yolu izliyor.
+   *
+   * Neden böyle? Yalnızca bacağın geometrisini saklasaydık, rotanın geri
+   * kalanıyla ek yerinde kopukluk oluşurdu. Via noktası tek bir bütün rota
+   * üretiyor.
+   */
+  const alternatifiUygula = async () => {
+    const alt = alternatifler?.alternatifler?.[seciliAlternatif]
+    if (!alt) return
+
+    setAlternatifKaydediliyor(true)
+    try {
+      // Via, KOORDİNATIYLA BİRLİKTE hangi durağa ait olduğunu da taşıyor.
+      // Yalnızca koordinat gönderdiğimizde sunucu bacağı geometriden
+      // tahmin ediyordu ve yanılıyordu; bacak zaten belli (bkz. RotaViaDto).
+      await rotaOlustur(
+        alternatifler.guzergahId,
+        [{ durakId: alternatifler.durakId, wkt: alt.viaWkt }],
+        goLogin,
+      )
+      alternatifleriTemizle()
+      await ulasimiYukle()
+      bildir('ok', 'Seçilen yol hattın rotasına uygulandı.')
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    } finally {
+      setAlternatifKaydediliyor(false)
+    }
+  }
+
+  /**
+   * Popup kapanınca alternatifler de silinsin.
+   *
+   * Silmeseydik kullanıcı başka bir yere tıkladığında turuncu kesikli
+   * çizgiler haritada asılı kalır ve neye ait oldukları anlaşılmazdı.
+   *
+   * NEDEN BURADA, DOSYANIN ÜST TARAFINDA DEĞİL?
+   * `alternatifleriTemizle` bir `const` — tanımlanmadan önce okunamaz
+   * (temporal dead zone). Effect'i tanımın ÜSTÜNE koyduğumuzda bileşen
+   * "Cannot access 'alternatifleriTemizle' before initialization" ile
+   * çöküyordu; derleyici bunu yakalamıyor, yalnızca çalışma anında patlıyor.
+   */
+  useEffect(() => {
+    if (!secili || secili.tip !== DURAK) alternatifleriTemizle()
+  }, [secili, alternatifleriTemizle])
 
   const poiyiSil = async (dto) => {
     if (!window.confirm(
@@ -4445,6 +4651,101 @@ export default function MapPage() {
                       <dt>Eklenme</dt>
                       <dd>{new Date(secili.dto.createdDate).toLocaleString('tr-TR')}</dd>
                     </dl>
+
+                    {/* ---------- Ödev 18: BU DURAĞA GİDEN YOLLAR ----------
+
+                        Alternatifler İSTEK ÜZERİNE hesaplanıyor, durağa
+                        tıklar tıklamaz değil: her tıklamada OSRM'e istek
+                        atmak, kullanıcı yalnızca bilgi kartına bakmak
+                        istediğinde boşuna bir gecikme ve boşuna bir yük
+                        olurdu. */}
+                    {!alternatifler && (
+                      <div className="popup-eylemler">
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => alternatifleriGetir(secili.dto)}
+                          disabled={alternatifYukleniyor}
+                        >
+                          {alternatifYukleniyor
+                            ? 'Yollar aranıyor…'
+                            : 'Bu durağa giden yollar'}
+                        </button>
+                      </div>
+                    )}
+
+                    {alternatifler && (
+                      <div className="alternatif-bolum">
+                        <h4>
+                          {alternatifler.oncekiDurakAdi
+                            ? <>{alternatifler.oncekiDurakAdi} → {alternatifler.durakAdi}</>
+                            : alternatifler.durakAdi}
+                        </h4>
+
+                        {alternatifler.alternatifler.length === 0 ? (
+                          <p className="popup-ipucu">{alternatifler.mesaj}</p>
+                        ) : (
+                          <>
+                            <ul className="alternatif-listesi">
+                              {alternatifler.alternatifler.map((alt) => (
+                                <li key={alt.sira}>
+                                  <button
+                                    type="button"
+                                    className={`alternatif-satir${
+                                      alt.sira === seciliAlternatif ? ' secili' : ''}`}
+                                    onClick={() => alternatifSec(alt.sira)}
+                                    aria-pressed={alt.sira === seciliAlternatif}
+                                  >
+                                    <span className="alternatif-no">{alt.sira + 1}</span>
+
+                                    <span className="alternatif-govde">
+                                      <strong>
+                                        {(alt.mesafeMetre / 1000).toFixed(1)} km
+                                        {' · ~'}{Math.round(alt.sureSaniye / 60)} dk
+                                      </strong>
+                                      <small>
+                                        {alt.enIyi
+                                          ? 'en hızlı — otomatik seçildi'
+                                          : `+${Math.max(1, Math.round(alt.sureFarkiSaniye / 60))} dk daha uzun`}
+                                      </small>
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+
+                            {/* Tek yol bulunduğunda da mesaj var: kullanıcı
+                                "alternatifler nerede?" diye düğmeye tekrar
+                                basmasın. */}
+                            {alternatifler.mesaj && (
+                              <p className="popup-ipucu">{alternatifler.mesaj}</p>
+                            )}
+
+                            <p className="tool-hint muted">
+                              Yollar haritada <strong>kesikli</strong> çiziliyor: henüz
+                              kaydedilmediler. Çizgilere tıklayarak da seçebilirsiniz.
+                            </p>
+
+                            {yetkiVar(YETKILER.guzergahYonetimi) && (
+                              <div className="popup-eylemler">
+                                <button
+                                  type="button"
+                                  className="btn-primary"
+                                  onClick={alternatifiUygula}
+                                  disabled={alternatifKaydediliyor}
+                                >
+                                  {alternatifKaydediliyor ? 'Uygulanıyor…' : 'Bu yolu kullan'}
+                                </button>
+                                <button type="button" className="btn-ghost"
+                                        onClick={alternatifleriTemizle}>
+                                  Kapat
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
 
                     {/* Düzenle/sil yalnızca yetkisi olana görünüyor. Asıl kontrol
                         sunucuda: sahibi olmayan bir operatör 400 alır. */}
