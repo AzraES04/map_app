@@ -4608,7 +4608,22 @@ export default function MapPage() {
               </>
             )}
 
-            {secili && secili.tip !== POI && !pending && !poiTaslak && (
+            {/* ---------- GEOMETRİ BİLGİ KARTI ----------
+
+                KOŞUL BİR İZİN LİSTESİ, YASAK LİSTESİ DEĞİL.
+
+                Önceden `secili.tip !== POI` yazıyordu ve bu bir hataya yol
+                açtı: Ödev 16'da DURAK tipi eklendiğinde koşul güncellenmedi,
+                dolayısıyla bir durağa tıklandığında BU kart da çizilmeye
+                çalıştı ve `DRAW_TYPES['Durak']` undefined olduğu için
+                `.color` okunurken bütün ekran çöktü.
+
+                Yasak listesi, her yeni tip eklendiğinde burayı hatırlamayı
+                gerektiriyor — hatırlanmadığında da derleme değil, ÇALIŞMA
+                ZAMANI hatası veriyor. İzin listesi bunu yapıya bağlıyor:
+                kart yalnızca gerçekten bir çizim tipi seçildiğinde çiziliyor,
+                yeni tipler kendiliğinden dışarıda kalıyor. */}
+            {secili && DRAW_TYPE_KEYS.includes(secili.tip) && !pending && !poiTaslak && (
               <>
                 <div className="popup-baslik">
                   <span className="dot"
