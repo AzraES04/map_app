@@ -995,6 +995,19 @@ export default function MapPage() {
   // Amaç, kullanıcıyı yapamayacağı bir işe kalkıştırıp sonunda hata göstermemek.
   const [yetkilerim, setYetkilerim] = useState([])
 
+  /**
+   * Giriş yapan kullanıcının bu yetkisi var mı? (rolden veya doğrudan)
+   *
+   * Tanım, beslendiği state'in HEMEN YANINDA duruyor. Önceden 2200 satır
+   * aşağıdaydı ve bu bir hataya yol açtı: sürükleme etkileşimi (yukarıda)
+   * bu yardımcıyı çağırıyor ama `const` henüz başlatılmamış oluyordu —
+   * ReferenceError ile bütün harita ekranı çöküyordu.
+   *
+   * Türetilmiş bir değeri kaynağından uzağa koymak, o değeri kullanan yeni
+   * kodun nereye yazılabileceğini sessizce kısıtlıyor.
+   */
+  const yetkiVar = (ad) => yetkilerim.includes(ad)
+
   // ---- Ödev 12: POI ----
   // Kayıtlar SÜZÜLMEDEN geliyor: POI ortak referans verisi, herkes hepsini
   // görüyor (çizimlerden bilerek farklı — bkz. README, Ödev 12 bölümü).
@@ -3221,9 +3234,6 @@ export default function MapPage() {
     setAramaHatasi(null)
     setAramaAcik(false)
   }
-
-  /** Giriş yapan kullanıcının bu yetkisi var mı? (rolden veya doğrudan) */
-  const yetkiVar = (ad) => yetkilerim.includes(ad)
 
   /** Araç kullanılabilir mi? Sözlükte karşılığı yoksa yetki aranmaz. */
   const aracKullanilabilir = (key) => !ARAC_YETKISI[key] || yetkiVar(ARAC_YETKISI[key])
