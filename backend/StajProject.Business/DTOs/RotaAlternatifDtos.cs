@@ -136,3 +136,23 @@ public class RotaViaDto
     /// <summary>Ara noktanın konumu (WKT POINT).</summary>
     public string Wkt { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// Bir alternatif seçildiğinde hattın TAMAMININ nasıl görüneceği —
+/// kaydedilmemiş önizleme (Ödev 18).
+///
+/// Yalnızca çizgi ve iki sayı dönüyor; <c>GuzergahDto</c> döndürmek durak
+/// listesini ve hat bilgisini boşuna taşırdı. Önizlemede değişen tek şey
+/// rotanın kendisi.
+/// </summary>
+public class RotaOnizlemeDto
+{
+    public int GuzergahId { get; set; }
+
+    /// <summary>Önizlenen rotanın geometrisi (WKT LINESTRING).</summary>
+    public string Wkt { get; set; } = string.Empty;
+
+    public double MesafeMetre { get; set; }
+
+    public double SureSaniye { get; set; }
+}

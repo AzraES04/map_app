@@ -80,6 +80,18 @@ public interface IUlasimService
         IReadOnlyList<RotaViaDto>? viaNoktalar = null);
 
     /// <summary>
+    /// Ödev 18 — seçilen alternatifle hattın TAMAMININ nasıl olacağını
+    /// gösterir; hiçbir şey kaydetmez.
+    ///
+    /// Kullanıcı haritada alternatifler arasında gezinirken çağrılıyor.
+    /// Yetki istemiyor: veriyi değiştirmiyor. Kalıcı hâle getirmek
+    /// <see cref="RotaHesaplaAsync"/> ve "Güzergah Yönetimi" istiyor.
+    /// </summary>
+    Task<RotaOnizlemeDto?> RotaOnizleAsync(
+        int guzergahId,
+        IReadOnlyList<RotaViaDto>? viaNoktalar = null);
+
+    /// <summary>
     /// Ödev 18 — seçilen durağa GİDEN yolların alternatifleri.
     ///
     /// Bacak = bir önceki durak → seçilen durak. Durak yoksa null; alternatif

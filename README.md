@@ -3270,20 +3270,42 @@ Sunucu ilk sıradakini `enIyi = true` ile işaretliyor, arayüz de onu **açıl�
 açılmaz seçili** getiriyor. Diğerlerinin yanında "+3 dk daha uzun" yazıyor;
 karşılaştırma yapabilmek için mutlak süre değil **farkın kendisi** gerekiyor.
 
-### Seçim iki yerden yapılabiliyor
+### Seçim iki yerden yapılabiliyor, sonucu ANINDA görünüyor
 
-Listeden ve **doğrudan haritadaki çizgiden**. Harita tıklaması bilgi
-kutucuğunu değiştirmiyor: kullanıcı hâlâ aynı durağa bakıyor, yalnızca hangi
-yolu incelediği değişiyor. Kutucuğu kapatıp yeniden açsaydık liste kaybolur,
-karşılaştırma imkânsızlaşırdı.
+Listeden ve **doğrudan haritadaki çizgiden** seçilebiliyor. Bir alternatif
+seçilir seçilmez **hattın tamamı o yoldan çizilip gösteriliyor** — Google
+Haritalar'da alternatife tıklandığında olan şey.
 
-Alternatifler haritada **kesikli** çiziliyor. Hattın kayıtlı rotası düz
-çizgi; aynı görünümü verseydik hangisinin gerçek olduğu anlaşılmazdı. Seçili
-olan kalın ve canlı turuncu, diğerleri ince ve soluk.
+Yalnızca o bacağı vurgulasaydık kullanıcı asıl merak ettiği sorunun cevabını
+göremezdi: *"bu yolu seçersem güzergahım ne olur?"* Merak edilen tek bir
+parça değil, bütün.
 
-Seçim **görsel**: kalıcı olması için "Bu yolu kullan" gerekiyor. Tıklamayı
-doğrudan kaydetseydik, karşılaştırmak için gezinen kullanıcı farkında olmadan
-hattın rotasını değiştirirdi.
+Önizleme **sunucudan** geliyor (`POST …/rota/onizleme`); istemcide kayıtlı
+rotanın ilgili parçası kesilip yapıştırılmıyor. Kessek ek yerlerinde kopukluk
+oluşurdu; sunucu rotanın tamamını tek seferde çizdiriyor.
+
+| Çizgi | Görünüm | Anlamı |
+|---|---|---|
+| Kayıtlı rota | hattın kendi rengi, düz | şu an veritabanında olan |
+| **Önizleme** | **mavi, kalın, düz** | seçili alternatiften geçen **hattın tamamı** |
+| Alternatifler | turuncu, **kesikli** | tıklanabilir **bacak** önerileri |
+
+Harita tıklaması bilgi kutucuğunu **değiştirmiyor**: kullanıcı hâlâ aynı
+durağa bakıyor, yalnızca hangi yolu incelediği değişiyor. Kutucuğu kapatıp
+yeniden açsaydık liste kaybolur, karşılaştırma imkânsızlaşırdı.
+
+Bütün bunlar **kaydedilmiş değil**. Kalıcı olması için "Bu yolu kullan"
+gerekiyor. Önizleme ucu bilerek hiçbir şey yazmıyor: kullanıcı alternatifler
+arasında gezinirken her tıklamayı veritabanına yazsaydık, sadece bakmak
+isteyen kullanıcı farkında olmadan hattın rotasını değiştirirdi.
+(Testi: `ONIZLEME_VERITABANINADOKUNMUYOR`.)
+
+> Önizleme ucu **yetki istemiyor** — hiçbir şeyi değiştirmiyor ve girdisi
+> olan güzergah/durak verisi zaten yetkisiz okunabiliyor. POST olması
+> "değiştiriyorum" demek değil: ara nokta listesi adres satırına
+> sığdırılamayacağı için seçilmiş, **gövdesi olan bir sorgu**. Yapısal
+> denetim testi (`YetkilendirmeDenetimiTests`) bu ucu yakaladı ve
+> gerekçesiyle istisna listesine yazıldı.
 
 ### Kaydederken geometri değil, ARA NOKTA gönderiliyor
 
@@ -3390,6 +3412,7 @@ kalmamış bir yerden geçen tuhaf bir rota üretirdi.
 | **PUT** | **`/api/ulasim/guzergahlar/{id}/sira`** | `{ durakIdleri: […] }` → sürükle-bırak sıralaması — **Güzergah Yönetimi** |
 | **POST** | **`/api/ulasim/guzergahlar/{id}/rota`** | "Rota Oluştur" — OSRM'den hesaplayıp kaydeder (Ödev 17). Gövde: `{ viaNoktalar: [{ durakId, wkt }] }` — boş bırakılırsa OSRM serbest — **Güzergah Yönetimi** |
 | **GET** | **`/api/ulasim/duraklar/{id}/alternatifler`** | Bu durağa gelen bacağın alternatif yolları; ilki en iyi — **yetki istemez** (salt okuma) |
+| **POST** | **`/api/ulasim/guzergahlar/{id}/rota/onizleme`** | Seçilen ara noktalarla hattın tamamı nasıl görünürdü — **kaydetmez**, yetki istemez |
 | **GET** | **`/api/ulasim/duraklar`** | Bütün duraklar — **yetki istemez** |
 | **POST** | **`/api/ulasim/duraklar`** | `{ ad, guzergahId, wkt, aciklama? }` — **Durak Ekleme** |
 | **PUT/DELETE** | **`/api/ulasim/duraklar/{id}`** | Sahibi (Durak Ekleme) **veya** Güzergah Yönetimi |

@@ -287,7 +287,7 @@ export default function AdminUsers() {
       <header className="admin-baslik">
         <div>
           <h1>Kullanıcı Listesi</h1>
-          <p className="muted">Kullanıcı ekleyin, güncelleyin, çıkarın; rol ve yetkilerini yönetin.</p>
+          <p className="muted">Kullanıcı ekleyin, güncelleyin, silin; rol ve yetkilerini yönetin.</p>
         </div>
         <button type="button" className="btn-primary" onClick={yeniKullanici}>
           <EkleIkonu /> Yeni Kullanıcı
@@ -484,7 +484,7 @@ export default function AdminUsers() {
                       Düzenle
                     </button>
                     <button type="button" className="btn-ghost sil" onClick={() => sil(kullanici)}>
-                      <SilIkonu /> Çıkar
+                      <SilIkonu /> Sil
                     </button>
                   </td>
                 </tr>

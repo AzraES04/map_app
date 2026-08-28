@@ -638,7 +638,7 @@ export default function CografiYetkiModal({ sahip, onKapat, onDegisti, onOturumB
                       <strong>{alan.name}</strong>
                       <small>{new Date(alan.insertedDate).toLocaleDateString('tr-TR')}</small>
                     </span>
-                    <button type="button" className="btn-ghost sil" onClick={() => sil(alan)} title="Kaldır">
+                    <button type="button" className="btn-ghost sil" onClick={() => sil(alan)} title="Sil">
                       <SilIkonu />
                     </button>
                   </li>

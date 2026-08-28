@@ -129,6 +129,36 @@ public class UlasimController : YonetimControllerBase
         });
 
     /// <summary>
+    /// Ödev 18 — seçilen alternatifle hattın TAMAMI nasıl görünürdü?
+    ///
+    /// Kullanıcı haritada bir alternatife tıkladığında, Google Haritalar'daki
+    /// gibi bütün güzergahın o yoldan geçen hâlini görüyor. Bu uç o çizgiyi
+    /// hesaplayıp döndürüyor — VERİTABANINA YAZMIYOR.
+    ///
+    /// ---- NEDEN POST, MADEM DEĞİŞTİRMİYOR? ----
+    ///
+    /// GET olsaydı ara nokta listesini adres satırına sığdırmak gerekirdi;
+    /// birden çok WKT noktası orada hem çirkin hem de uzunluk sınırına açık
+    /// olurdu. POST burada "değiştiriyorum" demek değil, "gövdesi olan bir
+    /// sorgu" demek.
+    ///
+    /// ---- NEDEN YETKİ İSTEMİYOR? ----
+    ///
+    /// Hiçbir şeyi değiştirmiyor. Güzergah ve durak verisi zaten yetkisiz
+    /// okunabiliyor; buradan çıkan da onlardan hesaplanmış bir çizgi.
+    /// KALICI adım ayrı: <see cref="RotaOlustur"/> ve "Güzergah Yönetimi".
+    /// </summary>
+    [HttpPost("guzergahlar/{id:int}/rota/onizleme")]
+    public Task<ActionResult<RotaOnizlemeDto>> RotaOnizleme(
+        int id,
+        [FromBody] RotaOlusturDto? dto = null)
+        => Calistir<RotaOnizlemeDto>(async () =>
+        {
+            var sonuc = await _service.RotaOnizleAsync(id, dto?.ViaNoktalar);
+            return sonuc is null ? Bulunamadi(id) : Ok(sonuc);
+        });
+
+    /// <summary>
     /// Ödev 18 — bir durağa GİDEN yolların alternatifleri.
     ///
     /// Kullanıcı haritada bir durağa tıklayıp "bu durağa nasıl gidilir?" diye

@@ -84,6 +84,15 @@ public class YetkilendirmeDenetimiTests
         ["PoiController.SetActive"] = "Sahiplik VEYA yönetim yetkisi — kural serviste (PoiTests).",
         ["UlasimController.DurakGuncelle"] = "Sahiplik VEYA yönetim yetkisi — kural serviste (UlasimTests).",
         ["UlasimController.DurakSil"] = "Sahiplik VEYA yönetim yetkisi — kural serviste (UlasimTests).",
+
+        // Ödev 18 — rota ÖNİZLEMESİ. POST olması "değiştiriyor" demek değil:
+        // gövdesi olan bir SORGU. Ara nokta listesi (WKT noktaları) adres
+        // satırına sığdırılamayacağı için GET yerine POST seçildi.
+        //
+        // Hiçbir şey yazmıyor; girdisi olan güzergah ve durak verisi zaten
+        // yetkisiz okunabiliyor. KALICI adım ayrı bir uç: RotaOlustur ve o
+        // "Güzergah Yönetimi" istiyor.
+        ["UlasimController.RotaOnizleme"] = "Yazmıyor — gövdesi olan bir sorgu; kalıcı adım RotaOlustur (RotaAlternatifTests).",
     };
 
     /// <summary>Değiştirme etkisi olan HTTP metotları.</summary>

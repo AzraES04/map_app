@@ -88,13 +88,39 @@ describe('yonetimMenusu.js — "Yönetim" düğmesinin hedefi', () => {
     expect(adres).toBe('/admin/users')
   })
 
-  it('her menü maddesi tanımlı bir yetkiye bağlı', () => {
-    // Yetkisi boş bırakılan bir madde HERKESE görünürdü — sessiz bir açık.
+  it('her menü maddesinin yetkisi ya tanımlı bir yetki ya da BİLEREK null', () => {
+    // Asıl yakalamak istediğimiz şey YAZIM HATASI: yanlış yazılmış bir yetki
+    // adı hiçbir kullanıcıda eşleşmez ve madde sessizce, kalıcı olarak
+    // kaybolur. Hata da vermez.
+    //
+    // `null` bu tehlikeye girmiyor: yazım hatası olamayacak kadar ayrı bir
+    // değer ve "bu ekran tek bir yetkiyle eşleşmiyor" demenin açık yolu
+    // (Çöp Kutusu: geri alma yetkisi KAYDIN TÜRÜNE göre değişiyor).
     const tanimliYetkiler = Object.values(YETKILER)
 
     for (const ekran of YONETIM_EKRANLARI) {
+      if (ekran.yetki === null) continue
       expect(tanimliYetkiler).toContain(ekran.yetki)
     }
+  })
+
+  it('yetki alanı hiçbir maddede UNUTULMUYOR', () => {
+    // `null` bilinçli bir karar; `undefined` ise alanı yazmayı unutmak.
+    // İkisi de AdminLayout'ta aynı sonucu veriyor (madde herkese görünür),
+    // o yüzden ayrımı burada yapıyoruz: unutulanı yakalayalım, bilerek
+    // yazılanı geçirelim.
+    for (const ekran of YONETIM_EKRANLARI) {
+      expect(ekran).toHaveProperty('yetki')
+      expect(ekran.yetki).not.toBeUndefined()
+    }
+  })
+
+  it('yetkisi null olan madde VARSAYILAN AÇILIŞ ekranı olmuyor', () => {
+    // ilkYonetimEkrani, kullanıcının açabileceği ilk ekranı buluyor.
+    // Herkese açık bir madde oraya karışsaydı, hiç yönetim yetkisi olmayan
+    // kullanıcıya da "Yönetim" düğmesi görünür ve panele girerdi.
+    expect(ilkYonetimEkrani([])).toBeNull()
+    expect(ilkYonetimEkrani([YETKILER.poiYonetimi])).toBe('/admin/poi')
   })
 })
 

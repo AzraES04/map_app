@@ -34,7 +34,7 @@ export const YONETIM_EKRANLARI = [
   {
     yol: '/admin/users',
     baslik: 'Kullanıcı Listesi',
-    altyazi: 'Ekle / Güncelle / Çıkar',
+    altyazi: 'Ekle / Güncelle / Sil',
     yetki: YETKILER.kullaniciYonetimi,
     ikon: 'kullanicilar',
   },
@@ -60,6 +60,25 @@ export const YONETIM_EKRANLARI = [
     altyazi: 'Hatlar / Durak sırası',
     yetki: YETKILER.guzergahYonetimi,
     ikon: 'guzergah',
+  },
+  {
+    // Çöp kutusu — silinen HER şey (nokta, çizgi, poligon, POI, kategori,
+    // durak, güzergah, kullanıcı, rol) burada duruyor ve geri alınabiliyor.
+    //
+    // `yetki: null` = HERKESE görünür. Sebep: geri alma yetkisi kaydın
+    // TÜRÜNE göre değişiyor (noktayı geri almak "Kayıt Silme", rolü geri
+    // almak "Rol Yönetimi" istiyor) ve bu ekran tek bir yetkiyle
+    // eşleşmiyor. Tek bir yetkiye bağlasaydık, örneğin yalnızca POI
+    // yetkisi olan kullanıcı kendi sildiği POI'yi göremezdi.
+    //
+    // Ekranın kendisi zaten güvenli: liste herkese açık (silinen kaydın adı
+    // zaten görünen bir bilgiydi), GERİ ALMA düğmesi ise türün yetkisi
+    // yoksa hiç çıkmıyor ve sunucu ayrıca kontrol ediyor.
+    yol: '/admin/cop',
+    baslik: 'Çöp Kutusu',
+    altyazi: 'Silinenler / Geri al',
+    yetki: null,
+    ikon: 'cop',
   },
 ]
 

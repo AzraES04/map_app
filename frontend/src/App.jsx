@@ -65,6 +65,12 @@ export default function App() {
         >
           {/* index: tam olarak "/admin" istendiğinde açılacak ekran */}
           <Route index element={<Navigate to="/admin/users" replace />} />
+          {/* Çöp kutusu YÖNETİM PANELİNİN İÇİNDE de açılıyor.
+              Aynı ekran iki adreste: `/cop` (herkes, hesap menüsünden) ve
+              `/admin/cop` (yönetim menüsünden, sol çubuk yerinde kalarak).
+              Menü maddesi `/cop`'a gitseydi tıklayan kullanıcı panelden
+              dışarı düşer, sol çubuk kaybolur ve bunu bir arıza sanardı. */}
+          <Route path="cop" element={<CopKutusu />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="roles" element={<AdminRoles />} />
           {/* Ödev 12: POI listesi + kategori yönetimi tek ekranda */}

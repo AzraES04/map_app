@@ -2467,13 +2467,33 @@ kbd {
 
 .admin-menu-link.ikincil { padding: 8px 11px; }
 
+/*
+  Yatay iç boşluk .admin-menu-link ile AYNI (11px).
+  4px'ti ve oturum satırı "Haritaya dön" bağlantısından 8px daha solda
+  başlıyordu: iki satır alt alta duruyor, kenarları tutmayınca menünün dibi
+  eğri görünüyordu. Aynı değeri paylaşınca sol kenarlar hizalanıyor.
+*/
 .admin-oturum {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 4px;
+  padding: 0 11px;
 }
+
+/*
+  Hesap rozeti KENDİ SATIRINDA.
+
+  Üçü (rozet 100px + tema 77px + çıkış 56px + boşluklar) 249px ediyordu;
+  kenar çubuğunun içine 199px sığıyor. Fazlalık taşıyor ve "Çıkış" düğmesi
+  çubuğun dışına çıkıyordu — ekranda kesik görünüyordu.
+
+  `flex-wrap` tek başına yetmezdi: sarma noktası kullanıcı adının uzunluğuna
+  göre değişir, kısa adlarda üçü yan yana kalır, uzun adlarda satır atlardı.
+  Rozeti tam satır yaparak dizilim kullanıcı adından BAĞIMSIZ hâle geliyor.
+*/
+.admin-oturum .hesap-secici { flex: 1 1 100%; }
 
 .admin-oturum .badge {
   display: inline-flex;
@@ -5401,3 +5421,29 @@ kbd {
 .alternatif-govde { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .alternatif-govde strong { font-size: var(--yazi-sm); }
 .alternatif-govde small { font-size: 11px; color: var(--kart-metin-soluk); }
+
+/*
+  ---------- ZEMİN HARİTASI: biraz daha AÇIK ----------
+
+  OSM'in standart döşemeleri bej ve doygun; üzerine bizim renkli
+  katmanlarımız (kırmızı hatlar, mavi önizleme, POI simgeleri) binince
+  zemin onlarla yarışıyor ve harita yorucu görünüyordu.
+
+  Doygunluğu düşürüp parlaklığı ve kontrastı hafifçe açıyoruz: yollar ve
+  etiketler okunur kalıyor, zemin geri çekiliyor. Google Haritalar'ın açık
+  temasının yaptığı da bu.
+
+  ÖNEMLİ: süzgeç yalnızca `.taban-katman` üzerinde (MapPage.jsx'te
+  TileLayer'a verilen className). Bütün haritaya uygulasaydık kendi
+  verimiz de solar ve tam tersi bir sonuç alırdık.
+*/
+.taban-katman {
+  filter: saturate(0.68) brightness(1.07) contrast(0.96);
+}
+
+/* Karanlık temada zemin zaten göz yormasın diye biraz daha kısılıyor —
+   ama yine de AÇIK harita; koyu bir zemin isteseydik ayrı bir döşeme
+   sağlayıcısı gerekirdi, süzgeçle koyulaştırmak etiketleri okunmaz yapıyor. */
+[data-tema='karanlik'] .taban-katman {
+  filter: saturate(0.6) brightness(1.02) contrast(0.94);
+}

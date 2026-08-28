@@ -355,6 +355,101 @@ public class RotaAlternatifTests
         Assert.Equal(3, o.Osrm.SonNoktalar!.Count);
     }
 
+    // ==================================================================
+    //  4) Önizleme — gösteriyor ama KAYDETMİYOR
+    // ==================================================================
+
+    /// <summary>
+    /// Kullanıcı haritada bir alternatife tıkladığında hattın TAMAMINI o
+    /// yoldan görüyor. Önizleme, seçilen ara noktayı içeren tam rotayı
+    /// döndürmeli.
+    /// </summary>
+    [Fact]
+    public async Task ONIZLEME_TAMROTAYIAraNoktayla_Donduruyor()
+    {
+        var o = OrtamKur();
+        var hat = await HatKurAsync(o, UcDurak);
+
+        var sonuc = await o.Servis.DurakAlternatifleriAsync(hat.Duraklar[1].Id);
+
+        var onizleme = await o.Servis.RotaOnizleAsync(
+            hat.Id,
+            new[]
+            {
+                new RotaViaDto
+                {
+                    DurakId = hat.Duraklar[1].Id,
+                    Wkt = sonuc!.Alternatifler[1].ViaWkt,
+                },
+            });
+
+        Assert.NotNull(onizleme);
+        Assert.Equal(hat.Id, onizleme!.GuzergahId);
+        Assert.StartsWith("LINESTRING", onizleme.Wkt);
+
+        // Üç durak + bir ara nokta: önizleme de gerçek hesapla aynı noktaları
+        // gönderiyor. Farklı gönderseydi kullanıcı bir şey görüp başka bir
+        // şey kaydetmiş olurdu.
+        Assert.Equal(4, o.Osrm.SonNoktalar!.Count);
+    }
+
+    /// <summary>
+    /// EN KRİTİK TEST. Önizleme bir GEZİNME hareketi: kullanıcı alternatifler
+    /// arasında dolaşırken hiçbir şey değişmemeli. Kaydetseydi, sadece bakmak
+    /// isteyen kullanıcı farkında olmadan hattın rotasını değiştirirdi.
+    /// </summary>
+    [Fact]
+    public async Task ONIZLEME_VERITABANINADOKUNMUYOR()
+    {
+        var o = OrtamKur();
+        var hat = await HatKurAsync(o, UcDurak);
+
+        // Önce gerçek bir rota yazdır; karşılaştıracağımız "önceki hâl" bu.
+        await o.Servis.RotaHesaplaAsync(hat.Id);
+        var oncesi = await o.Servis.GuzergahGetirAsync(hat.Id);
+
+        var sonuc = await o.Servis.DurakAlternatifleriAsync(hat.Duraklar[1].Id);
+        await o.Servis.RotaOnizleAsync(
+            hat.Id,
+            new[]
+            {
+                new RotaViaDto
+                {
+                    DurakId = hat.Duraklar[1].Id,
+                    Wkt = sonuc!.Alternatifler[1].ViaWkt,
+                },
+            });
+
+        var sonrasi = await o.Servis.GuzergahGetirAsync(hat.Id);
+
+        Assert.Equal(oncesi!.RotaWkt, sonrasi!.RotaWkt);
+        Assert.Equal(oncesi.RotaMesafeMetre, sonrasi.RotaMesafeMetre);
+    }
+
+    /// <summary>Olmayan güzergah için null — 404'e dönüşüyor.</summary>
+    [Fact]
+    public async Task ONIZLEME_OLMAYANGUZERGAH_NullDonuyor()
+    {
+        var o = OrtamKur();
+        Assert.Null(await o.Servis.RotaOnizleAsync(99999));
+    }
+
+    /// <summary>
+    /// Ara nokta verilmezse önizleme, hattın OSRM'e göre en iyi hâlini
+    /// gösteriyor — "alternatif seçimini geri al" hareketinin karşılığı.
+    /// </summary>
+    [Fact]
+    public async Task ONIZLEME_VIASIZ_YALNIZCADURAKLARIGonderiyor()
+    {
+        var o = OrtamKur();
+        var hat = await HatKurAsync(o, UcDurak);
+
+        var onizleme = await o.Servis.RotaOnizleAsync(hat.Id);
+
+        Assert.NotNull(onizleme);
+        Assert.Equal(3, o.Osrm.SonNoktalar!.Count);
+    }
+
     [Fact]
     public async Task SIRADEGISINCE_AlternatifSecimiKORUNMUYOR()
     {

@@ -377,7 +377,36 @@ public class UlasimService : IUlasimService
         }
 
         var duraklar = SiraliDuraklar(guzergah);
+        var sonuc = await RotaCizdirAsync(duraklar, viaNoktalar);
 
+        // Hesaplanamadıysa RotaCizdirAsync zaten istisna fırlattı ve buraya
+        // hiç gelinmedi. Bunun anlamı: ESKİ ROTA DURUYOR, silinmiyor.
+        // Kullanıcı "yeniden hesapla" dedi ve olmadı; eldeki en iyi bilgiyi
+        // bir başarısızlık yüzünden yok etmek harita da boşalırdı. İmza
+        // uyuşmadığı için arayüz zaten "rota güncel değil" diyor.
+        await _repository.RotaYazAsync(
+            guzergahId,
+            sonuc.Cizgi,
+            sonuc.MesafeMetre,
+            sonuc.SureSaniye,
+            RotaImzasiUret(duraklar));
+
+        return await GuzergahGetirAsync(guzergahId);
+    }
+
+    /// <summary>
+    /// Durakları (ve varsa ara noktaları) OSRM'e çizdirir.
+    ///
+    /// <see cref="RotaHesaplaAsync"/> ile <see cref="RotaOnizleAsync"/>
+    /// arasındaki ORTAK adım. İkisi de aynı rotayı istiyor; ayrıldıkları tek
+    /// yer sonucun kaydedilip kaydedilmediği. Kopyalasaydık, ara nokta
+    /// yerleşimi gibi ince bir kural iki yerde ayrı ayrı yaşar ve biri
+    /// düzeltilirken diğeri unutulurdu.
+    /// </summary>
+    private async Task<OsrmRotaSonucu> RotaCizdirAsync(
+        List<Durak> duraklar,
+        IReadOnlyList<RotaViaDto>? viaNoktalar)
+    {
         if (duraklar.Count < 2)
         {
             throw new IsKuraliException(
@@ -398,26 +427,62 @@ public class UlasimService : IUlasimService
 
         if (sonuc is null)
         {
-            // Rota yazılMIYOR: eldeki eski rota duruyor.
-            //
-            // Neden temizlemiyoruz? Kullanıcı "yeniden hesapla" dedi ve
-            // olmadı. Eski rotayı silmek, elimizdeki en iyi bilgiyi bir
-            // başarısızlık yüzünden yok etmek olurdu; harita da o an
-            // boşalırdı. Eski rota duruyor, imza uyuşmuyorsa arayüz zaten
-            // "güncel değil" diyor.
             throw new IsKuraliException(
                 "OSRM rota hesaplayamadı. Servis çalışıyor mu ve durakların "
                 + "bulunduğu bölge yüklü veri kapsamında mı, kontrol edin.");
         }
 
-        await _repository.RotaYazAsync(
-            guzergahId,
-            sonuc.Cizgi,
-            sonuc.MesafeMetre,
-            sonuc.SureSaniye,
-            RotaImzasiUret(duraklar));
+        return sonuc;
+    }
 
-        return await GuzergahGetirAsync(guzergahId);
+    /// <summary>
+    /// Ödev 18 — "bu yoldan gidersem güzergah nasıl olur?" ÖNİZLEMESİ.
+    ///
+    /// ---- NEDEN AYRI BİR UÇ? ----
+    ///
+    /// Kullanıcı haritada bir alternatife tıkladığında, Google Haritalar'da
+    /// olduğu gibi HATTIN TAMAMINI o yoldan görmek istiyor — yalnızca o
+    /// bacağın vurgulanmasını değil. Bunu istemcide, kayıtlı rotanın ilgili
+    /// parçasını kesip alternatifle değiştirerek de yapabilirdik; ama ek
+    /// yerlerinde kopukluk oluşurdu. Rotanın tamamını OSRM'e yeniden
+    /// çizdirmek tek parça ve doğru bir sonuç veriyor.
+    ///
+    /// ---- NEDEN KAYDETMİYOR? ----
+    ///
+    /// Bu bir GEZİNME hareketi. Kullanıcı alternatifler arasında dolaşırken
+    /// her tıklamayı veritabanına yazsaydık, sadece bakmak isteyen kullanıcı
+    /// farkında olmadan hattın rotasını değiştirirdi. Kalıcı olması için
+    /// ayrıca "Bu yolu kullan" gerekiyor — o da <see cref="RotaHesaplaAsync"/>
+    /// ve "Güzergah Yönetimi" yetkisi istiyor.
+    ///
+    /// Bu yüzden burada YETKİ İSTENMİYOR: hiçbir şeyi değiştirmiyor,
+    /// güzergah ve durak verisi zaten herkese açık (bkz. IUlasimService).
+    /// </summary>
+    public async Task<RotaOnizlemeDto?> RotaOnizleAsync(
+        int guzergahId,
+        IReadOnlyList<RotaViaDto>? viaNoktalar = null)
+    {
+        var guzergah = await _repository.GuzergahGetirAsync(guzergahId);
+        if (guzergah is null)
+        {
+            return null;
+        }
+
+        if (!_osrm.Etkin)
+        {
+            throw new IsKuraliException(
+                "Rota servisi (OSRM) kapalı. appsettings.json → Osrm:Enabled ayarına bakın.");
+        }
+
+        var sonuc = await RotaCizdirAsync(SiraliDuraklar(guzergah), viaNoktalar);
+
+        return new RotaOnizlemeDto
+        {
+            GuzergahId = guzergahId,
+            Wkt = WktConverter.Write(sonuc.Cizgi),
+            MesafeMetre = sonuc.MesafeMetre,
+            SureSaniye = sonuc.SureSaniye,
+        };
     }
 
     /// <summary>

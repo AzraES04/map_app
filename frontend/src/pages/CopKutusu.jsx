@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { copKutusu, copGeriAl } from '../adminApi'
 
 // ============================================================================
@@ -27,6 +27,12 @@ import { copKutusu, copGeriAl } from '../adminApi'
 
 export default function CopKutusu() {
   const navigate = useNavigate()
+
+  // Bu ekran iki adreste açılıyor: `/cop` (tek başına) ve `/admin/cop`
+  // (yönetim panelinin içinde). Panelin sol çubuğunda ZATEN bir "Haritaya
+  // dön" var; aynı düğmeyi bir de başlıkta göstermek aynı ekranda iki özdeş
+  // düğme demek olurdu.
+  const panelIcinde = useLocation().pathname.startsWith('/admin')
 
   const [veri, setVeri] = useState(null)
   const [yukleniyor, setYukleniyor] = useState(true)
@@ -87,9 +93,11 @@ export default function CopKutusu() {
             Silinen kayıtlar burada duruyor ve geri alınabilir
           </p>
         </div>
-        <button type="button" className="btn-ghost" onClick={() => navigate('/map')}>
-          Haritaya dön
-        </button>
+        {!panelIcinde && (
+          <button type="button" className="btn-ghost" onClick={() => navigate('/map')}>
+            Haritaya dön
+          </button>
+        )}
       </header>
 
       {bilgi && <p className="info-banner">{bilgi}</p>}

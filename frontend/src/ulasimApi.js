@@ -159,5 +159,22 @@ export const rotaOlustur = (guzergahId, viaNoktalar = [], onUnauthorized) =>
  * Alternatif üretilemediğinde de 200 döner: `alternatifler` boş, `mesaj`
  * sebebini söyler (hattın ilk durağı / OSRM kapalı / tek makul yol var).
  */
+/**
+ * Ödev 18 — ÖNİZLEME: seçilen ara noktalarla hattın tamamı nasıl görünürdü?
+ *
+ * Hiçbir şey kaydetmiyor; kullanıcı alternatifler arasında gezinirken
+ * çağrılıyor. Kalıcı hâle getiren `rotaOlustur` ayrı bir uç ve "Güzergah
+ * Yönetimi" yetkisi istiyor.
+ *
+ * POST, çünkü ara nokta listesi adres satırına sığdırılacak bir şey değil —
+ * "değiştiriyorum" demek değil, "gövdesi olan bir sorgu" demek.
+ */
+export const rotaOnizle = (guzergahId, viaNoktalar = [], onUnauthorized) =>
+  istek(
+    `/api/ulasim/guzergahlar/${guzergahId}/rota/onizleme`,
+    jsonGovde('POST', { viaNoktalar }),
+    onUnauthorized,
+  )
+
 export const durakAlternatifleri = (durakId, onUnauthorized) =>
   istek(`/api/ulasim/duraklar/${durakId}/alternatifler`, {}, onUnauthorized)

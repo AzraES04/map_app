@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { clearSession } from '../auth'
 import { kendiYetkilerim } from '../adminApi'
 import { YONETIM_EKRANLARI } from '../yonetimMenusu'
-import { KullanicilarIkonu, RolIkonu, GeriIkonu, PoiIkonu, GuzergahIkonu } from '../icons'
+import { KullanicilarIkonu, RolIkonu, GeriIkonu, PoiIkonu, GuzergahIkonu, SilIkonu } from '../icons'
 import HesapSecici from '../HesapSecici.jsx'
 import TemaDugmesi from '../TemaDugmesi.jsx'
 
@@ -32,6 +32,7 @@ const IKONLAR = {
   rol: RolIkonu,
   poi: PoiIkonu,
   guzergah: GuzergahIkonu,
+  cop: SilIkonu,
 }
 
 export default function AdminLayout() {
@@ -60,7 +61,11 @@ export default function AdminLayout() {
     return () => { iptal = true }
   }, [oturumBitti])
 
-  const gorunur = (yetki) => yetkilerim === null || yetkilerim.includes(yetki)
+  // yetki === null → HERKESE açık madde (bkz. yonetimMenusu.js → Çöp Kutusu).
+  // Bu maddelerin ekranı tek bir yetkiyle eşleşmiyor; kural sunucuda ve
+  // ekranın kendi içinde işliyor.
+  const gorunur = (yetki) =>
+    !yetki || yetkilerim === null || yetkilerim.includes(yetki)
 
   const cikisYap = () => {
     clearSession()

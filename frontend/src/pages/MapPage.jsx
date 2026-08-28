@@ -64,7 +64,7 @@ import {
 import {
   guzergahlariListele, durakEkle as durakEkleIstek, durakSil as durakSilIstek,
   durakGuncelle as durakGuncelleIstek,
-  durakAlternatifleri as durakAlternatifleriIstek, rotaOlustur,
+  durakAlternatifleri as durakAlternatifleriIstek, rotaOlustur, rotaOnizle,
 } from '../ulasimApi'
 import { YETKILER, EKLEME_YETKISI } from '../yetkiler'
 // Ödev 16: "Yönetim" düğmesi artık menünün TANIMINA bakıyor
@@ -701,6 +701,35 @@ function alternatifStili() {
   }
 }
 
+/**
+ * ÖNİZLEME ROTASI (Ödev 18) — seçilen alternatiften geçen hattın TAMAMI.
+ *
+ * Kalın, DÜZ ve mavi. Üç seçim de bilinçli:
+ *   • DÜZ çizgi, çünkü bu bir "rota"; alternatif bacaklar kesikli kaldı ve
+ *     ikisi bir arada bakıldığında hangisinin parça hangisinin bütün olduğu
+ *     anlaşılıyor.
+ *   • MAVİ, çünkü hatların kendi renkleri (kırmızı, yeşil…) kullanıcı
+ *     tarafından seçiliyor; sabit bir vurgu rengi olmasaydı önizleme bazı
+ *     hatların renginde kaybolurdu.
+ *   • Yarı saydam, çünkü altındaki kayıtlı rotanın görünmesi gerekiyor —
+ *     kullanıcının karşılaştırdığı şey tam olarak ikisi arasındaki fark.
+ */
+function onizlemeStili() {
+  return [
+    new Style({
+      stroke: new Stroke({ color: 'rgba(255,255,255,0.85)', width: 11, lineCap: 'round' }),
+    }),
+    new Style({
+      stroke: new Stroke({
+        color: 'rgba(58, 130, 246, 0.85)',
+        width: 7,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }),
+    }),
+  ]
+}
+
 /** Henüz kaydedilmemiş çizim: kesikli turuncu — "bu geçici" mesajını verir. */
 const taslakStili = new Style({
   image: new Circle({
@@ -1115,9 +1144,39 @@ export default function MapPage() {
   const [seciliAlternatif, setSeciliAlternatif] = useState(0)
   const [alternatifYukleniyor, setAlternatifYukleniyor] = useState(false)
   const [alternatifKaydediliyor, setAlternatifKaydediliyor] = useState(false)
+  const [onizlemeYukleniyor, setOnizlemeYukleniyor] = useState(false)
 
   /** Alternatif çizgilerinin kaynağı — geçici, kaydedilmemiş öneriler. */
   const alternatifKaynagiRef = useRef(null)
+
+  /**
+   * ÖNİZLEME katmanının kaynağı: seçilen alternatiften geçen HATTIN TAMAMI.
+   *
+   * Alternatif çizgileri yalnızca bir BACAĞI gösteriyor. Kullanıcının görmek
+   * istediği ise "bu yoldan gidersem güzergah nasıl olur?" — Google
+   * Haritalar'da alternatife tıklandığında olan şey. O yüzden ayrı katman:
+   * biri parça, diğeri bütün.
+   */
+  const onizlemeKaynagiRef = useRef(null)
+
+  /** Seçili sıra — kararlı `alternatifSec` içinden okunabilmesi için. */
+  const seciliAlternatifRef = useRef(0)
+
+  /**
+   * `goLogin` ref üzerinden okunuyor: `alternatifSec`'in bağımlılık dizisine
+   * girseydi fonksiyon kararlılığını yitirir ve harita dinleyicileri
+   * gereksiz yere yeniden kurulurdu.
+   */
+  const goLoginRef = useRef(null)
+
+  /**
+   * Alternatif cevabı ve seçili sıra, REF olarak da tutuluyor.
+   *
+   * `alternatifSec` harita tıklama effect'inin bağımlılık dizisinde geçiyor;
+   * state'i doğrudan okusaydı her seçimde kimliği değişir ve effect tüm
+   * harita dinleyicilerini baştan kurardı. Ref ile fonksiyon KARARLI kalıyor.
+   */
+  const alternatifVeriRef = useRef(null)
 
   // Bu iki yardımcı, DURUMUN HEMEN ALTINDA duruyor — dosyanın ilerisindeki
   // diğer alternatif eylemleriyle birlikte değil. Sebebi teknik: ikisi de
@@ -1126,26 +1185,72 @@ export default function MapPage() {
   // ("before initialization" hatası); yazmasaydık de eslint haklı olarak
   // eksik bağımlılık uyarısı verirdi.
 
-  /** Alternatif çizgilerini haritadan sil. */
+  /** Alternatif çizgilerini ve önizlemeyi haritadan sil. */
   const alternatifleriTemizle = useCallback(() => {
     alternatifKaynagiRef.current?.clear()
+    onizlemeKaynagiRef.current?.clear()
+    alternatifVeriRef.current = null
+    seciliAlternatifRef.current = 0
     setAlternatifler(null)
     setSeciliAlternatif(0)
+    setOnizlemeYukleniyor(false)
   }, [])
 
   /**
-   * Listeden ya da haritadan bir alternatif seç.
+   * Listeden ya da HARİTADAKİ ÇİZGİDEN bir alternatif seç.
    *
-   * Seçim yalnızca GÖRSEL: hangi yolun vurgulanacağını belirliyor. Kalıcı
-   * olması için kullanıcının "Bu yolu kullan" demesi gerekiyor — tıklamayı
-   * doğrudan kaydetseydik, karşılaştırmak için gezinen kullanıcı farkında
-   * olmadan rotayı değiştirirdi.
+   * Seçilir seçilmez hattın TAMAMI o yoldan çizilip gösteriliyor
+   * (Google Haritalar davranışı). Yalnızca bacağı vurgulasaydık kullanıcı
+   * "bu yolu seçersem güzergahım ne olur?" sorusunun cevabını göremezdi;
+   * asıl merak ettiği de bu.
+   *
+   * Önizleme SUNUCUDAN geliyor, istemcide kayıtlı rotanın ilgili parçası
+   * kesilip yapıştırılmıyor: ek yerlerinde kopukluk oluşurdu. Sunucu bütün
+   * rotayı tek seferde çizdiriyor.
+   *
+   * Seçim yine de KALICI DEĞİL — hiçbir şey kaydedilmiyor. Kaydetmek için
+   * "Bu yolu kullan" gerekiyor; tıklamayı doğrudan yazsaydık, karşılaştırmak
+   * için gezinen kullanıcı farkında olmadan rotayı değiştirirdi.
    */
   const alternatifSec = useCallback((sira) => {
+    seciliAlternatifRef.current = sira
     setSeciliAlternatif(sira)
     alternatifKaynagiRef.current?.getFeatures().forEach((f) => {
       f.set('secili', f.get('alternatifSira') === sira)
     })
+
+    const veri = alternatifVeriRef.current
+    const alt = veri?.alternatifler?.[sira]
+    if (!veri || !alt) return
+
+    // Yarış durumu koruması: kullanıcı hızlıca 1 → 2 → 1 gezerse cevaplar
+    // sırasız dönebilir. Her istek kendi sırasını taşıyor; dönen cevap
+    // artık seçili olmayan bir alternatife aitse ÇİZİLMİYOR. Olmasaydı
+    // haritada seçili satırla uyuşmayan bir rota kalabilirdi.
+    setOnizlemeYukleniyor(true)
+    rotaOnizle(
+      veri.guzergahId,
+      [{ durakId: veri.durakId, wkt: alt.viaWkt }],
+      goLoginRef.current,
+    )
+      .then((cevap) => {
+        if (alternatifVeriRef.current !== veri) return          // kutucuk kapandı
+        if (seciliAlternatifRef.current !== sira) return        // başka seçildi
+
+        const kaynak = onizlemeKaynagiRef.current
+        if (!kaynak) return
+        kaynak.clear()
+        kaynak.addFeature(wktToFeature(cevap.wkt))
+      })
+      .catch(() => {
+        // Önizleme bir KOLAYLIK. Alınamazsa alternatif çizgileri yerinde
+        // duruyor ve seçim yapılabiliyor; kullanıcıyı hata kutusuyla
+        // rahatsız etmek, işleyen bir akışı bozmak olurdu.
+        onizlemeKaynagiRef.current?.clear()
+      })
+      .finally(() => {
+        if (seciliAlternatifRef.current === sira) setOnizlemeYukleniyor(false)
+      })
   }, [])
 
 
@@ -1255,6 +1360,7 @@ export default function MapPage() {
     () => navigate('/login', { replace: true, state: { expired: true } }),
     [navigate],
   )
+  goLoginRef.current = goLogin
 
   /**
    * Alt ortada bildirim gösterir.
@@ -1999,6 +2105,9 @@ export default function MapPage() {
     const alternatifSource = new VectorSource()
     alternatifKaynagiRef.current = alternatifSource
 
+    const onizlemeSource = new VectorSource()
+    onizlemeKaynagiRef.current = onizlemeSource
+
     // Ödev 12: POI katmanı. Üç çizim katmanından AYRI çünkü ayrı bir tablo,
     // ayrı bir uç ve ayrı bir görünüm. Aynı kaynağa koysaydık "bu nokta
     // çizim mi POI mi?" sorusu her tıklamada yeniden sorulurdu.
@@ -2039,7 +2148,11 @@ export default function MapPage() {
     const map = new Map({
       target: mapElement.current,
       layers: [
-        new TileLayer({ source: new OSM() }),
+        // className verilince OpenLayers bu katmanı KENDİ canvas'ına
+        // çiziyor; CSS süzgeci de yalnızca ona uygulanabiliyor. Ortak
+        // canvas'ta kalsaydı zemini açmak için koyduğumuz süzgeç rotaları,
+        // durakları ve POI'leri de soldururdu.
+        new TileLayer({ source: new OSM(), className: 'taban-katman' }),
         // Sıra önemli: poligon en altta, çizgi ortada, nokta en üstte dursun ki
         // küçük noktalar büyük alanların altında kaybolmasın.
         layers.Polygon,
@@ -2056,6 +2169,17 @@ export default function MapPage() {
         // Alternatifler hattın ÜSTÜNDE (325 > 320): kullanıcı onları
         // karşılaştırmak için açtı, mevcut rotanın altında kalırlarsa
         // karşılaştırma yapamaz.
+        // ÖNİZLEME en altta (318 < 320): seçilen yoldan geçen hattın
+        // tamamı. Kayıtlı rotanın ÜSTÜNE koysaydık ikisi çakışan yerlerde
+        // hangisinin ne olduğu anlaşılmazdı; altta durunca kayıtlı rota
+        // referans olarak okunabiliyor ve önizleme onun etrafında
+        // "nereden saptığını" gösteriyor.
+        new VectorLayer({
+          source: onizlemeSource,
+          style: onizlemeStili(),
+          zIndex: 318,
+        }),
+
         new VectorLayer({
           source: alternatifSource,
           style: alternatifStili(),
@@ -3644,7 +3768,11 @@ export default function MapPage() {
     try {
       const cevap = await durakAlternatifleriIstek(durakDto.id, goLogin)
       setAlternatifler(cevap)
-      setSeciliAlternatif(0)
+
+      // Ref, state'ten ÖNCE doldruluyor: hemen aşağıdaki `alternatifSec`
+      // önizlemeyi ondan okuyor ve state güncellemesi o ana kadar
+      // uygulanmamış olabilir.
+      alternatifVeriRef.current = cevap
 
       const kaynak = alternatifKaynagiRef.current
       if (kaynak) {
@@ -3657,6 +3785,12 @@ export default function MapPage() {
           kaynak.addFeature(feature)
         })
       }
+
+      // En iyisini SEÇ — yalnızca işaretlemekle kalmıyor, önizlemesini de
+      // çiziyor. Kullanıcı hiçbir şeye tıklamadan hattın en iyi hâlini
+      // görüyor; ödevin "en iyi alternatif otomatik seçilsin" isteği bu.
+      if (cevap.alternatifler.length > 0) alternatifSec(0)
+      else setSeciliAlternatif(0)
 
       if (cevap.mesaj && cevap.alternatifler.length === 0) {
         bildir('uyari', cevap.mesaj)
@@ -4722,8 +4856,16 @@ export default function MapPage() {
                             )}
 
                             <p className="tool-hint muted">
-                              Yollar haritada <strong>kesikli</strong> çiziliyor: henüz
-                              kaydedilmediler. Çizgilere tıklayarak da seçebilirsiniz.
+                              {onizlemeYukleniyor
+                                ? 'Güzergah bu yoldan çiziliyor…'
+                                : (
+                                  <>
+                                    Seçtiğiniz yol <strong>mavi</strong> ile hattın tamamı
+                                    olarak çiziliyor; alternatifler <strong>kesikli</strong>.
+                                    Haritadaki kesikli çizgilere tıklayarak da
+                                    seçebilirsiniz. Hiçbiri kaydedilmiş değil.
+                                  </>
+                                )}
                             </p>
 
                             {yetkiVar(YETKILER.guzergahYonetimi) && (
