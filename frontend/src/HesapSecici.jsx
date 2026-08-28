@@ -116,6 +116,15 @@ export default function HesapSecici() {
               type="button"
               role="menuitem"
               className="hesap-ekle"
+              onClick={() => { setAcik(false); navigate('/cop') }}
+            >
+              Çöp kutusu
+            </button>
+
+            <button
+              type="button"
+              role="menuitem"
+              className="hesap-ekle"
               onClick={() => { aktifOturumuBirak(); navigate('/login', { replace: true }) }}
             >
               Başka hesapla giriş yap

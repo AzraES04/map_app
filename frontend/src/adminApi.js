@@ -225,3 +225,29 @@ export const ikiAdimliDogrula = (kod, onUnauthorized) =>
 /** Korumayı kapatır. ŞİFRE ister — kod değil (bkz. TotpKapatDto). */
 export const ikiAdimliKapat = (sifre, onUnauthorized) =>
   istek('/api/auth/2fa/kapat', jsonGovde('POST', { sifre }), onUnauthorized)
+
+// ---------------------------------------------------------------------------
+//  ÇÖP KUTUSU
+//
+//  Proje Ödev 3'ten beri soft delete kullanıyor: silinen hiçbir kayıt
+//  veritabanından gitmiyor. Veri zaten duruyordu — ama arayüzden görmenin ve
+//  geri getirmenin bir yolu yoktu.
+// ---------------------------------------------------------------------------
+
+/**
+ * Silinmiş bütün kayıtlar, tür özetiyle birlikte.
+ *
+ * Liste HERKESE geliyor; her kaydın `geriAlinabilir` alanı düğmenin açık olup
+ * olmayacağını söylüyor. Yetkiyi burada hesaplasaydık, yetki kurallarını
+ * ikinci kez (ve er geç yanlış) uygulamış olurduk.
+ */
+export const copKutusu = (onUnauthorized) =>
+  istek('/api/cop', {}, onUnauthorized)
+
+/**
+ * Bir kaydı geri alır.
+ * @param {string} tur "nokta" | "cizgi" | "poligon" | "poi" | "kategori" |
+ *                     "durak" | "guzergah" | "kullanici" | "rol"
+ */
+export const copGeriAl = (tur, id, onUnauthorized) =>
+  istek(`/api/cop/${tur}/${id}/geri-al`, { method: 'POST' }, onUnauthorized)

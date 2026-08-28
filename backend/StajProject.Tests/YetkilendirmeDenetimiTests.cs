@@ -66,6 +66,14 @@ public class YetkilendirmeDenetimiTests
         ["AuthController.TotpDogrula"] = "Kendi hesabının ayarı; kanıt TOTP kodu, hız sınırlı (IkinciAdimTests).",
         ["AuthController.TotpKapat"] = "Kendi hesabının ayarı; kanıt ŞİFRE, hız sınırlı (IkinciAdimTests).",
 
+        // Çöp kutusu: gereken yetki KAYDIN TÜRÜNE göre değişiyor (noktayı geri
+        // almak "Kayıt Silme", rolü geri almak "Rol Yönetimi" istiyor). Tek
+        // yetki adı alan [YetkiGerekli] bunu ifade edemiyor.
+        //
+        // Yeni bir "Çöp Kutusu Yönetimi" yetkisi UYDURULMADI: o yetkiye sahip
+        // biri, silemeyeceği bir kaydı geri alabilir hâle gelirdi.
+        ["CopKutusuController.GeriAl"] = "Yetki KAYIT TÜRÜNE göre değişiyor — kural serviste (CopKutusuTests).",
+
         // POI ve durak GÜNCELLEME/SİLME: gereken yetki
         // "X Yönetimi" VEYA ("X Ekleme" + kaydın sahibi olmak).
         // Bu VEYA'yı tek yetki adı alan [YetkiGerekli] ifade edemiyor;

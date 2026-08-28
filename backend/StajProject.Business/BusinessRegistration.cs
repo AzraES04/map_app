@@ -46,6 +46,7 @@ public static class BusinessRegistration
 
         // Ödev 16: akıllı ulaşım modülü — güzergah ve durak yönetimi
         services.AddScoped<IUlasimService, UlasimService>();
+        services.AddScoped<ICopKutusuService, CopKutusuService>();
 
         // Ödev 13 iyileştirmesi: POI stilleri kategori tablosundan üretiliyor.
         // PoiCategoryService bunu isteğe bağlı bağımlılık olarak alıyor —

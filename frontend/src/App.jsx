@@ -7,6 +7,7 @@ import AdminRoles from './pages/AdminRoles.jsx'
 import AdminPoi from './pages/AdminPoi.jsx'
 import AdminGuzergah from './pages/AdminGuzergah.jsx'
 import Guvenlik from './pages/Guvenlik.jsx'
+import CopKutusu from './pages/CopKutusu.jsx'
 import { isAuthenticated } from './auth'
 
 // Korumalı rota: geçerli token yoksa login'e yönlendirir
@@ -27,6 +28,16 @@ export default function App() {
         <Route
           path="/guvenlik"
           element={<RequireAuth><Guvenlik /></RequireAuth>}
+        />
+
+        {/* Çöp kutusu da /admin ALTINDA DEĞİL: liste herkese açık (silinmiş
+            bir kaydın adı zaten herkesin görebildiği bir bilgiydi), geri alma
+            ise kaydın TÜRÜNE göre yetki istiyor. AdminLayout'a koysaydık
+            yönetim yetkisi olmayan kullanıcı kendi sildiği noktayı bile
+            göremezdi. */}
+        <Route
+          path="/cop"
+          element={<RequireAuth><CopKutusu /></RequireAuth>}
         />
         <Route
           path="/map"

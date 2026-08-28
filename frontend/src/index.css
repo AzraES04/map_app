@@ -702,10 +702,17 @@ body {
 .kure-dunya.solgun { opacity: 0; }
 
 /*
-  KÜRE — hacim ve atmosfer.
-  Dört katmanlı kurgu: (1) ince parlak kenar, (2) sol üstten yumuşak ışık,
-  (3) sağ altta derin gölge, (4) dışa doğru iki kademeli atmosfer parıltısı.
-  Işığın sabit ve tek yönlü olması düz daireyi küre gibi okutuyor.
+  KÜRE — hacim ve atmosfer (GECE YÜZÜ).
+
+  Gezegen artık gece yüzünden görünüyor (bkz. Dunya.jsx), bu yüzden ışık
+  katmanı da yeniden dengelendi:
+
+    • Gölge DAHA DERİN ve daha geniş. Gündüz sürümünde gölgenin işi hacim
+      vermekti; şimdi asıl işi karanlığı taşımak.
+    • İç aydınlatma ZAYIFLADI. Güçlü kalsaydı şehir ışıklarını yıkar ve
+      gecenin siyahını griye çevirirdi.
+    • Atmosfer kavsi GÜÇLENDİ. Gece bir gezegende gözün tutunduğu tek
+      parlak şey o ince kenar; gerçek uzay fotoğraflarında da öyledir.
 */
 .kure-isik {
   top: 50%;
@@ -715,26 +722,29 @@ body {
   margin: -21vmin 0 0 -21vmin;
   border-radius: 50%;
   background:
-    /* ATMOSFER KAVSİ — gerçek uzay fotoğraflarında dünyanın kenarındaki o ince,
-       parlak mavi şerit. İnce ve belirgin olması "fotoğrafik" hissin anahtarı. */
+    /* ATMOSFER KAVSİ — dünyanın kenarındaki o ince, parlak mavi şerit.
+       Gece yüzünde daha belirgin: karanlık gezegeni uzaydan ayıran sınır. */
     radial-gradient(circle at center,
-      rgba(255, 255, 255, 0) 96.5%,
-      rgba(var(--atmosfer), 0.55) 99%,
-      rgba(var(--atmosfer), 0.28) 100%),
-    /* ana ışık kaynağı: sol üst */
-    radial-gradient(circle at 33% 27%,
-      rgba(255, 255, 255, 0.14),
-      rgba(255, 255, 255, 0) 52%),
-    /* GECE TARAFI — sağ alta doğru derinleşen terminatör (gündüz/gece sınırı) */
-    radial-gradient(circle at 72% 76%,
-      rgba(0, 2, 8, 0.72),
-      rgba(0, 2, 8, 0.28) 45%,
-      rgba(0, 2, 8, 0) 70%);
+      rgba(255, 255, 255, 0) 95.5%,
+      rgba(var(--atmosfer), 0.75) 98.5%,
+      rgba(var(--atmosfer), 0.35) 100%),
+    /* Ana ışık: sol üst. ZAYIF — Dunya.jsx'teki gündüz kuşağı asıl
+       aydınlatmayı zaten yapıyor; buradaki yalnızca ona hacim katıyor. */
+    radial-gradient(circle at 30% 24%,
+      rgba(190, 225, 255, 0.09),
+      rgba(255, 255, 255, 0) 48%),
+    /* GECE TARAFI — sağ alta doğru derinleşen gölge. Gündüz sürümünden
+       daha koyu ve daha geniş yayılıyor. */
+    radial-gradient(circle at 74% 78%,
+      rgba(0, 1, 5, 0.82),
+      rgba(0, 1, 5, 0.42) 48%,
+      rgba(0, 1, 5, 0) 76%);
   box-shadow:
-    inset 0 0 50px 10px rgba(0, 3, 10, 0.55),      /* kenar karanlığı → yuvarlaklık */
-    0 0 0 1px rgba(var(--atmosfer), 0.28),         /* 1px net halka → "tasarlanmış" hissi */
-    0 0 30px 1px rgba(var(--atmosfer), 0.26),      /* yakın atmosfer, dar tutuldu */
-    0 0 110px 18px rgba(var(--atmosfer), 0.09);    /* uzak parıltı, siyahta kaybolur */
+    /* Kenar karanlığı: kürenin yuvarlaklığını taşıyan şey. */
+    inset 0 0 60px 14px rgba(0, 2, 7, 0.68),
+    0 0 0 1px rgba(var(--atmosfer), 0.38),         /* 1px net halka */
+    0 0 34px 2px rgba(var(--atmosfer), 0.34),      /* yakın atmosfer */
+    0 0 130px 22px rgba(var(--atmosfer), 0.12);    /* uzak parıltı */
 }
 
 /*
@@ -5171,3 +5181,152 @@ kbd {
   background: color-mix(in srgb, var(--ok) 18%, transparent);
   color: var(--ok);
 }
+
+/* ---------- POI kategori seçici ---------- */
+
+/* Toplu seçim düğmeleri: on beş kategoriyi tek tek açmak zorunda bırakmamak
+   için. Akordiyonun en üstünde duruyorlar — listeyi kaydırmadan erişilsin. */
+.poi-toplu {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.poi-toplu .btn-ghost { flex: 1; }
+
+/* Satırın TAMAMI tıklanabilir: 13 piksellik onay kutusunu avlamak yerine
+   simge ve ad da hedefe dahil. */
+.poi-lejant.secilebilir li { padding: 0; }
+
+.poi-kategori-anahtar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 2px;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: background var(--gecis);
+}
+
+.poi-kategori-anahtar:hover { background: var(--yuzey-2); }
+
+.poi-kategori-anahtar input {
+  flex-shrink: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.poi-kategori-ad {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Seçili olmayan kategori soluyor: hangilerinin açık olduğu listeye
+   bakınca görülsün, tek tek onay kutusu okumaya gerek kalmasın. */
+.poi-kategori-anahtar:not(:has(input:checked)) .poi-simge,
+.poi-kategori-anahtar:not(:has(input:checked)) .poi-kategori-ad {
+  opacity: 0.45;
+}
+
+/* Katmanlar bölümündeki POI satırı artık bir DÜĞME değil, özet.
+   Tıklanabilir görünmemeli. */
+.layer-toggle.ozet {
+  cursor: default;
+  color: var(--metin-orta);
+}
+
+/* ---------- Çöp kutusu ---------- */
+
+.cop-sayfa { max-width: 900px; }
+
+/* Tür süzgeci — sekme değil ROZET görünümlü düğmeler.
+   Gerçek sekme olsaydı her tür ayrı bir "sayfa" gibi okunurdu; oysa hepsi
+   aynı listenin süzülmüş hâli. */
+.cop-suzgec {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 12px;
+}
+
+.cop-sekme {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius-full);
+  color: var(--metin-orta);
+  font-size: var(--yazi-sm);
+  cursor: pointer;
+  transition: background var(--gecis), border-color var(--gecis), color var(--gecis);
+}
+
+.cop-sekme:hover { border-color: var(--kenar-guclu); color: var(--metin); }
+
+.cop-sekme.aktif {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  border-color: var(--primary);
+  color: var(--metin);
+}
+
+.cop-sekme .sayi {
+  font-size: 11px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.cop-listesi {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.cop-listesi li {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+}
+
+/* Tür etiketi sabit genişlikte: satırlar arasında adlar aynı hizada
+   başlasın, göz listeyi tarayabilsin. */
+.cop-tur {
+  flex-shrink: 0;
+  width: 104px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--metin-soluk);
+}
+
+.cop-govde {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cop-govde strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cop-govde small { font-size: 11px; color: var(--metin-soluk); }
+
+/* Yetkisi olmayan kullanıcıda düğme KAYBOLMUYOR, sönüyor: kaydın geri
+   alınabilir olduğunu ama bunu yapacak yetkisi olmadığını görmeli. */
+.cop-listesi button[disabled] { opacity: 0.4; cursor: not-allowed; }

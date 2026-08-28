@@ -9,6 +9,7 @@ import VectorSource from 'ol/source/Vector'
 import Draw from 'ol/interaction/Draw'
 import Modify from 'ol/interaction/Modify'
 import Snap from 'ol/interaction/Snap'
+import Translate from 'ol/interaction/Translate'
 import Overlay from 'ol/Overlay'
 import { Style, Circle, Fill, Stroke, Text, RegularShape } from 'ol/style'
 import { fromLonLat, toLonLat } from 'ol/proj'
@@ -62,6 +63,7 @@ import {
 } from '../mesai'
 import {
   guzergahlariListele, durakEkle as durakEkleIstek, durakSil as durakSilIstek,
+  durakGuncelle as durakGuncelleIstek,
 } from '../ulasimApi'
 import { YETKILER, EKLEME_YETKISI } from '../yetkiler'
 // Ödev 16: "Yönetim" düğmesi artık menünün TANIMINA bakıyor
@@ -403,7 +405,7 @@ const olcumStili = [
  * Stil FONKSİYONU: etiket metni her feature'da farklı olduğu için sabit bir
  * Style yetmiyor (kayitStili ile aynı gerekçe).
  */
-function poiStili(stiller = []) {
+function poiStili(stiller = [], secim = null) {
   // Ödev 15: kategori id → simge. Boş liste = stiller henüz inmedi;
   // o durumda aşağıdaki daire görünümüne düşüyoruz.
   const ikonlar = ikonHaritasiKur(stiller)
@@ -434,6 +436,14 @@ function poiStili(stiller = []) {
   })
 
   return (feature) => {
+    // Kategori seçili değilse HİÇ ÇİZME.
+    //
+    // null dönmek OpenLayers'ta yalnızca çizimi değil TIKLAMA TESTİNİ de
+    // kapatıyor — gizli bir POI yanlışlıkla seçilemiyor. Katmanı topluca
+    // gizlemek yerine burada süzmemizin sebebi bu: "hangi kategoriler açık"
+    // bilgisi tek yerde kalıyor.
+    if (secim && !secim.has(feature.get('kategoriId'))) return null
+
     const aktif = feature.get('aktif')
     const ikon = ikonBul(ikonlar, feature.get('kategoriId'))
 
@@ -472,15 +482,40 @@ function poiStili(stiller = []) {
  * vektör katmanını tamamen kaldırsaydık POI'ye tıklanamaz, bilgi paneli
  * (Ödev 12) çalışmaz hâle gelirdi.
  */
-const poiVurusStili = new Style({
-  image: new Circle({
-    radius: 14,
-    // Tamamen saydam değil: sıfır alfa bazı tarayıcılarda hiç çizilmiyor
-    // sayılıp isabet testinin dışında kalabiliyor. 0.01 gözle görülmez ama
-    // katmanın "burada bir şey var" demesi için yeterli.
-    fill: new Fill({ color: 'rgba(142, 68, 173, 0.01)' }),
-  }),
-})
+function poiVurusStili(secim = null) {
+  const vurus = new Style({
+    image: new Circle({
+      radius: 14,
+      // Tamamen saydam değil: sıfır alfa bazı tarayıcılarda hiç çizilmiyor
+      // sayılıp isabet testinin dışında kalabiliyor. 0.01 gözle görülmez ama
+      // katmanın "burada bir şey var" demesi için yeterli.
+      fill: new Fill({ color: 'rgba(142, 68, 173, 0.01)' }),
+    }),
+  })
+
+  /**
+   * SÜRÜKLENEN nokta belirgin çiziliyor.
+   *
+   * Bu katman normalde neredeyse şeffaf: ekranda görünen simge WMS'ten
+   * geliyor. Ama WMS bir RESİM ve sürükleme sırasında güncellenmiyor — yani
+   * işaretlemeseydik kullanıcı bir şeyi sürüklerken hiçbir şeyin hareket
+   * ettiğini GÖRMEZDİ.
+   */
+  const surukleme = new Style({
+    image: new Circle({
+      radius: 11,
+      fill: new Fill({ color: 'rgba(232, 161, 60, 0.9)' }),
+      stroke: new Stroke({ color: '#ffffff', width: 3 }),
+    }),
+  })
+
+  return (feature) => {
+    // WMS o kategoriyi ÇİZMİYORSA tıklama hedefi de olmamalı; yoksa boş bir
+    // yere tıklayan kullanıcı görünmeyen bir POI'nin bilgi kartını açardı.
+    if (secim && !secim.has(feature.get('kategoriId'))) return null
+    return feature.get('suruklenlyor') ? surukleme : vurus
+  }
+}
 
 /**
  * DURAK simgesi (Ödev 16).
@@ -510,6 +545,16 @@ function durakStili() {
   })
 
   return (feature) => {
+    // Sürüklenen durak büyür ve turuncuya döner: kullanıcı neyi taşıdığını
+    // görsün. Taslak çizim rengiyle aynı ton — ikisi de "henüz kalıcı değil"
+    // demek.
+    if (feature.get('suruklenlyor')) {
+      stil.getImage().getFill().setColor('#e8a13c')
+      stil.getImage().setOpacity(1)
+      stil.getText().setText('')
+      return stil
+    }
+
     // Ödev 17: hattı kapatılmışsa durağı da çizme.
     //
     // Katmanı gizlemek YETMEZDİ: durak ve hat AYNI katmanda değil ama bütün
@@ -964,9 +1009,53 @@ export default function MapPage() {
   const [poiTaslak, setPoiTaslak] = useState(null)     // çizildi, kaydedilmedi
   const [poiForm, setPoiForm] = useState(BOS_POI_FORMU)
   const [poiKaydediliyor, setPoiKaydediliyor] = useState(false)
-  const [poiGorunur, setPoiGorunur] = useState(true)
+  /**
+   * HANGİ POI KATEGORİLERİ GÖRÜNSÜN?
+   *
+   * ---- NEDEN TEK BİR AÇ/KAPAT DEĞİL? ----
+   *
+   * Önceden tek bir "POI" onay kutusu vardı ve varsayılan AÇIKTI. Veritabanında
+   * dört binden fazla POI olduğu için harita açılır açılmaz simgelerle
+   * doluyordu: ne çizimler, ne duraklar, ne de hatlar seçilebiliyordu.
+   * Kullanıcının şikâyeti tam olarak buydu.
+   *
+   * "Hepsi açık / hepsi kapalı" da yetmezdi: kullanıcı çoğu zaman TEK bir
+   * kategoriyle ilgileniyor (yalnızca eczaneler, yalnızca okullar).
+   *
+   * ---- NEDEN BOŞ BAŞLIYOR? ----
+   *
+   * Boş küme = hiçbir POI görünmüyor. Harita temiz açılıyor ve kullanıcı ne
+   * istiyorsa onu ekliyor. Tersi (hepsi açık başlasın, istemediğini kapatsın)
+   * kalabalığı varsayılan yapardı — yani düzeltmek istediğimiz şeyi.
+   *
+   * Seçilenleri tutuyoruz, gizlenenleri DEĞİL: sunucuya yeni bir kategori
+   * eklendiğinde kendiliğinden görünmesin, kullanıcı bilinçli olarak açsın.
+   */
+  const [poiKategoriSecimi, setPoiKategoriSecimi] = useState(() => new Set())
+
+  const poiKategorisiDegistir = useCallback((kategoriId) => {
+    setPoiKategoriSecimi((onceki) => {
+      const yeni = new Set(onceki)
+      if (yeni.has(kategoriId)) yeni.delete(kategoriId)
+      else yeni.add(kategoriId)
+      return yeni
+    })
+  }, [])
   // Bilgi kartındaki düzenleme modu: { isim, kategoriId, plan } | null
   const [poiDuzenle, setPoiDuzenle] = useState(null)
+
+  /**
+   * Durak düzenleme — bilgi kutucuğunun içinde açılan form.
+   *
+   * POI'deki desenin aynısı ve bilerek: kullanıcı iki farklı nesne için iki
+   * farklı akış öğrenmek zorunda kalmasın. Ayrı bir ekrana götürmek de
+   * mümkündü ama durak düzenlemenin tek bağlamı HARİTADAKİ YERİ — o bağlamı
+   * kaybetmek işi zorlaştırırdı.
+   *
+   * null → form kapalı. Dolu → { ad, aciklama, guzergahId }
+   */
+  const [durakDuzenle, setDurakDuzenle] = useState(null)
+  const [durakDuzenleKaydediliyor, setDurakDuzenleKaydediliyor] = useState(false)
 
   // ---- Ödev 16: ulaşım modülü ----
   //
@@ -1833,7 +1922,7 @@ export default function MapPage() {
 
     const poiKatmani = new VectorLayer({
       source: poiSource,
-      style: poiStili(poiStilleri),
+      style: poiStili(poiStilleri, poiKategoriSecimi),
       declutter: DECLUTTER_GRUBU,
     })
     poiKatmanRef.current = poiKatmani
@@ -2039,13 +2128,31 @@ export default function MapPage() {
     }
   }, [haritaHazir, geoDurum, poiStilleri, goLogin])
 
-  // POI görünürlüğü tek bir onay kutusundan yönetiliyor ama artık İKİ katmanı
-  // birden ilgilendiriyor: WMS resmi ve altındaki tıklama katmanı. İkisi ayrı
-  // ayrı kapatılabilseydi "POI kapalı ama tıklanabiliyor" gibi tuhaf bir
-  // durum çıkardı.
+  /**
+   * POI WMS katmanı — YALNIZCA SEÇİLİ KATEGORİLER çiziliyor.
+   *
+   * GeoServer isteği zaten kategori başına ayrı bir STYLES taşıyor (her
+   * kategorinin kendi SLD'si var). Dolayısıyla süzme, listeden istenmeyen
+   * stilleri ÇIKARMAKLA oluyor — sunucuya CQL süzgeci göndermeye gerek yok.
+   *
+   * Hiçbir kategori seçili değilse katman tamamen gizleniyor: boş bir
+   * LAYERS parametresiyle istek atmak GeoServer'dan hata döndürürdü.
+   */
   useEffect(() => {
-    poiWmsKatmanRef.current?.setVisible(poiGorunur && !sahneGizliyor)
-  }, [poiGorunur, poiWmsAktif, sahneGizliyor])
+    const katman = poiWmsKatmanRef.current
+    if (!katman) return
+
+    const secili = poiStilleri.filter((st) => poiKategoriSecimi.has(st.kategoriId))
+
+    katman.setVisible(secili.length > 0 && !sahneGizliyor)
+
+    if (secili.length > 0) {
+      katman.getSource().updateParams({
+        LAYERS: secili.map(() => geoDurum.poiKatmani).join(','),
+        STYLES: secili.map((st) => st.stil).join(','),
+      })
+    }
+  }, [poiKategoriSecimi, poiStilleri, poiWmsAktif, sahneGizliyor, geoDurum])
 
   // Ödev 16: ulaşım katmanları TEK anahtarla açılıp kapanıyor.
   //
@@ -2087,7 +2194,15 @@ export default function MapPage() {
   // Vektör katmanının stili: WMS çiziyorsa görünmez tıklama hedefi, çizmiyorsa
   // Ödev 12'nin mor halkası (gerekçe: poiVurusStili).
   useEffect(() => {
-    poiKatmanRef.current?.setStyle(poiWmsAktif ? poiVurusStili : poiStili(poiStilleri))
+    // Seçim stile REF ile değil, doğrudan setStyle ile veriliyor: seçim
+    // değiştiğinde stil fonksiyonunun kendisi yenileniyor ve OpenLayers
+    // katmanı baştan çiziyor. Ref kullansaydık yeniden çizimi elle
+    // tetiklemek gerekirdi.
+    poiKatmanRef.current?.setStyle(
+      poiWmsAktif
+        ? poiVurusStili(poiKategoriSecimi)
+        : poiStili(poiStilleri, poiKategoriSecimi),
+    )
 
     // poiStilleri BAĞIMLILIK LİSTESİNDE: simgeler stil ucundan geliyor ve
     // harita kurulduktan SONRA iniyor. Listede olmasaydı kategori simgeleri
@@ -2862,12 +2977,136 @@ export default function MapPage() {
     )
   }, [visible, sahneGizliyor])
 
-  // POI katmanı ayrı bir onay kutusuyla açılıp kapanıyor. haritaHazir
-  // bağımlılıkta: katman effect sırasına göre state'ten SONRA oluşabiliyor,
-  // o durumda da doğru görünürlükle başlasın.
+  /**
+   * POI VEKTÖR katmanı — tıklama hedefi.
+   *
+   * Katmanın kendisi seçim varken açık; hangi POI'nin çizileceğine stil
+   * fonksiyonu karar veriyor (seçili olmayan kategori için null dönüyor).
+   *
+   * NEDEN KATMANI TOPLUCA GİZLEMİYORUZ? Gizleseydik "hangi kategoriler açık"
+   * bilgisini iki yerde tutmamız gerekirdi. Tek yer: stil fonksiyonu.
+   * Katman görünürlüğü yalnızca "hiç seçim yok" ve "sahne oynuyor"
+   * durumlarını kapatıyor.
+   *
+   * Feature'a null stil dönmek OpenLayers'ta hem ÇİZİMİ hem de TIKLAMA
+   * TESTİNİ kapatıyor — yani gizli bir POI yanlışlıkla seçilemiyor.
+   */
   useEffect(() => {
-    poiKatmanRef.current?.setVisible(poiGorunur && !sahneGizliyor)
-  }, [poiGorunur, haritaHazir, sahneGizliyor])
+    poiKatmanRef.current?.setVisible(poiKategoriSecimi.size > 0 && !sahneGizliyor)
+  }, [poiKategoriSecimi, haritaHazir, sahneGizliyor])
+
+  // ------------------------------------------------------------------------
+  //  SÜRÜKLEYEREK TAŞIMA (POI ve duraklar)
+  // ------------------------------------------------------------------------
+  //
+  //  ---- NEDEN Translate, Modify DEĞİL? ----
+  //
+  //  Modify köşe EKLEMEYE ve TAŞIMAYA yarıyor; nokta geometrisinde "köşe
+  //  ekleme" anlamsız ve kullanıcı yanlışlıkla noktayı çoğaltabiliyor.
+  //  Translate bütün geometriyi taşıyor — nokta için doğru araç bu.
+  //
+  //  ---- NEDEN İYİMSER GÜNCELLEME? ----
+  //
+  //  Sürükleme bittiği anda nokta zaten yeni yerinde duruyor (OpenLayers onu
+  //  oraya taşıdı). Sunucudan cevap gelene kadar eski yere geri koymak,
+  //  kullanıcının gözünde noktanın "zıplaması" olurdu. Sunucu reddederse
+  //  (yetki yok, coğrafi alan dışı) listeyi tazeleyip gerçek konumu geri
+  //  getiriyoruz.
+
+  /** Sürüklenen feature'ın taşınmadan önceki konumu — hata durumunda geri dönüş. */
+  const suruklemeBaslangicRef = useRef(null)
+
+  /**
+   * Sürükleme yetkisi var mı?
+   *
+   * Sunucu asıl kontrolü yapıyor (sahiplik + coğrafi alan). Buradaki kontrol
+   * yalnızca ETKİLEŞİMİ HİÇ KURMAMAK için: yetkisi olmayan kullanıcı bir
+   * noktayı sürükleyip sonra "yapamazsınız" hatası almasın.
+   */
+  const poiTasinabilir = yetkiVar(YETKILER.poiEkleme) || yetkiVar(YETKILER.poiYonetimi)
+  const durakTasinabilir = yetkiVar(YETKILER.durakEkleme) || yetkiVar(YETKILER.guzergahYonetimi)
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !haritaHazir) return undefined
+    if (!poiTasinabilir && !durakTasinabilir) return undefined
+
+    const katmanlar = [
+      poiTasinabilir ? poiKatmanRef.current : null,
+      durakTasinabilir ? durakKatmanRef.current : null,
+    ].filter(Boolean)
+
+    if (katmanlar.length === 0) return undefined
+
+    const tasi = new Translate({ layers: katmanlar })
+
+    // Sürükleme BAŞLARKEN: konumu sakla ve feature'ı işaretle.
+    //
+    // İşaret stil fonksiyonuna gidiyor: POI katmanı WMS açıkken neredeyse
+    // görünmez çiziliyor (tıklama hedefi), yani kullanıcı sürüklerken hiçbir
+    // şeyin hareket ettiğini GÖRMEZDİ. İşaretli feature belirgin çiziliyor.
+    tasi.on('translatestart', (olay) => {
+      const feature = olay.features.item(0)
+      if (!feature) return
+      suruklemeBaslangicRef.current = feature.getGeometry().clone()
+      feature.set('suruklenlyor', true)
+      popupKapat()          // açık bir bilgi kutucuğu sürüklenen noktayı takip etmiyor
+    })
+
+    tasi.on('translateend', async (olay) => {
+      const feature = olay.features.item(0)
+      if (!feature) return
+
+      feature.set('suruklenlyor', false)
+
+      const dto = feature.get('dto')
+      const tip = feature.get('tip')
+      const wkt = geometryToWkt(feature.getGeometry())
+      const eski = suruklemeBaslangicRef.current
+      suruklemeBaslangicRef.current = null
+
+      try {
+        if (tip === POI) {
+          // Yalnızca KONUM gönderiliyor; ad, kategori ve mesai planı DTO'dan
+          // aynen geri yazılıyor. Göndermeseydik sunucu onları boş sayıp
+          // silerdi (PUT tam kaydı günceller).
+          await poiGuncelle(dto.id, {
+            isim: dto.isim,
+            kategoriId: dto.kategoriId,
+            mesaiPlani: dto.mesaiPlani,
+            wkt,
+          }, goLogin)
+          await poileriYukle()
+          // WMS bir RESİM: kaynağı tazelemezsek simge eski yerinde kalır.
+          poiWmsKatmanRef.current?.getSource().refresh()
+          bildir('ok', `"${dto.isim}" taşındı.`)
+        } else if (tip === DURAK) {
+          await durakGuncelleIstek(dto.id, {
+            ad: dto.ad,
+            guzergahId: dto.guzergahId,
+            aciklama: dto.aciklama,
+            wkt,
+          }, goLogin)
+          // Durak taşınınca hattın ROTASI da değişiyor; ulasimiYukle güncel
+          // rotayı da getiriyor (sunucu OSRM'i kendisi yeniliyor).
+          await ulasimiYukle()
+          bildir('ok', `"${dto.ad}" taşındı, rota güncellendi.`)
+        }
+      } catch (err) {
+        // Reddedildi: noktayı ESKİ yerine geri koy. Koymasaydık ekranda
+        // kaydedilmemiş bir konum kalır ve kullanıcı taşımanın tuttuğunu
+        // sanırdı.
+        if (eski) feature.setGeometry(eski)
+        if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+      }
+    })
+
+    map.addInteraction(tasi)
+    return () => map.removeInteraction(tasi)
+  }, [
+    haritaHazir, poiTasinabilir, durakTasinabilir,
+    goLogin, bildir, popupKapat, poileriYukle, ulasimiYukle,
+  ])
 
   // ------------------------------------------------------------------------
   //  Eylemler
@@ -3232,6 +3471,35 @@ export default function MapPage() {
       if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
     } finally {
       setPoiKaydediliyor(false)
+    }
+  }
+
+  /**
+   * Durak düzenlemesini kaydeder.
+   *
+   * wkt GÖNDERİLMİYOR → konum değişmiyor. Konum bu formdan düzenlenmiyor
+   * çünkü haritada zaten SÜRÜKLENEBİLİR; koordinatı elle yazdırmak hem
+   * hataya açık hem de gereksiz.
+   */
+  const durakDuzenlemeKaydet = async (e) => {
+    e.preventDefault()
+    if (!secili || !durakDuzenle) return
+
+    setDurakDuzenleKaydediliyor(true)
+    try {
+      await durakGuncelleIstek(secili.dto.id, {
+        ad: durakDuzenle.ad.trim(),
+        guzergahId: Number(durakDuzenle.guzergahId),
+        aciklama: durakDuzenle.aciklama.trim() || null,
+      }, goLogin)
+
+      popupKapat()
+      await ulasimiYukle()
+      bildir('ok', `"${durakDuzenle.ad}" güncellendi.`)
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    } finally {
+      setDurakDuzenleKaydediliyor(false)
     }
   }
 
@@ -4099,33 +4367,97 @@ export default function MapPage() {
                   </span>
                 </p>
 
-                <dl className="popup-detay">
-                  {secili.dto.aciklama && (
-                    <>
-                      <dt>Açıklama</dt>
-                      <dd>{secili.dto.aciklama}</dd>
-                    </>
-                  )}
+                {durakDuzenle ? (
+                  <form className="popup-duzenle" onSubmit={durakDuzenlemeKaydet}>
+                    <label htmlFor="durak-d-ad">Durak adı</label>
+                    <input
+                      id="durak-d-ad"
+                      value={durakDuzenle.ad}
+                      onChange={(e) => setDurakDuzenle({ ...durakDuzenle, ad: e.target.value })}
+                      maxLength={150}
+                      required
+                      autoFocus
+                    />
 
-                  <dt>Durum</dt>
-                  <dd>{secili.dto.isActive ? 'Aktif' : 'Pasif'}</dd>
+                    <label htmlFor="durak-d-hat">Güzergah</label>
+                    {/* Durağı başka bir hatta TAŞIMAK da buradan: sunucu sırayı
+                        yeniden hesaplıyor ve iki hattın da rotasını yeniliyor. */}
+                    <select
+                      id="durak-d-hat"
+                      value={durakDuzenle.guzergahId}
+                      onChange={(e) => setDurakDuzenle({ ...durakDuzenle, guzergahId: e.target.value })}
+                    >
+                      {guzergahlar.map((g) => (
+                        <option key={g.id} value={g.id}>{g.ad}</option>
+                      ))}
+                    </select>
 
-                  <dt>Ekleyen</dt>
-                  <dd>{secili.dto.kullaniciAdi ?? 'bilinmiyor'}</dd>
+                    <label htmlFor="durak-d-aciklama">Açıklama</label>
+                    <input
+                      id="durak-d-aciklama"
+                      value={durakDuzenle.aciklama}
+                      onChange={(e) => setDurakDuzenle({ ...durakDuzenle, aciklama: e.target.value })}
+                      maxLength={500}
+                      placeholder="peron, aktarma bilgisi…"
+                    />
 
-                  <dt>Eklenme</dt>
-                  <dd>{new Date(secili.dto.createdDate).toLocaleString('tr-TR')}</dd>
-                </dl>
+                    <div className="popup-eylemler">
+                      <button type="submit" className="btn-primary"
+                              disabled={durakDuzenleKaydediliyor}>
+                        {durakDuzenleKaydediliyor ? 'Kaydediliyor…' : 'Kaydet'}
+                      </button>
+                      <button type="button" className="btn-ghost"
+                              onClick={() => setDurakDuzenle(null)}>
+                        Vazgeç
+                      </button>
+                    </div>
 
-                {/* Silme düğmesi yalnızca yetkisi olana görünüyor. Asil kontrol
-                    sunucuda: sahibi olmayan bir operatör 400 alır. */}
-                {(yetkiVar(YETKILER.guzergahYonetimi) || yetkiVar(YETKILER.durakEkleme)) && (
-                  <div className="popup-eylemler">
-                    <button type="button" className="btn-ghost sil"
-                            onClick={() => duragiSil(secili.dto)}>
-                      <SilIkonu /> Durağı sil
-                    </button>
-                  </div>
+                    <p className="tool-hint muted">
+                      Konumu değiştirmek için durağı <strong>haritada sürükleyin</strong>.
+                    </p>
+                  </form>
+                ) : (
+                  <>
+                    <dl className="popup-detay">
+                      {secili.dto.aciklama && (
+                        <>
+                          <dt>Açıklama</dt>
+                          <dd>{secili.dto.aciklama}</dd>
+                        </>
+                      )}
+
+                      <dt>Durum</dt>
+                      <dd>{secili.dto.isActive ? 'Aktif' : 'Pasif'}</dd>
+
+                      <dt>Ekleyen</dt>
+                      <dd>{secili.dto.kullaniciAdi ?? 'bilinmiyor'}</dd>
+
+                      <dt>Eklenme</dt>
+                      <dd>{new Date(secili.dto.createdDate).toLocaleString('tr-TR')}</dd>
+                    </dl>
+
+                    {/* Düzenle/sil yalnızca yetkisi olana görünüyor. Asıl kontrol
+                        sunucuda: sahibi olmayan bir operatör 400 alır. */}
+                    {(yetkiVar(YETKILER.guzergahYonetimi) || yetkiVar(YETKILER.durakEkleme)) && (
+                      <div className="popup-eylemler">
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => setDurakDuzenle({
+                            ad: secili.dto.ad,
+                            guzergahId: secili.dto.guzergahId,
+                            aciklama: secili.dto.aciklama ?? '',
+                          })}
+                        >
+                          Düzenle
+                        </button>
+                        <button type="button" className="btn-ghost sil"
+                                onClick={() => duragiSil(secili.dto)}>
+                          <SilIkonu /> Durağı sil
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -4417,16 +4749,55 @@ export default function MapPage() {
                   kurulumda daha da uzun olabilir. Açık bıraksaydık panelin
                   yarısını kaplar, altındaki çizim araçlarını aşağı iterdi.
                   Özet satırı kaç kategori olduğunu katlıyken de söylüyor. */}
-              <details className="akordiyon panel-akordiyon">
+              {/* AKORDİYON VARSAYILAN AÇIK (open):
+                  POI'ler artık kapalı başlıyor ve kullanıcının onları
+                  açabileceği tek yer burası. Katlı bıraksaydık "POI'ler nerede?"
+                  sorusunun cevabı bir tık daha uzakta olurdu. */}
+              <details className="akordiyon panel-akordiyon" open>
                 <summary>
-                  Simge ve renkler
-                  <span className="akordiyon-ozet">{poiStilleri.length} kategori</span>
+                  Gösterilecek kategoriler
+                  <span className="akordiyon-ozet">
+                    {poiKategoriSecimi.size > 0
+                      ? `${poiKategoriSecimi.size} / ${poiStilleri.length}`
+                      : 'kapalı'}
+                  </span>
                 </summary>
 
                 <div className="akordiyon-govde">
-                  <ul className="poi-lejant">
+                  {/* Toplu seçim: on beş kategoriyi tek tek açmak zorunda
+                      bırakmak, "hepsini görmek" isteyen kullanıcıya on beş tık
+                      demek olurdu. */}
+                  <div className="poi-toplu">
+                    <button
+                      type="button"
+                      className="btn-ghost kucuk"
+                      onClick={() => setPoiKategoriSecimi(
+                        new Set(poiStilleri.map((st) => st.kategoriId)),
+                      )}
+                      disabled={poiKategoriSecimi.size === poiStilleri.length}
+                    >
+                      Hepsini göster
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost kucuk"
+                      onClick={() => setPoiKategoriSecimi(new Set())}
+                      disabled={poiKategoriSecimi.size === 0}
+                    >
+                      Hiçbirini
+                    </button>
+                  </div>
+
+                  <ul className="poi-lejant secilebilir">
                     {poiStilleri.map((st) => (
                       <li key={st.stil} title={st.tamYol}>
+                        <label className="poi-kategori-anahtar">
+                        <input
+                          type="checkbox"
+                          checked={poiKategoriSecimi.has(st.kategoriId)}
+                          onChange={() => poiKategorisiDegistir(st.kategoriId)}
+                          aria-label={`${st.ad} kategorisini haritada göster`}
+                        />
                         {/* Ödev 15: lejant artık renkli bir nokta değil, HARİTADAKİ
                             SİMGENİN TA KENDİSİ. Çizim parçaları stil ucundan
                             geliyor, yani GeoServer'ın bastığı SVG ile birebir aynı
@@ -4443,12 +4814,22 @@ export default function MapPage() {
                         ) : (
                           <span className={`poi-simge ${st.sekil}`} style={{ background: st.renk }} />
                         )}
-                        {st.ad}
+                        <span className="poi-kategori-ad">{st.ad}</span>
+                        </label>
                       </li>
                     ))}
                   </ul>
                 </div>
               </details>
+
+              {/* Boş durum, bir uyarı değil BİLGİ: harita bilerek temiz
+                  açılıyor. Kullanıcı "POI'ler kayboldu mu?" diye düşünmesin. */}
+              {poiKategoriSecimi.size === 0 && (
+                <p className="arama-durum">
+                  POI'ler <strong>gizli</strong>. Görmek istediğiniz kategorileri
+                  yukarıdan işaretleyin.
+                </p>
+              )}
 
               <p className="arama-ipucu muted">
                 Simgeleri GeoServer çiziyor: <strong>her kategori için ayrı bir SLD</strong>,
@@ -4881,19 +5262,25 @@ export default function MapPage() {
             ))}
 
             {/* ---- Ödev 12: POI katmanı ----
-                Üç çizim katmanından ayrı bir satır: ayrı tablo, ayrı uç.
-                Sayı yanında duruyor ki "POI eklendi mi?" sorusu panelden
-                cevaplanabilsin. */}
-            <label className="layer-toggle">
-              <input
-                type="checkbox"
-                checked={poiGorunur}
-                onChange={(e) => setPoiGorunur(e.target.checked)}
-              />
+                Burada TEK BİR AÇ/KAPAT YOK — bilerek.
+
+                Önceden vardı ve varsayılan açıktı; dört binden fazla POI
+                haritayı simgelerle dolduruyor, çizimler ve duraklar
+                seçilemiyordu. Artık görünürlük KATEGORİ BAZINDA, "POI
+                Kategorileri" bölümünden yönetiliyor (yukarıda).
+
+                İki yerden yönetilseydi ("POI kapalı ama kategori açık" gibi)
+                hangisinin kazandığı belirsiz kalırdı. Bu satır o yüzden
+                yalnızca özet gösteriyor. */}
+            <div className="layer-toggle ozet">
               <span className="dot" style={{ background: POI_RENGI }} />
               POI
-              <span className="sayi">{poiler.length}</span>
-            </label>
+              <span className="sayi">
+                {poiKategoriSecimi.size === 0
+                  ? 'gizli'
+                  : `${poiKategoriSecimi.size} kategori`}
+              </span>
+            </div>
 
             {/* ---- Ödev 8: GeoServer WMS katmanı ----
                 Yukarıdaki üç katman WFS'ten gelen VEKTÖR verisidir (tıklanabilir).
