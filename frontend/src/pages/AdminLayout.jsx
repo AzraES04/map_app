@@ -32,6 +32,10 @@ const IKONLAR = {
   rol: RolIkonu,
   poi: PoiIkonu,
   guzergah: GuzergahIkonu,
+  // Tur da güzergah simgesini kullanıyor: ikisi de "sıralı duraklardan
+  // oluşan bir yol". Ayrı bir simge çizmek, aralarındaki akrabalığı
+  // gizlemek olurdu.
+  tur: GuzergahIkonu,
   cop: SilIkonu,
 }
 

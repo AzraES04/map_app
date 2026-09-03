@@ -19,6 +19,17 @@ public class RegisterRequestDto
     [Required(ErrorMessage = "Şifre zorunludur.")]
     [MinLength(6, ErrorMessage = "Şifre en az 6 karakter olmalıdır.")]
     public string Password { get; set; } = string.Empty;
+
+    /// <summary>
+    /// İSTEĞE BAĞLI davet kodu.
+    ///
+    /// Doğru bir kod girilirse hesap o kodun sahibine (bir admine) bağlanır
+    /// VE manuel onay beklemeden aktif olur — admin kodu paylaşarak zaten
+    /// vouch etmiş oluyor. Kod girilmezse eski akış aynen sürüyor: hesap
+    /// oluşur ama bir yöneticinin onayını bekler.
+    /// </summary>
+    [StringLength(24)]
+    public string? InviteCode { get; set; }
 }
 
 /// <summary>Kayıt sonucu — token DEĞİL, çünkü hesap henüz kullanılamaz.</summary>

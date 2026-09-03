@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { copKutusu, copGeriAl } from '../adminApi'
+import { copKutusu, copGeriAl, copKaliciSil } from '../adminApi'
 
 // ============================================================================
 //  ÇÖP KUTUSU — silinen her kaydın geri getirilebildiği tek ekran
@@ -74,6 +74,34 @@ export default function CopKutusu() {
     try {
       await copGeriAl(oge.tur, oge.id, oturumBitti)
       setBilgi(`"${oge.ad}" geri alındı.`)
+      await yukle()
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') setHata(err.message)
+    } finally {
+      setIslemdeki(null)
+    }
+  }
+
+  const kaliciSil = async (oge) => {
+    // GERİ ALINAMAZ — çift onay istiyoruz: hem düğmenin ne yaptığını hem
+    // de bu turun geri dönüşü olmadığını söylüyoruz. "Sil" düğmesine
+    // basmışlardı zaten; burada bir kez daha "kalıcı" ve "geri alınamaz"
+    // kelimelerini görmeleri gerekiyor.
+    if (!window.confirm(
+      `"${oge.ad}" veritabanından TAMAMEN silinsin mi?
+
+`
+      + 'Bu işlem geri alınamaz — çöp kutusuna bile düşmez.',
+    )) return
+
+    const anahtar = `${oge.tur}-${oge.id}`
+    setIslemdeki(anahtar)
+    setHata(null)
+    setBilgi(null)
+
+    try {
+      await copKaliciSil(oge.tur, oge.id, oturumBitti)
+      setBilgi(`"${oge.ad}" kalıcı olarak silindi.`)
       await yukle()
     } catch (err) {
       if (err.message !== 'Oturum süresi doldu') setHata(err.message)
@@ -171,17 +199,35 @@ export default function CopKutusu() {
                   {/* Düğme yetkiye göre açık/kapalı ve bu bilgi SUNUCUDAN
                       geliyor. İstemcide hesaplasaydık yetki kurallarını
                       ikinci kez uygulamış olurduk. */}
-                  <button
-                    type="button"
-                    className="btn-primary kucuk"
-                    onClick={() => geriAl(oge)}
-                    disabled={!oge.geriAlinabilir || islemdeki === `${oge.tur}-${oge.id}`}
-                    title={oge.geriAlinabilir
-                      ? 'Bu kaydı geri getir'
-                      : 'Bu türü geri almak için yetkiniz yok'}
-                  >
-                    {islemdeki === `${oge.tur}-${oge.id}` ? 'Alınıyor…' : 'Geri al'}
-                  </button>
+                  <span className="cop-eylemler">
+                    <button
+                      type="button"
+                      className="btn-primary kucuk"
+                      onClick={() => geriAl(oge)}
+                      disabled={!oge.geriAlinabilir || islemdeki === `${oge.tur}-${oge.id}`}
+                      title={oge.geriAlinabilir
+                        ? 'Bu kaydı geri getir'
+                        : 'Bu türü geri almak için yetkiniz yok'}
+                    >
+                      {islemdeki === `${oge.tur}-${oge.id}` ? 'Alınıyor…' : 'Geri al'}
+                    </button>
+
+                    {/* KALICI SİL — aynı yetki şartı, ama geri dönüşü YOK.
+                        Bilerek Geri Al'dan görsel olarak ayrı (kırmızı,
+                        "tehlike" sınıfı): yan yana iki benzer düğme
+                        olsaydı biri yanlışlıkla tıklanabilirdi. */}
+                    <button
+                      type="button"
+                      className="btn-ghost kucuk tehlike"
+                      onClick={() => kaliciSil(oge)}
+                      disabled={!oge.geriAlinabilir || islemdeki === `${oge.tur}-${oge.id}`}
+                      title={oge.geriAlinabilir
+                        ? 'Veritabanından tamamen sil — geri dönüşü yok'
+                        : 'Bu türü kalıcı silmek için yetkiniz yok'}
+                    >
+                      Kalıcı sil
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>

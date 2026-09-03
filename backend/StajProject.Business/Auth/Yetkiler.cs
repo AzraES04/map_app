@@ -61,6 +61,40 @@ public static class Yetkiler
     /// </summary>
     public const string GuzergahYonetimi = "Güzergah Yönetimi";
 
+    /// <summary>
+    /// Ödev 19: bir güzergah için araç simülasyonunu başlatma/durdurma.
+    ///
+    /// Ödev metni "sadece Admin ve Operatör başlatabilsin" diyor. Rol ADINA
+    /// bakmak yerine yeni bir YETKİ tanımlıyoruz ve o yetkiyi bu iki role
+    /// veriyoruz: proje baştan beri rol adına değil yetkiye bakıyor
+    /// (bkz. YetkiGerekliAttribute) ve yönetici panelden yetkiyi başka bir
+    /// role de verebilmeli — örneğin "Ulaşım Operatörü"ne. Rol adı koda
+    /// gömülseydi bu ancak yeni bir sürümle mümkün olurdu.
+    ///
+    /// TAKİP ETMEK yetki İSTEMİYOR: ödev "diğer kullanıcılar takip
+    /// edebilsin" diyor. Yayını dinlemek okuma işidir.
+    /// </summary>
+    public const string SimulasyonBaslatma = "Simülasyon Başlatma";
+
+    /// <summary>
+    /// Tur modülü: tur tanımlama, duraklarını düzenleme ve canlı tur oturumu
+    /// başlatma — yani bir turda REHBER (Guide) olabilme.
+    ///
+    /// KATILMAK YETKİ İSTEMİYOR: katılımcı (Participant) yayını yalnızca
+    /// izliyor; okuma işi için yetki aramak, turu paylaşılamaz kılardı
+    /// (<see cref="SimulasyonBaslatma"/> ile aynı ayrım).
+    ///
+    /// Neden rol adına ("Rehber" diye bir rol) değil de yetkiye bağlandı?
+    /// Proje baştan beri rol adına değil yetkiye bakıyor; yönetici yarın bu
+    /// yetkiyi başka bir role de verebilmeli. Rol adı koda gömülseydi bu ancak
+    /// yeni bir sürümle mümkün olurdu.
+    ///
+    /// OTURUM İÇİ ROL AYRI BİR ŞEY: Guide/Participant ayrımı oturuma özeldir ve
+    /// tour_session_participant tablosunda durur (bkz. Entities/Tour.cs →
+    /// TourRole). Bu yetki "tur oturumu AÇABİLİR mi?" sorusunu cevaplıyor.
+    /// </summary>
+    public const string TurYonetimi = "Tur Yönetimi";
+
     /// <summary>Seed'in kullandığı tanım listesi: ad + açıklama.</summary>
     public static readonly (string Ad, string Aciklama)[] Tumu =
     {
@@ -77,5 +111,7 @@ public static class Yetkiler
         (PoiYonetimi,      "Yönetim panelinden bütün POI'leri ve kategori ağacını yönetebilir."),
         (DurakEkleme,      "Haritaya durak (Point) ekleyebilir ve kendi eklediği durakları düzenleyip silebilir."),
         (GuzergahYonetimi, "Güzergah tanımlayabilir, düzenleyebilir ve durakların sırasını değiştirebilir."),
+        (SimulasyonBaslatma, "Bir güzergahta araç simülasyonu başlatabilir ve durdurabilir."),
+        (TurYonetimi,      "Tur tanımlayabilir, duraklarını düzenleyebilir ve canlı tur oturumu başlatabilir."),
     };
 }

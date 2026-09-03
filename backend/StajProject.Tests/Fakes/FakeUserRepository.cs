@@ -117,4 +117,21 @@ public class FakeUserRepository : IUserRepository
         }
         return Task.CompletedTask;
     }
+
+    // ---------- Admin-bağlı kullanıcılar (davet kodu) ----------
+
+    public Task<User?> GetByInviteCodeAsync(string kod)
+        => Task.FromResult(_store.FirstOrDefault(u => u.InviteCode == kod && !u.IsDeleted));
+
+    public Task<string?> InviteCodeYazAsync(int userId, string kod)
+    {
+        var user = _store.FirstOrDefault(u => u.Id == userId && !u.IsDeleted);
+        if (user is null) return Task.FromResult<string?>(null);
+
+        user.InviteCode = kod;
+        return Task.FromResult<string?>(kod);
+    }
+
+    public Task<int> BagliKullaniciSayisiAsync(int adminId)
+        => Task.FromResult(_store.Count(u => u.ParentAdminId == adminId && !u.IsDeleted));
 }

@@ -11,6 +11,8 @@ import {
   kendiYetkilerim,
   kullaniciOnayla,
   ikiAdimliSifirla,
+  davetKodum,
+  davetKoduYenile,
 } from '../adminApi'
 import { EkleIkonu, KilitIkonu, SilIkonu, YetkiIkonu, HaritaIkonu } from '../icons'
 import { YETKILER } from '../yetkiler'
@@ -27,7 +29,9 @@ import CografiYetkiModal from './CografiYetkiModal.jsx'
 // ============================================================================
 
 /** Form alanlarının başlangıç değeri — "yeni kullanıcı" durumu. */
-const BOS_FORM = { id: null, username: '', password: '', isActive: true, roleIds: [] }
+const BOS_FORM = {
+  id: null, username: '', password: '', phoneNumber: '', isActive: true, roleIds: [],
+}
 
 export default function AdminUsers() {
   const navigate = useNavigate()
@@ -51,6 +55,11 @@ export default function AdminUsers() {
 
   // "Coğrafi Yetki" düğmesi, yetkisi olmayana HİÇ gösterilmiyor (ödevin ek maddesi).
   const [cografiYetkim, setCografiYetkim] = useState(false)
+
+  // ---- Davet kodu (admin-bağlı kullanıcılar) ----
+  const [davet, setDavet] = useState(null)
+  const [davetYukleniyor, setDavetYukleniyor] = useState(false)
+  const [davetKopyalandi, setDavetKopyalandi] = useState(false)
 
   // Token düştüğünde login'e dön. useCallback: aşağıdaki useEffect'in
   // bağımlılık listesinde duruyor, her render'da yeniden üretilirse
@@ -79,6 +88,44 @@ export default function AdminUsers() {
   }, [oturumBitti])
 
   useEffect(() => { yukle() }, [yukle])
+
+  // Davet kodum — sayfa açılır açılmaz. Yoksa sunucu üretir (idempotent),
+  // yani bu çağrı hiçbir yan etkiye sebep olmuyor, yalnızca gösteriyor.
+  useEffect(() => {
+    let iptal = false
+    davetKodum(oturumBitti)
+      .then((d) => { if (!iptal) setDavet(d) })
+      .catch(() => {})
+    return () => { iptal = true }
+  }, [oturumBitti])
+
+  const kodYenile = async () => {
+    if (!window.confirm(
+      'Kod yenilenirse eskisi artık kimseyi bu hesaba bağlamaz. '
+      + 'Devam edilsin mi?',
+    )) return
+
+    setDavetYukleniyor(true)
+    try {
+      setDavet(await davetKoduYenile(oturumBitti))
+      setDavetKopyalandi(false)
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') setHata(err.message)
+    } finally {
+      setDavetYukleniyor(false)
+    }
+  }
+
+  const kodKopyala = async () => {
+    if (!davet?.kod) return
+    try {
+      await navigator.clipboard.writeText(davet.kod)
+      setDavetKopyalandi(true)
+      setTimeout(() => setDavetKopyalandi(false), 2000)
+    } catch {
+      /* pano izni yoksa sessizce geç; kod zaten ekranda okunabilir */
+    }
+  }
 
   // Kendi yetkilerimi bir kez oku: düğmeyi gösterip göstermeyeceğimize karar ver.
   useEffect(() => {
@@ -109,6 +156,9 @@ export default function AdminUsers() {
       id: kullanici.id,
       username: kullanici.username,
       password: '',                                  // boş = şifre değişmesin
+      // Şifreden farklı olarak DOLU geliyor: numara gizli bir bilgi değil ve
+      // düzenlemeye gelen kişi mevcut numarayı görmeden düzeltemez.
+      phoneNumber: kullanici.phoneNumber ?? '',
       isActive: kullanici.isActive,
       roleIds: kullanici.roles.map((r) => r.id),
     })
@@ -134,6 +184,7 @@ export default function AdminUsers() {
           {
             username: form.username,
             password: form.password,
+            phoneNumber: form.phoneNumber || null,
             isActive: form.isActive,
             roleIds: form.roleIds,
           },
@@ -148,6 +199,9 @@ export default function AdminUsers() {
             // Boş şifre alanını GÖNDERMİYORUZ: backend null gelince mevcut
             // hash'i koruyor, boş metin gelseydi doğrulamaya takılırdı.
             password: form.password ? form.password : null,
+            // Şifreden FARKLI: boş göndermek numarayı siliyor. Kullanıcı
+            // alanı temizleyip kaydettiyse niyeti budur.
+            phoneNumber: form.phoneNumber || null,
             isActive: form.isActive,
             roleIds: form.roleIds,
           },
@@ -328,6 +382,21 @@ export default function AdminUsers() {
             </label>
           </div>
 
+          {/* TELEFON — isteğe bağlı. Bu kullanıcı bir turun rehberi olursa
+              numara, CANLI turda misafirlerin gördüğü "Rehberi ara"
+              düğmesine dönüşüyor; boş bırakılırsa düğme hiç çıkmıyor.
+              Alanı boşaltıp kaydetmek numarayı siler. */}
+          <label>
+            Telefon <span className="muted">(isteğe bağlı)</span>
+            <input
+              type="tel"
+              value={form.phoneNumber}
+              onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
+              maxLength={32}
+              placeholder="Örn. +90 555 123 45 67 — tur rehberiyse misafirlere görünür"
+            />
+          </label>
+
           <label className="admin-onay">
             <input
               type="checkbox"
@@ -371,6 +440,45 @@ export default function AdminUsers() {
         </form>
       )}
 
+      {/* ---------------- Davet Kodu ----------------
+          Kullanıcılar adminlere bağlı çalışabilir: bu kod paylaşıldığında
+          kayıt formuna girilen kişi otomatik bu hesaba bağlanır ve onay
+          beklemeden aktif olur (bkz. Login.jsx, AuthService.RegisterAsync). */}
+      <div className="admin-kart admin-davet-kodu">
+        <h2>
+          <span className="tool-icon"><KilitIkonu /></span>
+          Davet Kodu
+        </h2>
+
+        <p className="admin-alt-metin">
+          Bu kodu paylaştığınız kişi, kayıt formuna girince hesabı otomatik
+          size bağlanır ve yönetici onayı beklemeden aktif olur.
+        </p>
+
+        {davet && (
+          <div className="davet-kodu-satiri">
+            <code className="davet-kodu-deger">{davet.kod}</code>
+
+            <button type="button" className="btn-ghost kucuk" onClick={kodKopyala}>
+              {davetKopyalandi ? 'Kopyalandı' : 'Kopyala'}
+            </button>
+
+            <button
+              type="button"
+              className="btn-ghost kucuk"
+              onClick={kodYenile}
+              disabled={davetYukleniyor}
+            >
+              {davetYukleniyor ? 'Yenileniyor…' : 'Yenile'}
+            </button>
+
+            <span className="muted">
+              {davet.bagliKullaniciSayisi} kullanıcı bu koda bağlı
+            </span>
+          </div>
+        )}
+      </div>
+
       {/* ---------------- Liste ---------------- */}
       <div className="admin-kart">
         {yukleniyor ? (
@@ -389,6 +497,7 @@ export default function AdminUsers() {
                 <th>Kullanıcı</th>
                 <th>Roller</th>
                 <th>Yetki</th>
+                <th>Bağlı</th>
                 <th>Durum</th>
                 <th className="sag">İşlemler</th>
               </tr>
@@ -415,6 +524,14 @@ export default function AdminUsers() {
                     {kullanici.directPermissionCount > 0 && (
                       <span className="admin-rozet notr">{kullanici.directPermissionCount} doğrudan</span>
                     )}
+                  </td>
+                  <td>
+                    {/* Davet koduyla mı geldi? Kayıt anında ayarlanan bir
+                        bilgi — sonradan değiştirilemiyor, yalnızca
+                        gösteriliyor. */}
+                    {kullanici.parentAdminUsername
+                      ? <span className="admin-rozet notr">{kullanici.parentAdminUsername}</span>
+                      : <span className="muted">—</span>}
                   </td>
                   <td>
                     {/* Ödev 10: "onay bekliyor" ile "pasif" AYRI şeyler.

@@ -16,6 +16,9 @@ public class FakeCurrentUserService : ICurrentUserService
 
     public int? UserId { get; set; }
 
+    /// <summary>Ödev 19: simülasyonu başlatanın adı. Testlerde sabit.</summary>
+    public string? UserName { get; set; } = "test-kullanici";
+
     public int RequireUserId()
         => UserId ?? throw new WktFormatException("Bu işlem için giriş yapmış olmanız gerekiyor.");
 }

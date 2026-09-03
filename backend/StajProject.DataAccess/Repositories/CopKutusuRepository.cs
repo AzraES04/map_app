@@ -181,4 +181,57 @@ public class CopKutusuRepository : ICopKutusuRepository
         await _context.SaveChangesAsync();
         return true;
     }
+
+    // ------------------------------------------------------------------
+    //  Kalıcı silme
+    // ------------------------------------------------------------------
+
+    public async Task<bool> KaliciSilAsync(string tur, int id) => tur switch
+    {
+        Nokta => await KaliciSil<PointEntity>(id),
+        Cizgi => await KaliciSil<LineEntity>(id),
+        Poligon => await KaliciSil<PolygonEntity>(id),
+        Poi => await KaliciSil(_context.Poiler, id),
+        Kategori => await KaliciSil(_context.PoiKategorileri, id),
+        Durak => await KaliciSil(_context.Duraklar, id),
+        Guzergah => await KaliciSil(_context.Guzergahlar, id),
+        Kullanici => await KaliciSil(_context.Users, id),
+        Rol => await KaliciSil(_context.Roles, id),
+        _ => throw new ArgumentException($"Bilinmeyen kayıt türü: \"{tur}\".", nameof(tur)),
+    };
+
+    private Task<bool> KaliciSil<T>(int id) where T : GeometryEntityBase
+        => KaliciSil(_context.Set<T>(), id);
+
+    /// <summary>
+    /// Kaydı tablodan TAMAMEN kaldırır.
+    ///
+    /// ---- NEDEN YALNIZCA ZATEN SİLİNMİŞ KAYITTA ÇALIŞIYOR? ----
+    /// Kalıcı silme çöp kutusundan çağrılıyor ve çöp kutusu zaten yalnızca
+    /// <c>IsDeleted</c> kayıtları listeliyor — ama bu metot çöp kutusunun
+    /// DIŞINDAN da (yanlışlıkla) çağrılabileceği ihtimaline karşı ikinci
+    /// bir kapı: aktif bir kayıt bu yoldan asla silinemez.
+    ///
+    /// ---- YABANCI ANAHTAR İHLALİ NE OLUYOR? ----
+    /// Kasıtlı olarak burada YAKALANMIYOR — kayıt başka bir tabloya
+    /// referans veriliyorsa (örn. bir kategoriye bağlı POI'ler, bir
+    /// güzergaha bağlı duraklar) veritabanı isteği reddediyor ve
+    /// <c>DbUpdateException</c> fırlıyor. Servis katmanı bunu yakalayıp
+    /// kullanıcının anlayacağı bir mesaja çeviriyor (bkz. CopKutusuService).
+    /// Burada yutsaydık "silindi" mesajı gösterip aslında silmemiş olurduk.
+    /// </summary>
+    private async Task<bool> KaliciSil<T>(DbSet<T> tablo, int id) where T : class, IAuditableEntity
+    {
+        var kayit = await tablo.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => EF.Property<int>(x, "Id") == id);
+
+        if (kayit is null || !kayit.IsDeleted)
+        {
+            return false;   // yok ya da HÂLÂ AKTİF — bu yoldan silinemez
+        }
+
+        tablo.Remove(kayit);
+        await _context.SaveChangesAsync();
+        return true;
+    }
 }

@@ -61,9 +61,18 @@ public class PoiController : YonetimControllerBase
     /// vuruşunda megabaytlar taşımak demek olurdu.
     /// </summary>
     /// <param name="q">Aranan metin. En az 2 karakter; altındaysa boş liste döner.</param>
+    /// <param name="enFazla">
+    /// Kaç sonuç istendiği. Arama barı için 8 yetiyor ama TUR DÜZENLEME
+    /// ekranı sonuçları bir de KENDİ ŞEHRİNE göre eliyor: 8 sonucun sekizi de
+    /// başka şehirdeyse kullanıcı boş liste görüyordu ("arama çalışmıyor").
+    /// Orası daha geniş bir aday havuzu isteyebilsin diye parametre. Üst
+    /// sınır yine iş katmanında (25) — istemcinin verdiği sayı bağlayıcı değil.
+    /// </param>
     [HttpGet("ara")]
-    public Task<ActionResult<List<PoiAramaSonucuDto>>> Ara([FromQuery] string? q)
-        => Calistir<List<PoiAramaSonucuDto>>(async () => Ok(await _service.AraAsync(q)));
+    public Task<ActionResult<List<PoiAramaSonucuDto>>> Ara(
+        [FromQuery] string? q, [FromQuery] int? enFazla)
+        => Calistir<List<PoiAramaSonucuDto>>(async () =>
+            Ok(await _service.AraAsync(q, enFazla ?? 8)));
 
     /// <summary>
     /// Resmî tatil takvimi (Ödev 13 / Madde 3).

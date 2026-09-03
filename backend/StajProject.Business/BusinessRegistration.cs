@@ -28,6 +28,7 @@ public static class BusinessRegistration
 
         // Ödev 14: konum analizi — alan seçimi + ağırlıklı kriterlerle ısı haritası
         services.AddScoped<IKonumAnaliziService, KonumAnaliziService>();
+        services.AddScoped<IErisilebilirlikService, ErisilebilirlikService>();
 
         // Ödev 6: yönetim paneli ve dinamik yetkilendirme
         services.AddScoped<IPermissionService, PermissionService>();
@@ -46,6 +47,43 @@ public static class BusinessRegistration
 
         // Ödev 16: akıllı ulaşım modülü — güzergah ve durak yönetimi
         services.AddScoped<IUlasimService, UlasimService>();
+
+        // Tur modülü: Google Places + Directions üzerinden rota önerisi.
+        // Scoped — il tablosunu okuyor (DbContext) ve istek başına çalışıyor.
+        // Kota sayacı ve önbellek singleton, onlar DataAccess tarafında.
+        services.AddScoped<ITurPlanlamaServisi, TurPlanlamaServisi>();
+
+        // Tur şablonu kaydetme ve canlı oturum yönetimi.
+        services.AddScoped<ITurOturumServisi, TurOturumServisi>();
+
+        // Turistik POI içe aktarımı — yönetim panelinden tetikleniyor,
+        // açılışta DEĞİL (uygulamanın açılışı dış bir servise bağlanmasın).
+        services.AddScoped<ITuristikPoiAktarici, TuristikPoiAktarici>();
+
+        // Ödev 19: araç simülasyonu.
+        //
+        // SINGLETON — ve bu, ömür seçimlerinin en bilinçli olanı. Simülasyon
+        // bir isteğe değil UYGULAMAYA ait: "başlat" isteği bittikten sonra da
+        // araç yolda ilerlemeye, arka plandaki zamanlayıcı yayın yapmaya
+        // devam ediyor. Scoped olsaydı istek bitince defter silinirdi.
+        //
+        // Karşılığında bir kural doğuyor: singleton sınıf DbContext gibi
+        // scoped bir şeye DOKUNAMAZ. Bu yüzden veritabanını okuma işi
+        // UlasimService'te (scoped) kaldı, singleton yalnızca hazır bir
+        // anlık görüntü alıyor (bkz. SimulasyonKaynak).
+        services.AddSingleton<ISimulasyonServisi, SimulasyonServisi>();
+
+        // Yoklama da SINGLETON ve bellekte: rehber soruyor, cevaplar başka
+        // isteklerden geliyor; anlık bir durum olduğu için kalıcı değil
+        // (gerekçe IYoklamaServisi başlığında).
+        services.AddSingleton<IYoklamaServisi, YoklamaServisi>();
+
+        // Ayarlar da singleton: appsettings bir kez okunuyor, "Simulasyon"
+        // bölümü hiç yoksa sınıfın kendi varsayılanları geçerli
+        // (OsrmSettings ve GeoServerSettings ile aynı desen).
+        services.AddSingleton(
+            configuration.GetSection("Simulasyon").Get<Ulasim.SimulasyonAyarlari>()
+            ?? new Ulasim.SimulasyonAyarlari());
         services.AddScoped<ICopKutusuService, CopKutusuService>();
 
         // Ödev 13 iyileştirmesi: POI stilleri kategori tablosundan üretiliyor.

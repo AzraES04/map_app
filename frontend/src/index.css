@@ -3,10 +3,19 @@
 /* ============================================================================
    TASARIM SİSTEMİ
 
-   Ana ilke: KOYU KROM, AYDINLIK İÇERİK.
-   Üst bar ve yan panel derin mürekkep tonunda; harita ve üzerindeki kartlar
-   aydınlık. Böylece harita "içerik" olarak öne çıkar, çevresi geri çekilir —
-   ve login ekranı, açılış sahnesi ve uygulama aynı görsel evrende buluşur.
+   Ana ilke: BAŞTAN SONA KOYU KROM, HARİTA AYDINLIK.
+   Üst bar, yan panel VE harita üstündeki kartlar derin mürekkep tonunda;
+   aydınlık kalan tek şey haritanın kendisi. Kartlar login ekranındaki kartın
+   reçetesini kullanıyor: yarı saydam koyu cam, arkasını bulanıklaştıran bir
+   süzgeç ve üst kenarda ince bir ışık çizgisi. Böylece harita "içerik" olarak
+   öne çıkar, çevresindeki her şey geri çekilir — ve login ekranı, açılış
+   sahnesi ve uygulama aynı görsel evrende buluşur.
+
+   ⚠ ÖNCEDEN kartlar BEYAZDI ("koyu krom, aydınlık içerik"). Türkiye/Dünya
+   düğmeleri, koordinat göstergesi ve bilgi kartları koyu bir arayüzün
+   ortasında beyaz adacıklar gibi duruyordu; hepsi tek noktadan (--kart*
+   değişkenleri) koyuya çevrildi. Aydınlık temada eski beyaz değerlerine
+   geri dönüyorlar — kart artık TEMAYI takip ediyor.
 
    Renkler iki kademede tanımlı:
      1) Ham (primitive)  — mürekkep merdiveni, marka tonları
@@ -45,12 +54,47 @@
      başlıklarında 4.36'da kalıyordu, yani sınırın altındaydı. */
   --metin-soluk: #8aa3ac;           /* etiketler, ipuçları */
 
-  /* ---- Anlamsal roller: AYDINLIK İÇERİK (harita üstü kartlar) ----------- */
-  --kart: #ffffff;
-  --kart-2: #f2f6f8;
-  --kart-kenar: #dfe7ec;
-  --kart-metin: #14212a;
-  --kart-metin-soluk: #5a6b7b;
+  /* ---- Anlamsal roller: HARİTA ÜSTÜ KARTLAR (koyu cam) ------------------ */
+  /* Kart zemini SAYDAM: altındaki harita hafifçe sızsın diye. Opaklık 0.9'un
+     altına inmiyor — daha saydamı, kalabalık bir şehir görüntüsünün üstünde
+     metni okunmaz yapıyordu. */
+  --kart: rgba(15, 28, 33, 0.90);
+  /* Kartın İÇİNDEKİ ikinci yüzey (özet satırı, akordiyon, girdi). Sabit renk
+     değil BEYAZ ALFA: kartın kendisi saydam olduğu için, altındaki harita ne
+     renk olursa olsun bu yüzey her zaman "bir tık açık" görünüyor. */
+  --kart-2: rgba(255, 255, 255, 0.07);
+  /* Kartın KENDİSİ vurgulandığında (harita düğmesinin üzerine gelince).
+     --kart-2 burada işe yaramaz: beyaz alfa, zemini olmayan bir düğmede
+     haritayı olduğu gibi gösterirdi. */
+  --kart-hover: rgba(26, 44, 51, 0.95);
+  --kart-kenar: rgba(255, 255, 255, 0.14);
+  --kart-metin: #e9f1f3;
+  --kart-metin-soluk: #a3b7bf;
+
+  /* Haritanın kenarlarındaki vinyet (bkz. .map-alan::after). Değişken olarak
+     duruyor ki aydınlık temada tek satırla kapatılabilsin. */
+  --harita-vinyet: radial-gradient(ellipse 120% 98% at 50% 47%,
+    transparent 56%,
+    color-mix(in oklab, var(--murekkep-950) 26%, transparent) 100%);
+
+  /* Kartların cam etkisi — login kartıyla AYNI reçete (bkz. .login-card).
+     Değişken olarak duruyor ki dokuz ayrı kural aynı değeri tekrarlamasın. */
+  --kart-cam: blur(14px) saturate(140%);
+
+  /* Kart içindeki UYARI kutuları (kategori uyarısı, tatil rozeti, pasif
+     rozeti). Üçü de aynı kehribar aileden; tek yerde tanımlı olmalarının
+     sebebi tema: koyu kartta açık kehribar yazı, aydınlık kartta koyu
+     kehribar yazı gerekiyor. */
+  --kart-uyari-zemin: color-mix(in oklab, var(--uyari) 20%, transparent);
+  --kart-uyari-kenar: color-mix(in oklab, var(--uyari) 45%, transparent);
+  --kart-uyari-metin: #f0cd95;
+
+  /* Aynı mantık, "otomatik seçildi" kutusunun yeşili için. Zemin ve kenar
+     karışımdan üretilebiliyor (saydam yeşil iki temada da doğru), ama YAZI
+     rengi karışımla tutturulamıyor: koyu kartta açık yeşil, beyaz kâğıtta
+     koyu yeşil gerekiyor — ikisi aynı formülden çıkmaz. */
+  --kart-oneri-metin: color-mix(in oklab, var(--ok) 78%, var(--kart-metin));
+  --kart-oneri-metin-soluk: color-mix(in oklab, var(--ok) 55%, var(--kart-metin));
 
   /* ---- Durum renkleri: koyu zeminde okunabilir olacak şekilde açıldı ---- */
   --ok: #3fbf88;
@@ -483,6 +527,40 @@ body {
   margin-top: 18px;
 }
 
+/*
+  MİSAFİR GİRİŞİ — kartın altında AYRI bir blok.
+
+  Önce .login-hint olarak yazılmıştı ve iki sorunu vardı: metin ortalanıp
+  serbestçe kırılıyordu (soru ile bağlantı rastgele bir yerden bölünüyordu),
+  ve o sınıfın rengi %45 opaklıkta — bir İPUCU için doğru, tıklanması
+  beklenen bir BAĞLANTI için görünmez.
+
+  Şimdi: ince bir ayraçla ayrılmış, iki satırı da ortalanmış bir blok.
+  Soru soluk kalıyor (bilgi), bağlantı marka renginde ve altı çizili
+  (eylem) — hiyerarşi araç paletindekiyle aynı mantıkta.
+*/
+.login-misafir {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.8rem;
+}
+
+.login-misafir span { color: rgba(232, 241, 247, 0.5); }
+
+.login-misafir a {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.login-misafir a:hover { color: #fff; }
+
 .login-hint code {
   background: rgba(255, 255, 255, 0.09);
   color: rgba(232, 241, 247, 0.85);
@@ -606,6 +684,36 @@ body {
 .map-alan { flex: 1; min-width: 0; position: relative; display: flex; }
 
 .map-container { flex: 1; min-width: 0; }
+
+/*
+  VİNYET — haritanın kenarları koyu kroma karışsın.
+
+  Login ekranındaki ışık düzeninin aynısı: merkez aydınlık, kenarlar mürekkebe
+  düşüyor. Orada gezegenin altından yükselen ışık vardı; burada aydınlık olan
+  şey haritanın kendisi. Vinyet olmadan parlak dikdörtgen, koyu üst bara ve
+  panele KESKİN bir çizgiyle bitişiyordu — iki ayrı ekran gibi duruyordu.
+
+  Çok düşük opaklık: haritayı okumayı zorlaştırmamalı, yalnızca çerçeveye
+  bağlamalı. Ölçü tutturulamazsa fark edilir, doğru tutturulursa yalnızca
+  "oturmuş" görünür.
+
+  z-index 4: döşemelerin ÜSTÜNDE ama haritanın üstünde duran HER ŞEYİN
+  altında. "Her şey" burada dikkat isteyen bir liste — OpenLayers'ın kendi
+  denetimleri harita kapsayıcısının içinde ve varsayılan olarak z-index'siz;
+  onlara da 5 verildi (bkz. .ol-control / .ol-scale-line / .ol-overlay-container),
+  yoksa köşedeki +/− düğmeleri ve kenara yakın açılan bilgi kartları vinyetin
+  altında kalıp kararırdı.
+
+  pointer-events yok — tıklamalar haritaya geçiyor.
+*/
+.map-alan::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background: var(--harita-vinyet);
+}
 
 /*
   Haritanın oturduğu koyu zemin, tile'lar yüklenirken beyaz parlama yerine
@@ -772,6 +880,90 @@ body {
   mask-image: radial-gradient(circle at center, transparent 21vmin, #000 21.6vmin);
 }
 
+/*
+  YILDIZLAR — uzayın dokusu ve İNİŞİN PARALAKSI (bkz. Yildizlar.jsx).
+
+  Katman sırası bilinçli: .uzay-katmani'nın ÜSTÜNDE, gezegenin ALTINDA.
+  Altında kalsaydı katmanın siyah gradyanı yıldızları örterdi; gezegenin
+  üstünde olsaydı yıldızlar dünyanın önünde parlardı.
+*/
+.uzay-yildizlar {
+  inset: 0;
+  /*
+    GEZEGENİN ÖNÜNDE YILDIZ OLMAZ — deliği maskeyle açıyoruz.
+
+    İki kademeli: 21.6vmin'e kadar tamamen boş (kürenin ve atmosfer
+    kavsinin alanı), sonra 40vmin'e kadar YAVAŞ YAVAŞ açılıyor. Sert bir
+    sınır olsaydı gezegenin çevresinde yıldızlarla çizilmiş bir halka
+    görünürdü. Kademeli geçiş aynı zamanda fiziksel olarak doğru:
+    atmosferin parıltısı yakınındaki sönük yıldızları yutar.
+  */
+  -webkit-mask-image: radial-gradient(circle at center,
+    transparent 21.6vmin, rgba(0, 0, 0, 0.35) 27vmin, #000 40vmin);
+  mask-image: radial-gradient(circle at center,
+    transparent 21.6vmin, rgba(0, 0, 0, 0.35) 27vmin, #000 40vmin);
+}
+
+/*
+  TEK YILDIZ — konumu YÜZDE, boyutu PİKSEL.
+
+  Bu ayrım bilinçli ve bir hatanın sonucu (bkz. Yildizlar.jsx): yüzde konum
+  yıldızları ekranın tamamına yayıyor, piksel boyut ise geniş ekranda
+  şişmelerini engelliyor. İkisi de yüzde olsaydı yıldızlar 4K ekranda
+  toplara dönerdi; ikisi de piksel olsaydı küçük ekranda bir köşede
+  kümelenirlerdi.
+
+  translate(-50%, -50%): left/top yıldızın SOL ÜST köşesini konumlandırır;
+  biz merkezini istiyoruz. Kaydırmasaydık büyük yıldızlar hesaplanan
+  noktadan sağa aşağıya kayardı — dağılımın dengesini bozacak kadar değil
+  ama hâlesi olan parlak yıldızlarda göze çarpardı.
+*/
+.uzay-yildizlar .yildiz {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/*
+  KIRPIŞMA — yalnızca yıldızların dörtte birinde (bkz. yildizUretimi.js).
+  Süre ve gecikme her yıldızda farklı; ortak bir nabız duyulmasın.
+
+  Yalnızca OPAKLIK değişiyor: boyut ya da konum animasyonu her karede yeniden
+  yerleşim hesabı demek olurdu. Opaklık ekran kartında, düzeni bozmadan
+  değişiyor.
+*/
+.uzay-yildizlar .kirpisir {
+  animation-name: yildizKirpis;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes yildizKirpis {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.28; }
+}
+
+/*
+  İNİŞ — ASIL MESELE BURASI.
+
+  Yıldız katmanı gezegenle AYNI oranda büyümüyor: gezegen 9 kat açılırken
+  yıldızlar 2.3 katta kalıyor. Bu fark paralaksın kendisi — uzaktaki nesne
+  yaklaşırken az, yakındaki çok kayar. Aynı oranı verseydik sahne tek bir
+  düz resim gibi yaklaşır, derinlik hissi doğmazdı.
+
+  Ve yıldızlar SÖNÜYOR: atmosfere girerken gökyüzü aydınlanır, yıldızlar
+  kaybolur. Teknik gerekçesi de var — gezegen solduktan sonra altındaki
+  gerçek harita ortaya çıkıyor; sönmeselerdi haritanın üstünde asılı kalmış
+  yıldızlar görünürdü.
+*/
+.uzay-sahnesi.inis .uzay-yildizlar {
+  transform: scale(2.3);
+  opacity: 0;
+  transition:
+    transform 2.6s cubic-bezier(0.55, 0, 0.35, 1),
+    opacity 1.3s ease-in;
+}
+
 /* Hareket hassasiyeti olan kullanıcıda sahne zaten hiç başlatılmıyor,
    yine de güvenlik için animasyonları kapatıyoruz. */
 @media (prefers-reduced-motion: reduce) {
@@ -790,26 +982,35 @@ body {
 .harita-popup:empty { display: none; }
 
 /*
-  Popup AYDINLIK bir adacık: gövde koyu olduğu için metin rengini
-  BURADA açıkça sıfırlamak zorundayız — yoksa açık zemine açık yazı miras
-  kalır ve içerik görünmez olur. Koyu/aydınlık karışık arayüzlerin
-  en sinsi hatası budur.
+  Popup, haritanın üstünde duran KOYU CAM bir kart (login kartının reçetesi).
+  Metin rengini BURADA açıkça veriyoruz: kart kendi bağlamını kuruyor ve
+  aydınlık temada rollerin değeri değiştiğinde tek satır bile
+  düzenlenmeden doğru renge dönüyor.
+
+  backdrop-filter: kartın arkasındaki harita bulanıklaşıyor. Sadece opaklık
+  düşürseydik yoğun bir şehir görüntüsünün üstünde yazı okunmuyordu; bulanık
+  zemin hem okunurluğu hem "cam" hissini birlikte veriyor.
 */
 .harita-popup:not(:empty) {
   background: var(--kart);
+  backdrop-filter: var(--kart-cam);
+  -webkit-backdrop-filter: var(--kart-cam);
   color: var(--kart-metin);
   border: 1px solid var(--kart-kenar);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), var(--isik-ust);
   padding: 12px 13px 11px;
   font-size: var(--yazi-sm);
   animation: popupAc 0.16s cubic-bezier(0.32, 0.72, 0.35, 1);
 }
 
-/* Kart içindeki girdiler de aydınlık bağlama ait */
+/* Kart içindeki girdiler: kartın kendi zemini değil, bir tık AÇIK olan
+   ikinci yüzey. Aynı rengi verseydik girdi kutusu kartın içinde
+   kaybolurdu — kenarlığı tek başına yeterince belirgin değil. */
 .harita-popup input {
-  background: var(--kart);
+  background: var(--kart-2);
   color: var(--kart-metin);
+  border-color: var(--kart-kenar);
 }
 
 .harita-popup input::placeholder { color: color-mix(in oklab, var(--kart-metin-soluk) 70%, transparent); }
@@ -822,7 +1023,9 @@ body {
   left: 50%;
   margin-left: -7px;
   border: 7px solid transparent;
-  border-top-color: #fff;
+  /* Ok, kartın zeminiyle AYNI değişkenden besleniyor: kart koyulaşınca ok da
+     koyulaşıyor, aydınlık temada ikisi birlikte beyaza dönüyor. */
+  border-top-color: var(--kart);
   border-bottom: 0;
   filter: drop-shadow(0 1px 0 var(--kart-kenar));
 }
@@ -908,7 +1111,7 @@ body {
 .popup-form input:not([type]) {
   padding: 7px 9px;
   margin-bottom: 9px;
-  border: 1px solid #cfd9e2;
+  border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
   font-size: 0.83rem;
   font-family: inherit;
@@ -918,7 +1121,7 @@ body {
 .popup-form input:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(35, 96, 110, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 28%, transparent);
 }
 
 /* Renk seçici: hazır renkler + serbest seçim */
@@ -934,7 +1137,9 @@ body {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 2px solid #fff;
+  /* Halka kartın zemininden: koyu kartta koyu, aydınlıkta beyaz. Sabit beyaz
+     bırakılsaydı koyu kartta noktalar birer beyaz düğmeye benzerdi. */
+  border: 2px solid var(--kart);
   box-shadow: 0 0 0 1px var(--kart-kenar);
   cursor: pointer;
   padding: 0;
@@ -990,19 +1195,34 @@ body {
 
 .popup-eylemler button { padding: 7px 10px; font-size: 0.8rem; }
 
-.btn-ghost.sil { color: var(--error); border-color: #f0c3bf; }
-.btn-ghost.sil:hover { background: #fdeceb; }
+/* Kırmızı tonlar da karışımdan üretiliyor: sabit açık pembe (#fdeceb) koyu
+   kartta beyaz bir leke gibi duruyordu. */
+.btn-ghost.sil { color: var(--error); border-color: color-mix(in oklab, var(--error) 45%, transparent); }
+.btn-ghost.sil:hover { background: color-mix(in oklab, var(--error) 16%, transparent); color: var(--error); }
 
 /* ---------- Harita üzerindeki gezinme düğmeleri ---------- */
 
+/*
+  TÜRKİYE / DÜNYA — YAN YANA, tek bir grup olarak.
+
+  Alt alta ve zoom düğmelerinin dibindeydiler; üç kutu (+ , − , Türkiye,
+  Dünya) sol kenarda üst üste binince "sıkışık" görünüyordu. İki değişiklik:
+
+    • ALT ALTA kaldılar (yatay denendi, geri alındı): harita alanının
+      üstünde yan yana iki etiketli düğme, sola doğru geniş bir şerit
+      oluşturup haritayı kesiyordu.
+    • Zoom düğmelerinden uzaklaştılar (72 → 88px) ve aralarındaki boşluk
+      arttı; kenardan da 8 yerine 10px içeride duruyorlar.
+*/
 .harita-araclari {
   position: absolute;
-  top: 72px;            /* OpenLayers'ın +/- zoom düğmelerinin hemen altı */
-  left: 8px;
+  top: 88px;            /* OpenLayers'ın +/- zoom düğmelerinden net ayrık */
+  left: 10px;
   z-index: 5;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .harita-btn {
@@ -1010,18 +1230,27 @@ body {
   align-items: center;
   gap: 6px;
   padding: 6px 11px 6px 8px;
-  background: rgba(255, 255, 255, 0.94);
+  /* "Türkiye" ve "Dünya" düğmeleri: bilgi kartlarıyla aynı koyu cam. Bunlar
+     haritanın üstünde duran en görünür iki eleman; beyaz kaldıklarında koyu
+     arayüzün ortasında iki parlak leke gibi duruyorlardı. */
+  background: var(--kart);
+  backdrop-filter: var(--kart-cam);
+  -webkit-backdrop-filter: var(--kart-cam);
   border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--kart-metin);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), var(--isik-ust);
   transition: background var(--gecis), transform var(--gecis), box-shadow var(--gecis);
 }
 
-.harita-btn:hover { background: #fff; box-shadow: var(--shadow-md); }
+/* Alt alta dizildiklerinde EŞİT GENİŞLİK şart: "Türkiye" ve "Dünya" farklı
+   uzunlukta ve serbest bıraktığımızda iki kutu merdiven gibi duruyordu. */
+.harita-araclari .harita-btn { width: 100%; }
+
+.harita-btn:hover { background: var(--kart-hover); box-shadow: var(--shadow-md), var(--isik-ust); }
 .harita-btn:active { transform: scale(0.96); }
 
 .harita-btn svg { width: 16px; height: 16px; fill: var(--primary); flex-shrink: 0; }
@@ -1029,6 +1258,68 @@ body {
 
 /* Çizim aracı aktifken imleç artı işaretine döner */
 .map-container.cizim-modu .ol-viewport { cursor: crosshair; }
+
+/* ----------------------------------------------------------------------------
+   OPENLAYERS'IN KENDİ DENETİMLERİ (+/− zoom, katkı bilgisi, ölçek)
+
+   ol.css bütün renklerini DEĞİŞKENDEN okuyor (--ol-background-color…). Bu
+   yüzden her düğmeyi tek tek ezmek yerine değişkenleri harita kapsayıcısının
+   içinde yeniden bağlıyoruz: OpenLayers'ın ileride ekleyeceği denetimler de
+   kendiliğinden doğru renkte gelir.
+
+   Kapsam `.map-container`: :root'a yazsaydık, haritası olmayan ekranlardaki
+   (yönetim paneli) olası OL bileşenlerini de etkilerdi.
+-------------------------------------------------------------------------- */
+.map-container {
+  --ol-background-color: var(--kart);
+  --ol-accent-background-color: var(--kart-hover);
+  --ol-subtle-background-color: var(--kart-kenar);
+  --ol-partial-background-color: var(--kart);
+  --ol-foreground-color: var(--kart-metin);
+  --ol-subtle-foreground-color: var(--kart-metin-soluk);
+}
+
+/* Zoom düğmeleri: harita düğmeleriyle (Türkiye/Dünya) aynı cam ve aynı
+   yükseklik hissi — ikisi ekranda alt alta duruyor, farklı görünmeleri
+   "bunlar ayrı uygulamalar mı?" izlenimi veriyordu. */
+.map-container .ol-control {
+  background-color: transparent;
+  /* Vinyetin (z-index 4) ÜSTÜNDE kalsınlar: OpenLayers denetimleri harita
+     kapsayıcısının içinde ve kendi z-index'leri yok; vinyetin altında
+     kalsalardı sol üst köşedeki +/− düğmeleri kararırdı. Kendi harita
+     düğmelerimizle (.harita-araclari) aynı kat. */
+  z-index: 5;
+}
+
+.map-container .ol-control button {
+  background-color: var(--kart);
+  backdrop-filter: var(--kart-cam);
+  -webkit-backdrop-filter: var(--kart-cam);
+  color: var(--kart-metin);
+  border: 1px solid var(--kart-kenar);
+  box-shadow: var(--shadow-sm), var(--isik-ust);
+}
+
+.map-container .ol-control button:hover,
+.map-container .ol-control button:focus {
+  background-color: var(--kart-hover);
+  color: var(--kart-metin);
+  outline: none;
+}
+
+/* Bilgi kartı (popup): OpenLayers'ın overlay sarmalayıcısı mutlak
+   konumlandığı için z-index tutuyor. Denetimlerden bir tık yukarıda —
+   kart açıldığında ölçek çubuğunun üstüne binebilmeli. */
+.map-container .ol-overlay-container { z-index: 6; }
+
+/* Katkı bilgisi (© OpenStreetMap) — küçük ama beyaz bir kutu olarak
+   haritanın sağ altında duruyordu. */
+.map-container .ol-attribution ul {
+  color: var(--kart-metin-soluk);
+  text-shadow: none;
+}
+
+.map-container .ol-attribution a { color: var(--kart-metin); }
 
 /* ---------- Harita kontrolleri ---------- */
 
@@ -1039,7 +1330,9 @@ body {
   bottom: 10px;
   left: 10px;
   z-index: 5;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--kart);
+  backdrop-filter: var(--kart-cam);
+  -webkit-backdrop-filter: var(--kart-cam);
   border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
   padding: 5px 11px;
@@ -1063,8 +1356,13 @@ body {
 }
 
 /* Ölçek çubuğu — koordinat göstergesinin hemen üstünde */
+/* ol.css'te ölçek çubuğunun sınıfı `ol-control` DEĞİL (yalnızca
+   `ol-scale-line ol-unselectable`), bu yüzden z-index'i ayrıca veriliyor. */
 .map-container .ol-scale-line {
-  background: rgba(255, 255, 255, 0.92);
+  z-index: 5;
+  background: var(--kart);
+  backdrop-filter: var(--kart-cam);
+  -webkit-backdrop-filter: var(--kart-cam);
   border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
   padding: 2px 6px;
@@ -1138,7 +1436,18 @@ body {
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.09em;
-  color: var(--metin-soluk);
+  /*
+    BİR KADEME YUKARI: --metin-soluk → --metin-orta.
+
+    Başlığın "geri çekilmiş" olması hâlâ doğru — göz önce içeriğe gitmeli.
+    Ama küçük punto + büyük harf + geniş harf aralığı zaten geri çekiyor;
+    üstüne en soluk rengi de verince başlıklar okunmaz oluyordu. Eylem
+    etiketleri canlandıktan sonra (bkz. .tool-btn) fark iyice açıldı ve
+    panel iki uçlu göründü: parlak düğmeler, hayalet başlıklar.
+
+    Hiyerarşi korunuyor — başlık hâlâ etiketten sönük, sadece görünür.
+  */
+  color: var(--metin-orta);
   margin-bottom: 12px;
   display: flex;
   align-items: center;
@@ -1266,6 +1575,34 @@ body {
 
 .tool-group { display: flex; gap: 6px; }
 
+/*
+  İKİNCİ SIRA — POI · Durak · Düzenle.
+
+  auto-fit ızgara, sabit üç sütun DEĞİL: yetkisi olmayan araç hiç
+  çizilmiyor, yani bir kullanıcıda üçü de, başkasında yalnızca biri
+  olabiliyor. Sabit sütunda tek düğme üçte bir genişlikte, ortada asılı
+  kalırdı; auto-fit kaç tane varsa satırı onlara paylaştırıyor.
+*/
+.tool-group-uclu {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/*
+  Bu satırın etiketleri üsttekilerden UZUN ("Düzenle" ve "Poligon" arasında
+  iki harf fark var ama sütun aynı genişlikte). Varsayılan 4px yan boşlukla
+  "Düzenle" düğmenin kenarına dayanıyordu — taşmıyor ama sıkışık görünüyor.
+  Yan boşluğu sıfırlayıp metnin ortalanmasına bırakıyoruz; harfler arası
+  aralığı da bir tık kısıyoruz.
+*/
+.tool-group-uclu .tool-btn {
+  padding-left: 2px;
+  padding-right: 2px;
+  letter-spacing: -0.01em;
+}
+
 .tool-btn {
   flex: 1;
   display: flex;
@@ -1277,13 +1614,31 @@ body {
   border: 1px solid var(--kenar);
   border-radius: var(--radius);
   font-size: var(--yazi-xs);
-  font-weight: 600;
-  color: var(--metin-orta);
+  /*
+    ETİKETLER CANLI.
+
+    Önceden --metin-orta idi ve geri bildirim "yazılar soluk kalıyor" oldu:
+    haklıydı, çünkü bunlar EYLEM etiketleri — "Nokta", "POI", "Düzenle" —
+    kullanıcının ekranda ilk aradığı şey. Soluk gri, bir düğmeyi "şu an
+    kullanılamaz" diye okutuyor.
+
+    Açıklama satırları (.tool-hint) SOLUK KALIYOR ve bu bilinçli: ikisi de
+    canlı olsaydı hiyerarşi kaybolur, panel tek düzlemde bir metin yığınına
+    dönerdi. Canlandırılan şey ne yapılacağı; soluk kalan şey nasıl.
+  */
+  font-weight: 650;
+  color: var(--metin);
   cursor: pointer;
   box-shadow: var(--isik-ust);
   transition: background var(--gecis), border-color var(--gecis),
               color var(--gecis), transform var(--gecis);
 }
+
+/* İkon da etiketle aynı canlılıkta: soluk bir ikonun yanındaki net yazı,
+   düğmeyi yarı kapalı gösteriyordu. */
+.tool-btn .tool-icon { color: var(--metin-orta); }
+.tool-btn:hover .tool-icon,
+.tool-btn.active .tool-icon { color: inherit; }
 
 /*
   Ödev 6 — YETKİSİ OLMAYAN araç.
@@ -1358,11 +1713,12 @@ body {
   vertical-align: middle;
 }
 
-/* Popup (aydınlık) içindeyse açık zemine uyarlanır */
+/* Kart içindeki rozet, kartın kendi kehribar reçetesini kullanıyor
+   (bkz. --kart-uyari-*): koyu kartta açık yazı, aydınlık kartta koyu yazı. */
 .harita-popup .pasif-rozet {
-  background: #fff3d6;
-  border-color: #f0d9a8;
-  color: #8a6d1a;
+  background: var(--kart-uyari-zemin);
+  border-color: var(--kart-uyari-kenar);
+  color: var(--kart-uyari-metin);
 }
 
 .harita-popup .pasif-rozet { margin: 0 0 9px; }
@@ -1436,18 +1792,25 @@ kbd {
 .btn-ghost:hover:not(:disabled) { background: var(--kart-2); color: var(--kart-metin); }
 
 /*
-  KOYU BAĞLAM = yan panel. Aynı sınıflar, farklı ortam.
-  Bileşeni ikiye bölmek yerine bağlama göre uyarlıyoruz — çağıran taraf
-  hangi renkte olduğunu bilmek zorunda kalmıyor.
+  KOYU BAĞLAM = yan panel VE harita üstündeki kartlar.
+  Aynı sınıflar, farklı ortam. Bileşeni ikiye bölmek yerine bağlama göre
+  uyarlıyoruz — çağıran taraf hangi renkte olduğunu bilmek zorunda kalmıyor.
+
+  Harita kartları bu listeye kartlar koyulaşınca eklendi: dolu koyu teal
+  (--marka-500) koyu cam bir kartın üstünde "sönük" duruyordu; yan panelin
+  reçetesi (koyu zemine karışmış AÇIK teal) orada da doğru okunuyor.
+  Aydınlık temada ikisi de eski hâline dönüyor (bkz. aydınlık tema bloğu).
 */
-.side-panel .btn-primary {
+.side-panel .btn-primary,
+.harita-popup .btn-primary {
   background: color-mix(in oklab, var(--marka-300) 22%, var(--yuzey-2));
   border-color: color-mix(in oklab, var(--marka-300) 55%, transparent);
   color: #eafaff;
   box-shadow: var(--isik-ust);
 }
 
-.side-panel .btn-primary:hover:not(:disabled) {
+.side-panel .btn-primary:hover:not(:disabled),
+.harita-popup .btn-primary:hover:not(:disabled) {
   background: color-mix(in oklab, var(--marka-300) 32%, var(--yuzey-2));
 }
 
@@ -1554,16 +1917,33 @@ kbd {
 
 /* ---------- Klavye kısayolu künyesi ---------- */
 
+/*
+  KISAYOL KÜNYESİ — tuş ve karşılığı ASLA AYRILMAZ.
+
+  Önceden tek bir paragraftı ve aralarında "·" ile akıyordu: satır sonu
+  nereye denk gelirse orada kırılıyordu, "P" bir satırda kalıp "POI"
+  diğerine düşebiliyordu. Şimdi her kısayol kendi kutusunda; kutu bir bütün
+  olarak alt satıra iniyor.
+*/
 .kisayol-kunye {
-  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  list-style: none;
+  margin: 12px 0 0;
   padding-top: 10px;
   border-top: 1px dashed var(--kenar);
   font-size: var(--yazi-xs);
   color: var(--metin-soluk);
-  line-height: 2;
 }
 
-.kisayol-kunye kbd { margin-right: 2px; }
+.kisayol-kunye li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kisayol-kunye kbd { margin: 0; }
 
 /* ---------- Yükleme iskeleti ---------- */
 
@@ -1921,9 +2301,11 @@ kbd {
 /* Termometre: tıklanan noktanın yoğunluk okuması (Ödev 11) */
 .termometre {
   background: var(--kart);
+  backdrop-filter: var(--kart-cam);
+  -webkit-backdrop-filter: var(--kart-cam);
   border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), var(--isik-ust);
   padding: 8px 10px;
   min-width: 156px;
 }
@@ -2018,9 +2400,11 @@ kbd {
   margin: 0;
   padding: 8px 10px 6px;
   background: var(--kart);
+  backdrop-filter: var(--kart-cam);
+  -webkit-backdrop-filter: var(--kart-cam);
   border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), var(--isik-ust);
 }
 
 .isi-lejant figcaption {
@@ -2293,7 +2677,9 @@ kbd {
 }
 
 /* Aydınlık kartların içinde markanın koyu tonu daha okunur */
-.harita-popup :focus-visible { outline-color: var(--marka-500); }
+/* Odak halkası: koyu kartta markanın koyu tonu görünmüyordu; hangi tonun
+   doğru olduğu zaten --primary'de yazıyor (karanlıkta açık, aydınlıkta koyu). */
+.harita-popup :focus-visible { outline-color: var(--primary); }
 
 /* Hareket hassasiyeti olan kullanıcılar için animasyonları kapat */
 @media (prefers-reduced-motion: reduce) {
@@ -3125,11 +3511,11 @@ kbd {
 .popup-duzenle select {
   padding: 7px 9px;
   margin-bottom: 9px;
-  border: 1px solid #cfd9e2;
+  border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
   font-size: 0.83rem;
   font-family: inherit;
-  background: #fff;
+  background: var(--kart-2);
   color: var(--kart-metin);
 }
 
@@ -3137,16 +3523,16 @@ kbd {
 .popup-duzenle select:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(35, 96, 110, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 28%, transparent);
 }
 
 /* Kategori hiç yoksa form çalışmaz; sebebini forma yakın söylüyoruz. */
 .popup-uyari {
   font-size: 0.74rem;
   line-height: 1.5;
-  color: #8a5a00;
-  background: #fff6e2;
-  border: 1px solid #f0d9a8;
+  color: var(--kart-uyari-metin);
+  background: var(--kart-uyari-zemin);
+  border: 1px solid var(--kart-uyari-kenar);
   border-radius: var(--radius);
   padding: 7px 9px;
   margin-bottom: 9px;
@@ -3176,7 +3562,7 @@ kbd {
   flex: 1;
   min-width: 0;
   padding: 6px 8px;
-  border: 1px solid #cfd9e2;
+  border: 1px solid var(--kart-kenar);
   border-radius: var(--radius);
   font-size: 0.83rem;
   font-family: inherit;
@@ -3600,9 +3986,9 @@ kbd {
   margin-top: 4px;
   padding: 2px 8px;
   border-radius: var(--radius-full);
-  background: #fff6e2;
-  border: 1px solid #f0d9a8;
-  color: #8a5a00;
+  background: var(--kart-uyari-zemin);
+  border: 1px solid var(--kart-uyari-kenar);
+  color: var(--kart-uyari-metin);
   font-size: var(--yazi-xs);
   font-weight: 650;
   width: fit-content;
@@ -3618,15 +4004,18 @@ kbd {
 
 /* Otomatik seçilen kategori: sessizce dolan bir alan "ben mi seçtim?"
    dedirtir, o yüzden gerekçesiyle birlikte ve görünür bir kutuda. */
+/* Yeşil kutu da kart bağlamına bağlandı: sabit açık yeşil (#eef7f4) koyu
+   kartta beyaz bir leke gibi duruyordu. Karışım oranları --ok renginden
+   türetiliyor, yani iki temada da doğru tonu buluyor. */
 .popup-ipucu.oneri {
-  background: #eef7f4;
-  border: 1px solid #cfe6dd;
+  background: color-mix(in oklab, var(--ok) 16%, transparent);
+  border: 1px solid color-mix(in oklab, var(--ok) 38%, transparent);
   border-radius: var(--radius);
   padding: 6px 9px;
-  color: #1f5a49;
+  color: var(--kart-oneri-metin);
 }
 
-.popup-ipucu.oneri small { color: #4c7d70; }
+.popup-ipucu.oneri small { color: var(--kart-oneri-metin-soluk); }
 
 /* ==========================================================================
    ÖDEV 13 İYİLEŞTİRMELERİ — açık/kapalı durumu, stil yönetimi, duyarlılık
@@ -3806,6 +4195,48 @@ kbd {
      ailesinin koyu tonu metin ve kenarlarda okunur kalıyor. Haritadaki
      çerçeve rengi değişmiyor — o zaten haritanın üstünde duruyor. */
   --konum: #6d3fd4;
+
+  /* ---- Harita üstündeki kartlar: aydınlıkta BEYAZ ----------------------
+     Kartlar artık temayı takip ediyor. Karanlıkta koyu cam, aydınlıkta
+     beyaz kâğıt. Değerler, kartların koyulaşmasından önceki hâlleriyle
+     birebir aynı — aydınlık tema o günkü görünümü koruyor. */
+  --kart: #ffffff;
+  --kart-2: #f2f6f8;
+  --kart-hover: #ffffff;
+  --kart-kenar: #dfe7ec;
+  --kart-metin: #14212a;
+  --kart-metin-soluk: #5a6b7b;
+
+  /* Aydınlık temada harita zaten aydınlık bir çerçevenin içinde; vinyet
+     birleştirecek bir şey bulamaz, yalnızca kenarları kirletirdi. */
+  --harita-vinyet: none;
+
+  /* Kehribar uyarı kutuları: beyaz kâğıtta koyu yazı, açık zemin. */
+  --kart-uyari-zemin: #fff6e2;
+  --kart-uyari-kenar: #f0d9a8;
+  --kart-uyari-metin: #8a5a00;
+
+  /* Beyaz kâğıtta açık yeşil yazı 3:1'e düşüyordu (ölçüldü); koyu yeşil
+     karşılığı 7:1 civarında. Kutunun ZEMİNİ karışımdan gelmeye devam ediyor,
+     yalnızca yazı sabitleniyor. */
+  --kart-oneri-metin: #1f5a49;
+  /* Eski değer (#4c7d70) 4.12'de kalıyordu — AA sınırının (4.5) altı.
+     Küçük punto olduğu için burada bir tık daha koyulaştırıldı. */
+  --kart-oneri-metin-soluk: #3a685b;
+}
+
+/* Aydınlık kartta birincil düğme yeniden DOLU KOYU TEAL oluyor: yan panelin
+   "koyu zemine karışmış açık teal" reçetesi beyaz kâğıtta okunmuyor.
+   (Karanlıktaki hâli için: .side-panel .btn-primary) */
+:root[data-tema='aydinlik'] .harita-popup .btn-primary {
+  background: var(--marka-500);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(20, 33, 42, 0.25);
+}
+
+:root[data-tema='aydinlik'] .harita-popup .btn-primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--marka-500) 88%, #000);
 }
 
 /* Aydınlıkta seçim vurgusu: koyu metin üzerinde açık zemin. */
@@ -4324,9 +4755,27 @@ kbd {
 .puan-toplami.tamam .puan-cubugu span { background: var(--ok); }
 .puan-toplami.gecersiz .puan-cubugu span { background: var(--uyari); }
 
+/*
+  POI LİSTESİ — açıkken bile kendi içinde kayıyor.
+
+  Aktarımdan sonra listede binlerce kayıt olabiliyor. Sınırsız bıraksaydık
+  akordiyonu açan kullanıcı panelin geri kalanını (çizim araçları, ulaşım,
+  tur) kaydırarak aramak zorunda kalırdı — katlamanın çözdüğü sorunun aynısı
+  bir tık ötede geri gelirdi.
+
+  Ölçü vh: kısa ekranda oransal olarak küçülüyor. Sabit piksel verseydik
+  dizüstü ekranında panelin yarısını kaplardı.
+*/
+.poi-list-govde {
+  max-height: 38vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;   /* liste bitince sayfa kaymasın */
+}
+
 /* ---------- Uyarılar ---------- */
 
 .analiz-engel,
+.analiz-not,
 .analiz-hata {
   font-size: var(--yazi-xs);
   margin-top: 7px;
@@ -4339,6 +4788,15 @@ kbd {
   background: color-mix(in oklab, var(--uyari) 12%, var(--yuzey-2));
   border: 1px solid color-mix(in oklab, var(--uyari) 40%, transparent);
   color: color-mix(in oklab, var(--uyari) 65%, var(--metin));
+}
+
+/* NÖTR BİLGİ — uyarı değil. "10 gün istediniz, mekanlar 3 güne yetiyor"
+   gibi durumlar bir sorun DEĞİL, bir açıklama; sarı uyarı rengiyle
+   verseydik kullanıcı bir şeyin bozulduğunu sanırdı. */
+.analiz-not {
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  color: var(--metin-soluk);
 }
 
 .analiz-hata {
@@ -5347,6 +5805,29 @@ kbd {
 
 .cop-govde small { font-size: 11px; color: var(--metin-soluk); }
 
+.cop-eylemler {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/*
+  TEHLİKELİ EYLEM — kalıcı silme (çöp kutusu) ve tur silme (Tur Yönetimi)
+  aynı sınıfı kullanıyor. Kırmızı kenarlıklı ama DOLU KIRMIZI DEĞİL: liste
+  boyunca sürekli kırmızı bir düğme göz kanıksar ve gerçekten tehlikeli bir
+  eylemi sıradanlaştırır. Renk yalnızca hover'da güçleniyor.
+*/
+.btn-ghost.tehlike {
+  border-color: color-mix(in oklab, var(--error) 45%, transparent);
+  color: color-mix(in oklab, var(--error) 75%, var(--metin));
+}
+
+.btn-ghost.tehlike:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--error) 14%, var(--yuzey-2));
+  border-color: var(--error);
+  color: var(--error);
+}
+
 /* Yetkisi olmayan kullanıcıda düğme KAYBOLMUYOR, sönüyor: kaydın geri
    alınabilir olduğunu ama bunu yapacak yetkisi olmadığını görmeli. */
 .cop-listesi button[disabled] { opacity: 0.4; cursor: not-allowed; }
@@ -5443,7 +5924,1597 @@ kbd {
 
 /* Karanlık temada zemin zaten göz yormasın diye biraz daha kısılıyor —
    ama yine de AÇIK harita; koyu bir zemin isteseydik ayrı bir döşeme
-   sağlayıcısı gerekirdi, süzgeçle koyulaştırmak etiketleri okunmaz yapıyor. */
-[data-tema='karanlik'] .taban-katman {
+   sağlayıcısı gerekirdi, süzgeçle koyulaştırmak etiketleri okunmaz yapıyor.
+
+   ⚠ SEÇİCİ NEDEN `:not([data-tema='aydinlik'])`?
+   Karanlık tema öznitelik YAZMIYOR, siliyor (bkz. tema.js → temayiUygula):
+   varsayılan palet zaten karanlık. Bu kural önce `[data-tema='karanlik']`
+   diye yazılmıştı ve HİÇBİR ZAMAN eşleşmiyordu — hata vermediği için de
+   fark edilmemişti. */
+:root:not([data-tema='aydinlik']) .taban-katman {
   filter: saturate(0.6) brightness(1.02) contrast(0.94);
+}
+
+/* ==========================================================================
+   ÖDEV 19 — ARAÇ SİMÜLASYONU
+   ==========================================================================
+
+   Üç yeni parça var: "canlı" rozeti (hangi hatta sefer var?), araç kartındaki
+   yüzde göstergesi ve yan paneldeki sefer düğmeleri.
+   ========================================================================== */
+
+/* "canlı · %37" — hem hat kartında hem paneldeki listede.
+   Yeşil, çünkü durum renkleri arasında "şu an akan bir şey" anlamına en
+   yakın olan o; kehribar zaten "kaydedilmemiş öneri" için ayrılmış
+   (alternatif çizgileri) ve ikisi aynı ekranda yan yana durabiliyor. */
+.canli-rozet {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--ok) 18%, transparent);
+  border: 1px solid color-mix(in oklab, var(--ok) 45%, transparent);
+  color: var(--ok);
+  font-size: var(--yazi-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;   /* yüzde değişirken rozet titremesin */
+  white-space: nowrap;
+}
+
+/* Yanıp sönen nokta: "bu sayı canlı, donmuş bir kayıt değil". */
+.canli-rozet::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: canli-nabiz 1.6s ease-in-out infinite;
+}
+
+@keyframes canli-nabiz {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.8); }
+}
+
+/* Hareket hassasiyeti olan kullanıcıda nokta DURUR ama kalır: bilgi
+   kaybolmuyor, yalnızca hareket kalkıyor (yıldız alanındaki kararın aynısı). */
+@media (prefers-reduced-motion: reduce) {
+  .canli-rozet::before { animation: none; }
+}
+
+/* ---------- Araç kartı ---------- */
+
+/* Yüzde, kartın en büyük öğesi: ödevin istediği tek bilgi bu ("güzergahın
+   yüzde kaçının tamamlandığı"). Gözün ilk gittiği yer olması gerekiyor. */
+.arac-yuzde {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+
+.arac-yuzde strong {
+  font-size: 1.8rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;   /* %9 → %10 geçişinde kart zıplamasın */
+  color: var(--kart-metin);
+}
+
+.arac-yuzde span {
+  font-size: var(--yazi-xs);
+  color: var(--kart-metin-soluk);
+}
+
+/* İlerleme çubuğu — sayının görsel karşılığı. Sayı tek başına "ne kadar
+   kaldı?" sorusunu cevaplamıyor; çubuk bir bakışta cevaplıyor. */
+.arac-cubuk {
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--kart-2);
+  border: 1px solid var(--kart-kenar);
+  overflow: hidden;
+  margin-bottom: 11px;
+}
+
+.arac-cubuk span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  /* Genişlik saniyede iki kez değişiyor; geçiş olmadan çubuk sıçrayarak
+     ilerliyordu. Süre TİK ARALIĞINDAN kısa (500 ms): daha uzun olsaydı
+     bir sonraki güncelleme öncekini yarıda keserdi. */
+  transition: width 0.45s linear;
+}
+
+/* ---------- Yan paneldeki sefer düğmeleri ---------- */
+
+.guzergah-simulasyon {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 7px 0 2px;
+}
+
+/* Panelde düğmeler daha küçük: liste satırının içinde duruyorlar, kart
+   içindeki eylemler kadar baskın olmamalılar. */
+.guzergah-simulasyon .popup-eylemler button {
+  padding: 5px 8px;
+  font-size: var(--yazi-xs);
+}
+
+/* ===========================================================================
+   TOUR BUILDER — tur oluşturma paneli
+
+   Panel, konum analizi paneliyle aynı iskeleti kullanıyor (.analiz-adim,
+   .analiz-sekme, .analiz-engel, .analiz-hata): iki panel de "adım adım seçim
+   yap, sonra çalıştır" kalıbında ve farklı görünmeleri için bir sebep yok.
+   Buradaki kurallar yalnızca ARADAKİ FARKI tanımlıyor: etiketli form alanları.
+   =========================================================================== */
+
+.tur-olusturucu {
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--marka-500) 7%, var(--yuzey-1)) 0%,
+    var(--yuzey-1) 100%);
+  border-left: 2px solid var(--marka-500);
+  animation: acil 0.18s ease-out;
+}
+
+.tur-olusturucu > .analiz-adim:first-of-type { margin-top: 0; }
+
+/* Etiket + girdi tek sütun: yan yana dizmek dar yan panelde etiketleri
+   kırpardı. */
+.tur-alan {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 9px;
+}
+
+.tur-alan > label {
+  font-size: var(--yazi-sm);
+  color: var(--metin-soluk);
+}
+
+.tur-alan select,
+.tur-alan input {
+  padding: 6px 9px;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  color: var(--metin);
+  font: inherit;
+}
+
+.tur-alan select:focus,
+.tur-alan input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+/* Geçersiz alan kenarlıktan da belli olsun: hata metnini okumadan önce
+   NEREYE bakacağı görünsün. */
+.tur-alan [aria-invalid="true"] {
+  border-color: color-mix(in oklab, var(--error) 55%, transparent);
+}
+
+.tur-alan-hata {
+  font-size: var(--yazi-xs);
+  color: color-mix(in oklab, var(--error) 65%, var(--metin));
+  margin: 1px 0 0;
+}
+
+/* Gün sayısı + günlük saat yan yana: ikisi tek bir kararın parçası. */
+.tur-satir {
+  display: flex;
+  gap: 8px;
+}
+
+.tur-satir .tur-alan { flex: 1; min-width: 0; }
+
+.tur-ozet {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  font-size: var(--yazi-xs);
+  color: var(--metin-orta);
+  margin: 2px 0 0;
+  padding: 6px 9px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+}
+
+/* ===========================================================================
+   ACTIVE TOUR VIEW — canlı tur ekranı
+
+   Panel iskeleti TourBuilder ile ortak (.panel-section, .analiz-*, .tur-ozet);
+   buradaki kurallar yalnızca canlı turun kendine özgü parçalarını tanımlıyor:
+   durum rozeti ve iki durak kartı.
+   =========================================================================== */
+
+.aktif-tur {
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--ok) 8%, var(--yuzey-1)) 0%,
+    var(--yuzey-1) 100%);
+  border-left: 2px solid var(--ok);
+  animation: acil 0.18s ease-out;
+}
+
+.aktif-tur-ust {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--yazi-xs);
+  margin-bottom: 10px;
+}
+
+.aktif-tur-rozet {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--kenar);
+  background: var(--yuzey-2);
+  font-weight: 650;
+}
+
+/* Yayındaki tur yeşil, duraklatılan sarı: rehberin ekrana bir bakışta
+   "yayın sürüyor mu?" sorusunu cevaplaması gerekiyor. */
+.aktif-tur-rozet.live {
+  border-color: color-mix(in oklab, var(--ok) 45%, transparent);
+  background: color-mix(in oklab, var(--ok) 14%, var(--yuzey-2));
+  color: color-mix(in oklab, var(--ok) 70%, var(--metin));
+}
+
+.aktif-tur-rozet.paused {
+  border-color: color-mix(in oklab, var(--uyari) 45%, transparent);
+  background: color-mix(in oklab, var(--uyari) 14%, var(--yuzey-2));
+  color: color-mix(in oklab, var(--uyari) 70%, var(--metin));
+}
+
+.aktif-tur-ilerleme { margin-bottom: 10px; }
+
+.aktif-tur-ilerleme p {
+  margin: 5px 0 0;
+  font-size: var(--yazi-xs);
+}
+
+.aktif-tur-kart {
+  position: relative;
+  padding: 9px 10px;
+  margin-bottom: 8px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+}
+
+/* Şu anki durak vurgulu: iki kart aynı görünseydi hangisinde olunduğu
+   ancak etiketi okuyarak anlaşılırdı. */
+.aktif-tur-kart.mevcut {
+  border-color: color-mix(in oklab, var(--ok) 40%, var(--kenar));
+  background: color-mix(in oklab, var(--ok) 7%, var(--yuzey-2));
+}
+
+.aktif-tur-etiket {
+  display: block;
+  font-size: var(--yazi-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--metin-soluk);
+  margin-bottom: 3px;
+}
+
+.aktif-tur-durak {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 2px;
+  font-size: var(--yazi-sm);
+}
+
+.aktif-tur-kart p.muted {
+  margin: 0;
+  font-size: var(--yazi-xs);
+}
+
+/* Yol tarifi düğmesindeki simge metinle aynı hizada dursun. */
+.aktif-tur .btn-primary.genis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ---------- Tur önerisi listesi (harita paneli) ---------- */
+
+.tur-oneri-listesi {
+  list-style: none;
+  margin: 0 0 9px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tur-oneri-listesi li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  font-size: var(--yazi-xs);
+}
+
+/* Numara haritadaki durak madalyonuyla AYNI renkte: listedeki 3. satır ile
+   haritadaki 3 numaralı durak gözle eşleşsin. */
+.tur-oneri-sira {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-full);
+  background: #7b5cd6;
+  color: #fff;
+  font-weight: 700;
+}
+
+.tur-oneri-ad { flex: 1; min-width: 0; }
+
+/* ---------- POI Yönetimi: OpenStreetMap aktarım kartı ---------- */
+
+.poi-aktarim h2 {
+  margin: 0 0 4px;
+  font-size: var(--yazi-md);
+}
+
+.poi-aktarim > p.muted { margin: 0 0 10px; max-width: 70ch; }
+
+.poi-aktarim-sehirler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+/* Seçilebilir rozet: tıklanabilir olduğu imleçten ve seçili hâlin
+   belirginliğinden anlaşılmalı — salt okunur rozetlerle karışmasın. */
+.admin-rozet.secilebilir {
+  cursor: pointer;
+  border: 1px solid var(--kenar);
+  background: var(--yuzey-2);
+  color: var(--metin-orta);
+  transition: background var(--gecis), color var(--gecis), border-color var(--gecis);
+}
+
+.admin-rozet.secilebilir:hover { color: var(--metin); }
+
+.admin-rozet.secilebilir.aktif {
+  border-color: color-mix(in oklab, var(--primary) 55%, transparent);
+  background: color-mix(in oklab, var(--primary) 18%, var(--yuzey-2));
+  color: var(--metin);
+  font-weight: 650;
+}
+
+.poi-aktarim-sonuc {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--ok) 40%, transparent);
+  background: color-mix(in oklab, var(--ok) 10%, var(--yuzey-2));
+  font-size: var(--yazi-sm);
+}
+
+.poi-aktarim-sonuc p { margin: 0 0 4px; }
+
+.poi-aktarim-sonuc ul {
+  margin: 0 0 4px;
+  padding-left: 18px;
+  font-size: var(--yazi-xs);
+}
+
+/* ---------- Tur paylaşımı (harita paneli) ---------- */
+
+/* ---------- MİSAFİR TUR EKRANI (/tur/:kod) ---------- */
+
+/*
+  Uygulamanın geri kalanından AYRI bir yüzey.
+
+  Misafirin ekranında panel, araç çubuğu, harita yok — yalnızca tur. Aynı
+  kabuğun içine koysaydık "burada başka neler var?" sorusu doğar ve kullanıcı
+  girmesi gerekmeyen bir uygulamayı kurcalamaya başlardı.
+
+  Ölçüler telefon önce: misafirlerin çoğu tur SIRASINDA, ayaktayken bakıyor.
+*/
+.misafir-sayfa {
+  min-height: 100vh;
+  padding: 16px 12px 32px;
+  background: var(--zemin);
+  color: var(--metin);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.misafir-kart {
+  width: 100%;
+  max-width: 520px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--yuzey);
+  border: 1px solid var(--kenar);
+  box-shadow: var(--shadow-lg);
+}
+
+.misafir-kod-kart { margin-top: 8vh; }
+
+.misafir-kod-girdi {
+  width: 100%;
+  margin: 12px 0 10px;
+  padding: 12px;
+  font-size: 22px;
+  font-weight: 650;
+  /* Kod telefonda okunup elle yazılıyor: harfler arası boşluk ve tek tip
+     genişlik, "0 mı O mu" duraksamasını azaltıyor. */
+  letter-spacing: 5px;
+  text-align: center;
+  text-transform: uppercase;
+  font-family: var(--mono, monospace);
+}
+
+.misafir-baslik {
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  /* Turun KENDİ rengi: rehberin haritada gördüğüyle aynı renk, misafirin
+     ekranında da tekrar ediyor. */
+  border-bottom: 2px solid var(--kenar);
+}
+
+.misafir-baslik h1 { font-size: 20px; margin: 0 0 3px; }
+
+.misafir-rozet {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--uyari) 18%, var(--yuzey-2));
+  color: color-mix(in oklab, var(--uyari) 70%, var(--metin));
+  font-size: var(--yazi-xs);
+}
+
+/*
+  REHBERİ ARA — misafir ekranının tek "acil" düğmesi.
+
+  Yeşil (--ok) değil, turun kendi rengi de değil: bu bir DURUM bildirimi
+  değil, bir EYLEM. Vurgu rengiyle çizilmiş dolu bir şerit, listenin
+  içindeki gri düğmelerden ayrılıyor — telefonda paniklemiş biri onu
+  aramadan bulabilmeli.
+*/
+.misafir-rehber-ara {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--primary) 45%, transparent);
+  background: color-mix(in oklab, var(--primary) 14%, var(--yuzey-2));
+  color: var(--metin);
+  text-decoration: none;
+  transition: background var(--gecis);
+}
+
+.misafir-rehber-ara:hover {
+  background: color-mix(in oklab, var(--primary) 24%, var(--yuzey-2));
+}
+
+.misafir-rehber-ara svg { flex-shrink: 0; color: var(--primary); }
+
+.misafir-rehber-ara strong { display: block; font-size: var(--yazi-sm); }
+
+/* Numara tek tip genişlikte: ekrandan okuyup başka bir telefona
+   yazacak kişi rakamları karıştırmasın. */
+.misafir-rehber-ara small {
+  font-size: var(--yazi-xs);
+  color: var(--metin-2);
+  font-family: var(--mono, monospace);
+  letter-spacing: 0.4px;
+}
+
+/* "ŞU AN" KUTUSU — ekranın en büyük yazısı.
+   Misafirin sayfayı açma sebebi tek bir soru: grup nerede? */
+.misafir-simdi {
+  padding: 12px;
+  margin-bottom: 14px;
+  border-radius: var(--radius);
+  background: var(--yuzey-2);
+}
+
+.misafir-simdi strong { display: block; font-size: 18px; margin: 2px 0 4px; }
+
+.misafir-etiket {
+  font-size: var(--yazi-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--metin-soluk);
+}
+
+.misafir-ilerleme {
+  height: 5px;
+  margin: 10px 0 4px;
+  border-radius: 3px;
+  background: var(--kenar);
+  overflow: hidden;
+}
+
+.misafir-ilerleme span { display: block; height: 100%; transition: width 0.4s ease; }
+
+/* Misafir haritası — kartın içinde, sabit ve ölçülü bir yükseklikte.
+   Telefonda ekranın yarısını kaplarsa altındaki program listesi görünmez
+   olur; 240px hem rotayı hem birkaç durağı gösteriyor. */
+.misafir-harita {
+  height: 240px;
+  margin-bottom: 12px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--yuzey-2);
+}
+
+/* Canlı yayın rozeti — yeşil ve nabız gibi. Ekranda hareket eden tek şey
+   olması bilinçli: "bu veri şu an akıyor" mesajı metinle değil, hareketle
+   veriliyor. */
+.misafir-canli {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: var(--yazi-xs);
+  color: color-mix(in oklab, var(--ok) 75%, var(--metin));
+}
+
+.misafir-canli-nokta {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: misafirNabiz 2s ease-in-out infinite;
+}
+
+@keyframes misafirNabiz {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.8); }
+}
+
+/* Hareket hassasiyeti olan kullanıcıda nabız durur; rozet yerinde kalır. */
+@media (prefers-reduced-motion: reduce) {
+  .misafir-canli-nokta { animation: none; }
+}
+
+.misafir-durak-listesi { list-style: none; margin: 0; padding: 0; }
+
+.misafir-durak {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 0;
+}
+
+.misafir-sira {
+  flex: 0 0 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--kenar);
+  color: var(--metin);
+  font-size: var(--yazi-xs);
+  font-weight: 650;
+  display: grid;
+  place-items: center;
+}
+
+.misafir-durak-bilgi { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.misafir-durak-bilgi strong { font-size: var(--yazi-sm); }
+.misafir-durak-bilgi span { font-size: var(--yazi-xs); }
+
+/* GEÇİLEN DURAKLAR SOLUK ama silinmiyor: "nereden geldik" bilgisi turun
+   parçası. Listeden çıkarsaydık misafir programın tamamını göremezdi. */
+.misafir-durak-listesi li.gecildi { opacity: 0.45; }
+
+.misafir-durak-listesi li.simdi .misafir-durak-bilgi strong { font-weight: 700; }
+.misafir-durak-listesi li.simdi .misafir-sira { color: #fff; }
+
+.misafir-bacak { margin: 0 0 0 33px; font-size: var(--yazi-xs); }
+
+.misafir-alt { margin-top: 14px; font-size: var(--yazi-xs); }
+
+/* ---------- Tur Yönetimi ekranı (hazır turlar) ---------- */
+
+.tur-yonetim-listesi li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.tur-yonetim-bilgi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 240px;
+  min-width: 0;
+  font-size: var(--yazi-xs);
+}
+
+.tur-yonetim-bilgi strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--yazi-sm);
+}
+
+/* CANLI ROZETİ — listedeki tek renkli öge. Bir turun şu anda sahada
+   kullanılıyor olması, o listedeki en önemli bilgi; aynı gri tonda
+   kalsaydı gözden kaçardı. */
+.tur-yonetim-canli {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--ok) 16%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--ok) 40%, transparent);
+  color: color-mix(in oklab, var(--ok) 70%, var(--metin));
+}
+
+/* Bağlantı satırı tam genişlik: turun altında, ait olduğu satıra bağlı. */
+.tur-yonetim-baglanti {
+  flex: 1 0 100%;
+  margin-top: 4px;
+}
+
+.tur-yonetim-baglanti input {
+  width: 100%;
+  font-family: var(--mono, monospace);
+  font-size: var(--yazi-xs);
+}
+
+/* Mola / konaklama rozeti — durak adının yanında, küçük ve nötr.
+   Uyarı rengi verseydik program boyunca "dikkat" işaretleri sıralanırdı;
+   bunlar bir sorun değil, planın parçası. */
+.tur-mola-rozet {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  color: var(--metin-soluk);
+  font-size: 0.66rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Tur formundaki onay kutuları — etiket ve açıklaması alt alta,
+   kutu üstte hizalı. Tek satır olsaydı açıklama kutunun altına kayar,
+   hangi kutuya ait olduğu belirsizleşirdi. */
+.tur-secenek {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.tur-secenek input { margin-top: 2px; flex-shrink: 0; }
+.tur-secenek > span { display: flex; flex-direction: column; gap: 2px; }
+.tur-secenek strong { font-size: var(--yazi-sm); }
+.tur-secenek .muted { font-size: var(--yazi-xs); line-height: 1.4; }
+
+/* ---------- Tur rotası düzenleme ---------- */
+
+/*
+  DURAK SATIRI EYLEMLERİ — taşı / çıkar.
+
+  Sağa yaslı ve KÜÇÜK: satırın asıl bilgisi durağın adı ve saati. Düğmeler
+  aynı görsel ağırlıkta olsaydı liste bir "araç çubukları dizisi" gibi
+  okunur, program okunmaz hâle gelirdi.
+*/
+.tur-durak-islem {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.tur-durak-islem button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--metin-soluk);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tur-durak-islem button:hover:not(:disabled) {
+  background: var(--yuzey-2);
+  border-color: var(--kenar);
+  color: var(--metin);
+}
+
+/* Silme HOVER'DA kırmızıya dönüyor, baştan değil: üç düğmeden biri sürekli
+   kırmızı dursaydı liste tehlikeli görünürdü. */
+.tur-durak-islem button.sil:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--error) 16%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--error) 45%, transparent);
+  color: var(--error);
+}
+
+.tur-durak-islem button:disabled { opacity: 0.3; cursor: default; }
+
+.tur-durak-ekle {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kenar);
+}
+
+.tur-durak-ekle label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+}
+
+.tur-durak-ekle input { width: 100%; }
+
+/* Sonuç listesi kendi içinde kayıyor: "cami" araması yüzlerce kayıt
+   döndürebiliyor ve panelin tamamını itmemeli. */
+.tur-durak-sonuc {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 30vh;
+  overflow-y: auto;
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+}
+
+.tur-durak-sonuc li + li { border-top: 1px solid var(--kenar); }
+
+.tur-durak-sonuc button {
+  display: block;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--metin);
+  font-size: var(--yazi-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tur-durak-sonuc button:hover { background: var(--yuzey-2); }
+
+/* Canlı konum yayını — rehberin eylem çubuğunun altında.
+   Yayın açıkken düğme "basılı" görünüyor: kapatmayı unutmak, konumun
+   farkında olmadan paylaşılmaya devam etmesi demek. */
+.tur-konum-yayini {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kenar);
+}
+
+.tur-konum-yayini .aktif {
+  background: color-mix(in oklab, var(--ok) 18%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--ok) 55%, transparent);
+  color: color-mix(in oklab, var(--ok) 75%, var(--metin));
+}
+
+/* ---------- Map Bot ---------- */
+
+/*
+  KAPALIYKEN: sağ altta bir konum işareti.
+
+  Sağ alt, arayüzlerde "yardım" için yerleşmiş bir yer ve orada haritanın
+  hiçbir aracı yok — sol üstteki zoom/Türkiye/Dünya düğmeleriyle
+  çakışmıyor.
+*/
+.mapbot-dugme {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 12;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  /* Düz kart rengi yerine markanın rengine çalan bir geçiş: haritanın
+     üstünde duran diğer beyaz düğmelerden ayrılsın, "burası ayrı bir şey"
+     desin. */
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--primary) 22%, var(--kart)),
+    var(--kart) 70%
+  );
+  backdrop-filter: var(--kart-cam);
+  -webkit-backdrop-filter: var(--kart-cam);
+  border: 1px solid color-mix(in oklab, var(--primary) 35%, var(--kart-kenar));
+  box-shadow: var(--shadow-md), var(--isik-ust);
+  cursor: pointer;
+  transition: transform var(--gecis), box-shadow var(--gecis);
+}
+
+.mapbot-dugme:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.mapbot-dugme:active { transform: scale(0.94); }
+
+.mapbot-dugme svg { width: 25px; height: 25px; fill: var(--primary); }
+
+/* Düğmenin çevresinde yavaşça büyüyüp sönen halka. Düğmenin KENDİSİ
+   hareket etmiyor — hareket eden bir hedefe tıklamak zordur; yalnızca
+   arkasındaki halka genişliyor. */
+.mapbot-nabiz {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid color-mix(in oklab, var(--primary) 60%, transparent);
+  animation: mapbot-nabiz 2.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes mapbot-nabiz {
+  0%        { transform: scale(1);    opacity: 0.7; }
+  70%, 100% { transform: scale(1.55); opacity: 0; }
+}
+
+/* Hareketi azaltma tercihi olan kullanıcıda halka sabit duruyor. */
+@media (prefers-reduced-motion: reduce) {
+  .mapbot-nabiz { animation: none; opacity: 0.35; }
+}
+
+/* İşaretin ortasındaki delik: zemin rengiyle boyanıyor ki simge dolu bir
+   damla değil, gerçek bir konum işareti gibi okunsun. */
+.mapbot-ic { fill: var(--kart); }
+
+/*
+  AÇIKKEN: küçük bir sohbet penceresi.
+
+  Yüksekliği vh ile sınırlı — telefonda ekranı kaplayıp haritayı tamamen
+  gizlememesi için. Kullanıcı hâlâ neyin üstünde konuştuğunu görebilmeli.
+*/
+.mapbot {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 12;
+  /* Cevapların altına eylem düğmesi ve devam soruları eklendikten sonra
+     320 piksel dar kaldı: "Erişilebilirlik analizini aç" gibi etiketler
+     iki satıra kırılıyordu. */
+  width: min(352px, calc(100vw - 32px));
+  max-height: min(480px, 72vh);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg);
+  background: var(--kart);
+  backdrop-filter: var(--kart-cam);
+  -webkit-backdrop-filter: var(--kart-cam);
+  border: 1px solid var(--kart-kenar);
+  box-shadow: var(--shadow-lg), var(--isik-ust);
+  color: var(--kart-metin);
+  overflow: hidden;
+}
+
+/* Başlık: avatar + kimlik + kapat. Renkli bir şerit, sohbetin nerede
+   başladığını gösteriyor — düz kenarlıkta pencere "kesilmiş" gibi
+   duruyordu. */
+.mapbot-baslik {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--kart-kenar);
+  background: linear-gradient(
+    120deg,
+    color-mix(in oklab, var(--primary) 20%, transparent),
+    transparent 75%
+  );
+}
+
+.mapbot-avatar {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--primary) 28%, var(--kart));
+  border: 1px solid color-mix(in oklab, var(--primary) 45%, transparent);
+}
+
+.mapbot-avatar svg { width: 16px; height: 16px; fill: var(--primary); }
+
+/* min-width:0 — uzun bir durum metni başlığı taşırmasın, kısalsın. */
+.mapbot-kimlik { flex: 1; min-width: 0; }
+
+.mapbot-kimlik strong { display: block; font-size: var(--yazi-sm); }
+
+/* Çevrimiçi noktası: bot her zaman hazır, bunu söylemek yerine
+   göstermek daha kısa. */
+.mapbot-durum {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-2);
+}
+
+.mapbot-durum::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.mapbot-kapat {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--kart-metin);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mapbot-kapat:hover { background: var(--kart-hover); }
+
+.mapbot-akis {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;   /* sohbet bitince harita kaymasın */
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+/* Balon + altındaki eylem düğmesi tek bir sütun: düğme balonun kendisiyle
+   aynı kenardan hizalansın (bot solda, kullanıcı sağda). */
+.mapbot-satir {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 92%;
+}
+
+.mapbot-satir.bot { align-self: flex-start; align-items: flex-start; }
+.mapbot-satir.ben { align-self: flex-end; align-items: flex-end; }
+
+/* Balon artık satırın içinde: hizalamayı .mapbot-satir yapıyor, kendi
+   align-self'ine gerek yok ama tek başına kullanıldığı yer de var
+   ("yazıyor…" göstergesi), o yüzden aşağıdaki kurallar duruyor. */
+.mapbot-satir .mapbot-mesaj { max-width: 100%; }
+
+/*
+  EYLEM DÜĞMESİ — "Tur Planla'yı aç".
+
+  Balonun altında ve ondan daha küçük: cevabın kendisi asıl içerik, düğme
+  bir kısayol. Dolu bir düğme yapsaydık her cevapta göze çarpan bir
+  çağrı olur, okumayı böler.
+*/
+.mapbot-eylem {
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklab, var(--primary) 50%, var(--kart-kenar));
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  color: color-mix(in oklab, var(--primary) 78%, var(--kart-metin));
+  font-size: var(--yazi-xs);
+  font-weight: 550;
+  cursor: pointer;
+  transition: background var(--gecis);
+}
+
+.mapbot-eylem:hover {
+  background: color-mix(in oklab, var(--primary) 26%, transparent);
+}
+
+/* Balonlar: bot solda, kullanıcı sağda — sohbet arayüzlerinin ortak dili.
+   Aynı hizada olsalardı kimin ne dediği karışırdı. */
+.mapbot-mesaj {
+  max-width: 85%;
+  padding: 7px 10px;
+  border-radius: 12px;
+  font-size: var(--yazi-xs);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.mapbot-mesaj.bot {
+  align-self: flex-start;
+  background: var(--kart-2, rgba(255, 255, 255, 0.07));
+  border-bottom-left-radius: 4px;
+}
+
+.mapbot-mesaj.ben {
+  align-self: flex-end;
+  background: color-mix(in oklab, var(--primary) 30%, transparent);
+  border-bottom-right-radius: 4px;
+}
+
+/* Cevaptaki düğme adları ("**Tur Planla**") — metnin geri kalanından
+   ayrılsın ki kullanıcı arayüzde ne arayacağını bir bakışta görsün. */
+.mapbot-mesaj.bot strong {
+  color: color-mix(in oklab, var(--primary) 70%, var(--kart-metin));
+  font-weight: 600;
+}
+
+/* Yeni balon aşağıdan süzülerek geliyor: bir mesajın "geldiğini" fark
+   ettiren şey belirmesi değil, hareketi. */
+.mapbot-mesaj { animation: mapbot-balon 0.18s ease-out; }
+
+@keyframes mapbot-balon {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* "yazıyor…" yerine üç zıplayan nokta — metin okunacak bir şey sanılıyordu. */
+.mapbot-mesaj.yaziyor {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 11px 12px;
+}
+
+.mapbot-mesaj.yaziyor span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--metin-2);
+  animation: mapbot-nokta 1.1s ease-in-out infinite;
+}
+
+.mapbot-mesaj.yaziyor span:nth-child(2) { animation-delay: 0.15s; }
+.mapbot-mesaj.yaziyor span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes mapbot-nokta {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30%           { opacity: 1;   transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mapbot-mesaj { animation: none; }
+  .mapbot-mesaj.yaziyor span { animation: none; opacity: 0.55; }
+}
+
+/* Hazır sorular: balon değil DÜĞME oldukları belli olsun diye çerçeveli
+   ve balonlardan farklı hizada (ortada değil, sola yaslı sarmalanan bir
+   küme). */
+.mapbot-oneriler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.mapbot-oneriler button {
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--primary) 40%, var(--kart-kenar));
+  background: transparent;
+  color: var(--kart-metin);
+  font-size: var(--yazi-xs);
+  cursor: pointer;
+  transition: background var(--gecis), border-color var(--gecis);
+}
+
+.mapbot-oneriler button:hover {
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+  border-color: var(--primary);
+}
+
+.mapbot-girdi {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--kart-kenar);
+}
+
+.mapbot-girdi input { flex: 1; min-width: 0; }
+
+/*
+  ÇOK ŞEHİRLİ TUR — ek şehir işaret kutuları.
+
+  Kaydırılabilir ve sınırlı yükseklikte: 81 il (ya da bölge süzgecinden
+  sonra ~15) tam liste hâlinde dursaydı tur formunun geri kalanı —
+  ulaşım, süre, tema — ekranın dışına düşerdi. Erişilebilirlik
+  panelindeki il listesiyle aynı kalıp.
+*/
+.tur-sehir-listesi {
+  max-height: 150px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-top: 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  background: var(--yuzey-2);
+}
+
+.tur-sehir-satiri {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: var(--yazi-xs);
+  cursor: pointer;
+}
+
+/* Sınır dolduğunda kapanan satırlar: kapalı olduğu görünmeli, yoksa
+   tıklayıp hiçbir şey olmamasını arıza sanar. */
+.tur-sehir-satiri:has(input:disabled) { opacity: 0.4; cursor: default; }
+
+.tur-ipucu { margin: 2px 0 0; font-size: var(--yazi-xs); }
+
+/* ---------- Toplu taşıma erişilebilirlik paneli ---------- */
+
+.erisilebilirlik-il-listesi {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+}
+
+.erisilebilirlik-il-satiri {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  font-size: var(--yazi-xs);
+  cursor: pointer;
+}
+
+.erisilebilirlik-il-satiri:hover { background: var(--yuzey-2); }
+
+.erisilebilirlik-sonuc {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kenar);
+  font-size: var(--yazi-xs);
+}
+
+/* ---------- Davet kodu (admin-bağlı kullanıcılar) ---------- */
+
+.davet-kodu-satiri {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.davet-kodu-deger {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+
+/* ---------- Yoklama ---------- */
+
+.yoklama {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kenar);
+}
+
+.yoklama h3 {
+  font-size: var(--yazi-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--metin-orta);
+  margin-bottom: 8px;
+}
+
+.yoklama-alan {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+}
+
+.yoklama-alan input { width: 100%; }
+
+.yoklama-soru { font-size: var(--yazi-sm); font-weight: 600; margin-bottom: 6px; }
+
+/* ÖZET CÜMLE — rehberin sahada tek bakışta okuduğu satır. Sayıları tek tek
+   taramak yerine cümle: "15 kişinin 13'ü buradayım dedi." */
+.yoklama-ozet {
+  font-size: var(--yazi-sm);
+  margin-bottom: 8px;
+}
+
+.yoklama-sayilar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: var(--yazi-xs);
+  margin-bottom: 8px;
+}
+
+.yoklama-sayilar .olumlu { color: color-mix(in oklab, var(--ok) 75%, var(--metin)); }
+.yoklama-sayilar .olumsuz { color: var(--metin-soluk); }
+.yoklama-sayilar .acil { color: var(--metin-soluk); }
+
+/* ACİL YALNIZCA VARSA KIRMIZI: sıfırken de yerinde duruyor (rehber nereye
+   bakacağını bilsin) ama sürekli kırmızı bir sayı, gerçek bir acil durumda
+   fark edilmezdi. */
+.yoklama-sayilar .acil.vurgulu {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.yoklama-dugmeler { display: flex; gap: 6px; }
+
+/* ---- Misafir tarafı ---- */
+
+.yoklama-misafir {
+  padding: 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius);
+  background: color-mix(in oklab, var(--primary) 12%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--primary) 35%, transparent);
+}
+
+/* Cevap düğmeleri BÜYÜK: misafir yürürken, tek eliyle, telefona bakmadan
+   basıyor. Küçük düğme burada yanlış cevaba yol açar. */
+.yoklama-cevaplar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.yoklama-cevap {
+  padding: 11px;
+  border-radius: var(--radius);
+  border: 1px solid var(--kenar);
+  background: var(--yuzey);
+  color: var(--metin);
+  font-size: var(--yazi-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.yoklama-cevap.olumlu:hover { border-color: var(--ok); color: var(--ok); }
+.yoklama-cevap.olumsuz:hover { border-color: var(--uyari); }
+
+/* Acil BAŞTAN kırmızı çerçeveli: yanlışlıkla basılmaması için diğer
+   ikisinden görsel olarak ayrı durmalı. */
+.yoklama-cevap.acil {
+  border-color: color-mix(in oklab, var(--error) 45%, transparent);
+  color: color-mix(in oklab, var(--error) 80%, var(--metin));
+}
+
+.yoklama-onay { font-size: var(--yazi-sm); }
+
+.yoklama-alan-misafir input { width: 100%; }
+
+/* Kişi dökümü — rehberin gördüğü liste. */
+.yoklama-kisiler {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.yoklama-kisiler li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--yazi-xs);
+  background: var(--yuzey-2);
+}
+
+/* Acil satırlar hafifçe vurgulanıyor — listede kayıp gitmesinler. */
+.yoklama-kisiler li.acil {
+  background: color-mix(in oklab, var(--error) 10%, var(--yuzey-2));
+  border: 1px solid color-mix(in oklab, var(--error) 35%, transparent);
+}
+
+.yoklama-kisi-ad { font-weight: 600; }
+
+.yoklama-kisi-rozet {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.yoklama-kisi-rozet.olumlu { background: color-mix(in oklab, var(--ok) 20%, transparent); color: var(--ok); }
+.yoklama-kisi-rozet.olumsuz { background: var(--yuzey); color: var(--metin-soluk); }
+.yoklama-kisi-rozet.acil { background: color-mix(in oklab, var(--error) 22%, transparent); color: var(--error); }
+
+/* tel: bağlantısı — rehberin telefonundaki arama uygulamasını açıyor. */
+.yoklama-kisi-telefon {
+  margin-left: auto;
+  color: var(--error);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.baglanti-dugme {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---------- Tur simülasyonu (rotayı oynatma) ---------- */
+
+.tur-simulasyon {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kenar);
+}
+
+.tur-simulasyon-dugmeler {
+  display: flex;
+  gap: 6px;
+}
+
+.tur-simulasyon-durum { margin-top: 8px; }
+
+/* İLERLEME ÇUBUĞU — yüzdeyi sayıyla birlikte veriyor.
+   Yalnızca sayı olsaydı "%37" tek başına ne kadar yol kaldığını
+   sezdirmezdi; çubuk o oranı bir bakışta gösteriyor. */
+.tur-simulasyon-cubuk {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--yuzey-2);
+  overflow: hidden;
+}
+
+.tur-simulasyon-cubuk span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  /* Kare aralığıyla (40 ms) aynı: geçiş daha uzun olsaydı çubuk bir
+     sonraki kareye yetişemeden yenisi gelir, sürekli geride kalırdı. */
+  transition: width 40ms linear;
+}
+
+/* Paylaşım adımları — numaralı, kısa, emir kipinde. Kullanıcı buraya
+   "şimdi ne yapacağım?" diye bakıyor, açıklama okumaya değil. */
+.tur-paylasim-adimlar {
+  margin: 8px 0 10px;
+  padding-left: 18px;
+  font-size: var(--yazi-xs);
+  color: var(--metin-soluk);
+  line-height: 1.5;
+}
+
+.tur-paylasim-adimlar li + li { margin-top: 3px; }
+
+.tur-paylasim {
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--marka-500) 9%, var(--yuzey-1)) 0%,
+    var(--yuzey-1) 100%);
+  border-left: 2px solid var(--marka-500);
+}
+
+/* Kod büyük ve harf aralıklı: telefonda okunup elle yazılan bir değer. */
+.tur-paylasim-kod {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  font-size: var(--yazi-xs);
+}
+
+.tur-paylasim-kod strong {
+  font-size: var(--yazi-lg);
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tur-paylasim-baglanti {
+  width: 100%;
+  margin-bottom: 7px;
+  padding: 6px 9px;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  color: var(--metin-orta);
+  font: inherit;
+  font-size: var(--yazi-xs);
+}
+
+.tur-paylasim-baglanti:focus {
+  outline: none;
+  border-color: var(--primary);
+  color: var(--metin);
+}
+
+/* ---------- /tur/:kod — katılım ekranı ---------- */
+
+.katil-sayfa {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--yuzey-0, var(--yuzey-1));
+}
+
+.katil-kart {
+  width: min(420px, 100%);
+  padding: 28px 26px;
+  text-align: center;
+  background: var(--yuzey-1);
+  border: 1px solid var(--kenar);
+  border-radius: calc(var(--radius) * 2);
+  box-shadow: var(--shadow-sm);
+}
+
+.katil-kart h1 {
+  margin: 10px 0 6px;
+  font-size: var(--yazi-lg);
+}
+
+.katil-kart p { margin: 0 0 6px; }
+
+.katil-kart .tool-icon {
+  display: inline-flex;
+  padding: 10px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--marka-500) 16%, var(--yuzey-2));
+  color: var(--marka-300, var(--primary));
+}
+
+.katil-kart .btn-primary { margin-top: 12px; }
+
+/* ---------- Tur programı (gün gün, saat saat) ---------- */
+
+.tur-gun { margin-bottom: 10px; }
+
+.tur-gun-baslik {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--kenar);
+  font-size: var(--yazi-xs);
+}
+
+.tur-program-satiri {
+  display: block;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+.tur-program-durak {
+  display: flex;
+  /* ÜSTTEN hizalı, ortadan değil: ad iki satıra sarabildiği için numara ve
+     düğmeler ortalanırsa satırın içinde aşağı kayıp adla hizasını
+     kaybediyor. Üstte durunca hepsi ilk satırla aynı çizgide. */
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  font-size: var(--yazi-xs);
+  /* min-width:0 zincirinin son halkası: olmadan uzun bir durak adı flex
+     kutusunu şişirip satırı panelden taşırıyor. */
+  min-width: 0;
+}
+
+/* Ad üstte, saat ve rozet altta — gerekçe MapPage'de. */
+.tur-program-durak .tur-oneri-ad {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/*
+  DURAK ADI — en fazla İKİ SATIR, sonra üç nokta.
+
+  Tek satır + ellipsis daha önce denendi ve dar panelde çoğu adı okunmaz
+  hâle getiriyordu ("Ankara Etnografya Müzesi" → "Ankara Etno…"). Sonsuz
+  sarma da olmaz: dört satırlık bir ad, listedeki günü tek başına
+  doldururdu. İki satır ikisinin arası — mekan adlarının neredeyse hepsi
+  sığıyor, sığmayanın da ilk iki satırı kim olduğunu söylüyor.
+
+  Ad artık satırın TEK sahibi: yanında onu ezecek bir rozet yok.
+*/
+.tur-durak-ad {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 550;
+  line-height: 1.3;
+  /* Uzun tek parça adlar (URL benzeri) kutuyu taşırmasın. */
+  overflow-wrap: anywhere;
+}
+
+/*
+  İKİNCİL SATIR: saat + varsa mola rozeti.
+
+  wrap açık — "12:30–13:30" ile "Yemek molası" dar panelde alt alta
+  düşebilsin. Kırpmak yerine sarmak, çünkü buradaki iki bilginin de
+  tamamı okunmalı: yarım bir saat aralığı hiçbir işe yaramaz.
+*/
+.tur-durak-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+/* Rozet artık adın yanında değil, alt satırda: sol boşluğu kalktı. */
+.tur-mola-rozet { margin-left: 0; }
+
+/* Saat tabular: alt alta gelen satırlarda rakamlar hizalansın. */
+.tur-program-saat {
+  font-variant-numeric: tabular-nums;
+  color: var(--metin-soluk);
+  white-space: nowrap;
+}
+
+/* Bacak, iki durak KARTININ ARASINDA duran ince bir satır: rota gibi
+   okunsun diye ok işaretiyle başlıyor ve tıklanabilir olduğu altı çizili
+   "yol tarifi" ekiyle belli ediliyor. */
+.tur-bacak {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 3px 0;
+  padding: 3px 8px;
+  background: none;
+  border: none;
+  border-left: 2px dashed color-mix(in oklab, var(--marka-500) 45%, transparent);
+  color: var(--metin-soluk);
+  font: inherit;
+  font-size: var(--yazi-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tur-bacak:hover { color: var(--metin); }
+
+.tur-bacak-link {
+  margin-left: auto;
+  text-decoration: underline;
+  color: var(--marka-300, var(--primary));
 }

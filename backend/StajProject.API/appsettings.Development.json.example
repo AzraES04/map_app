@@ -1,4 +1,4 @@
-{
+﻿{
   "//": [
     "ŞABLON DOSYA — bunu kopyalayıp adındaki '.example' ekini silin:",
     "  appsettings.Development.json.example  →  appsettings.Development.json",
@@ -19,6 +19,22 @@
   },
   "GeoServer": {
     "Password": "geoserver"
+  },
+
+  "//GoogleMaps": [
+    "Tur onerisi (Places + Directions) icin API anahtari.",
+    "Anahtar olusturma: Google Cloud Console > APIs & Services > Credentials.",
+    "Etkinlestirilmesi gereken iki API: Places API (New) ve Directions API.",
+    "",
+    "ANAHTARI KISITLAYIN: yalnizca bu iki API ve kendi IP adresiniz.",
+    "Kisitsiz bir anahtar depoya sizarsa fatura sizin olur.",
+    "",
+    "Enabled=false birakilirsa tur onerisi 503 doner; uygulamanin geri",
+    "kalani anahtarsiz da eksiksiz calisir."
+  ],
+  "GoogleMaps": {
+    "ApiKey": "KENDI-GOOGLE-MAPS-ANAHTARINIZ",
+    "Enabled": false
   },
 
   "//Swagger": [

@@ -140,6 +140,17 @@ export function KullaniciIkonu({ size = 13 }) {
   )
 }
 
+/** Telefon ahizesi — "Rehberi ara" düğmesi ve telefon alanları. */
+export function TelefonIkonu({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+         strokeLinejoin="round" aria-hidden="true">
+      <path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 6.5 6.5L17 13l4 1.5v3a2 2 0 0 1-2.2 2A17 17 0 0 1 3.5 5.2 2 2 0 0 1 5.5 3Z" />
+    </svg>
+  )
+}
+
 /** Kullanıcı topluluğu — yönetim panelindeki "Kullanıcı Listesi" menüsü. */
 export function KullanicilarIkonu({ size = 18 }) {
   return (

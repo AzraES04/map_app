@@ -42,6 +42,13 @@ public class AppDbContext : DbContext
     public DbSet<Guzergah> Guzergahlar => Set<Guzergah>();
     public DbSet<Durak> Duraklar => Set<Durak>();
 
+    // Tur modülü — şablon (tour 1 ─< N waypoint) ve canlı oturum
+    // (tour 1 ─< N tour_session 1 ─< N tour_session_participant)
+    public DbSet<Tour> Tours => Set<Tour>();
+    public DbSet<Waypoint> Waypoints => Set<Waypoint>();
+    public DbSet<TourSession> TourSessions => Set<TourSession>();
+    public DbSet<TourSessionParticipant> TourSessionParticipants => Set<TourSessionParticipant>();
+
     // ---------- Ödev 3 / Görev 1: ModifiedDate otomatik güncelleme ----------
     // Her kayıt işleminden ÖNCE devreye girer. Böylece "modified_date yazmayı unuttum"
     // diye bir durum kalmaz; kural tek yerde, merkezî olarak uygulanır.
@@ -157,6 +164,33 @@ public class AppDbContext : DbContext
                   .IsUnique()
                   .HasFilter("is_deleted = false");
 
+            // ---------- Admin-bağlı kullanıcılar (davet kodu) ----------
+
+            entity.Property(e => e.InviteCode).HasColumnName("invite_code").HasMaxLength(24);
+
+            // Kısmi benzersiz index — aynı gerekçe: silinmiş bir kullanıcının
+            // eski kodu, yeni bir kullanıcı tarafından yeniden üretilebilsin.
+            entity.HasIndex(e => e.InviteCode)
+                  .IsUnique()
+                  .HasFilter("is_deleted = false AND invite_code IS NOT NULL");
+
+            entity.Property(e => e.ParentAdminId).HasColumnName("parent_admin_id");
+
+            // RESTRICT: üst kullanıcı silinirse alt kullanıcıların bağı
+            // sessizce kopmamalı. Kendine referans olduğu için Cascade zaten
+            // SQL Server/PostgreSQL'de çoklu kaskad döngüsü riski taşır.
+            entity.HasOne(e => e.ParentAdmin)
+                  .WithMany()
+                  .HasForeignKey(e => e.ParentAdminId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // ---------- İletişim ----------
+            // 32 karakter: uluslararası biçim ("+90 555 123 45 67") ve
+            // dahili numaralar için fazlasıyla yeterli. Biçim doğrulaması
+            // BİLEREK yok — telefon numarası biçimleri ülkeden ülkeye
+            // değişiyor ve fazla katı bir kural geçerli numarayı reddeder.
+            entity.Property(e => e.PhoneNumber).HasColumnName("phone_number").HasMaxLength(32);
+
             // Global query filter: bundan sonra Users üzerinden yapılan HER sorguya
             // EF otomatik olarak bu WHERE koşulunu ekler. Silinmiş kullanıcıyı görmek istersek
             // bilinçli olarak .IgnoreQueryFilters() dememiz gerekir.
@@ -226,6 +260,7 @@ public class AppDbContext : DbContext
 
         ConfigureAuthorization(modelBuilder);
         ConfigurePoi(modelBuilder);
+        ConfigureTour(modelBuilder);
     }
 
     // ---------- Ödev 6 / Madde 2: rol / yetki tabloları ----------
@@ -679,6 +714,241 @@ public class AppDbContext : DbContext
             // durağın listelenmesi "güzergahı olmayan durak" gibi tutarsız bir
             // sonuç üretirdi (poi → poi_category filtresiyle aynı desen).
             entity.HasQueryFilter(e => !e.IsDeleted && !e.Guzergah!.IsDeleted);
+        });
+    }
+
+    // ----------------------------------------------------------------------
+    //  Tur modülü — şablon, durakları ve canlı oturumları
+    // ----------------------------------------------------------------------
+
+    /// <summary>
+    /// tour / waypoint / tour_session / tour_session_participant tabloları.
+    ///
+    /// İLİŞKİ HARİTASI (ve silme davranışlarının gerekçesi):
+    ///
+    ///   tour 1 ─< waypoint          Restrict — dolu bir turu silmek duraklarını
+    ///                               sessizce götürürdü; engel serviste anlamlı
+    ///                               bir mesajla veriliyor (durak/güzergah ile aynı).
+    ///   tour 1 ─< tour_session      Restrict — geçmiş oturumlar turun kaydıdır,
+    ///                               şablon silinince kaybolmamalı.
+    ///   tour_session 1 ─< participant  Cascade — katılım satırı OTURUMUN parçası,
+    ///                               oturumu olmayan bir katılımın anlamı yok.
+    ///   tour_session >─ waypoint    SetNull  — "şu an bu duraktayız" bilgisi;
+    ///                               durak çıkarılsa da oturum ayakta kalmalı.
+    ///   waypoint >─ poi             SetNull  — POI silinse de durak turda kalır.
+    ///   tour >─ users               SetNull  — tur ortak veri, sahibi değişebilir.
+    ///   tour_session >─ users       Restrict — rehber ZORUNLU (bkz. GuideUserId).
+    /// </summary>
+    private static void ConfigureTour(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Tour>(entity =>
+        {
+            entity.ToTable("tour");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasColumnName("description").HasMaxLength(1000);
+
+            // "#rrggbb" — tam 7 karakter (guzergah.renk ile aynı kural).
+            entity.Property(e => e.Color).HasColumnName("color").HasMaxLength(7).IsRequired();
+
+            entity.Property(e => e.ScheduledStartUtc).HasColumnName("scheduled_start_utc");
+            entity.Property(e => e.GuideUserId).HasColumnName("guide_user_id");
+            entity.Property(e => e.CreatedDate).HasColumnName("created_date");
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+            entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+            // Rota: LineString, Point DEĞİL — tipi şemada sabitlemek yanlış bir
+            // geometrinin yazılmasını veritabanı düzeyinde imkânsız kılıyor.
+            entity.Property(e => e.Route)
+                  .HasColumnName("route")
+                  .HasColumnType("geometry(LineString, 4326)");
+
+            entity.Property(e => e.RouteDistanceMeters).HasColumnName("route_distance_meters");
+            entity.Property(e => e.RouteDurationSeconds).HasColumnName("route_duration_seconds");
+            entity.Property(e => e.RouteCalculatedUtc).HasColumnName("route_calculated_utc");
+
+            // SHA-256 hex özeti — sabit 64 karakter.
+            entity.Property(e => e.RouteSignature).HasColumnName("route_signature").HasMaxLength(64);
+
+            entity.HasOne(e => e.GuideUser)
+                  .WithMany()
+                  .HasForeignKey(e => e.GuideUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.GuideUserId);
+            entity.HasIndex(e => e.Route).HasMethod("gist");
+
+            entity.HasQueryFilter(e => !e.IsDeleted);
+        });
+
+        modelBuilder.Entity<Waypoint>(entity =>
+        {
+            entity.ToTable("waypoint");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.TourId).HasColumnName("tour_id");
+            entity.Property(e => e.Order).HasColumnName("sort_order");
+            entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+
+            // Dış sağlayıcı kimliği: "google:ChIJ...", "osm:node/123".
+            // 200 karakter, bilinen en uzun Place ID'nin çok üstünde.
+            entity.Property(e => e.PlaceId).HasColumnName("place_id").HasMaxLength(200).IsRequired();
+
+            entity.Property(e => e.PoiId).HasColumnName("poi_id");
+
+            // Enum METİN olarak yazılıyor: psql'den bakıldığında "Museum" görünüyor
+            // ve enum'a araya yeni bir üye eklendiğinde eski satırların anlamı
+            // kaymıyor (int saklasaydık her ekleme veri göçü isterdi).
+            entity.Property(e => e.VenueType)
+                  .HasColumnName("venue_type")
+                  .HasConversion<string>()
+                  .HasMaxLength(30)
+                  .IsRequired();
+
+            entity.Property(e => e.DwellMinutes).HasColumnName("dwell_minutes");
+            entity.Property(e => e.Note).HasColumnName("note").HasMaxLength(500);
+            entity.Property(e => e.CreatedDate).HasColumnName("created_date");
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+            entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+            entity.Property(e => e.Geom)
+                  .HasColumnName("geom")
+                  .HasColumnType("geometry(Point, 4326)")
+                  .IsRequired();
+
+            entity.HasIndex(e => e.Geom).HasMethod("gist");
+
+            entity.HasOne(e => e.Tour)
+                  .WithMany(t => t.Waypoints)
+                  .HasForeignKey(e => e.TourId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Poi)
+                  .WithMany()
+                  .HasForeignKey(e => e.PoiId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            // Bir turun durakları SIRAYLA okunuyor; bileşik index hem süzmeyi
+            // hem sıralamayı tek taramada karşılıyor (durak tablosuyla aynı).
+            entity.HasIndex(e => new { e.TourId, e.Order });
+
+            // "Bu mekan hangi turlarda geçiyor?" sorgusu place_id üzerinden.
+            entity.HasIndex(e => e.PlaceId);
+
+            entity.HasQueryFilter(e => !e.IsDeleted && !e.Tour!.IsDeleted);
+        });
+
+        modelBuilder.Entity<TourSession>(entity =>
+        {
+            entity.ToTable("tour_session");
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.TourId).HasColumnName("tour_id");
+            entity.Property(e => e.GuideUserId).HasColumnName("guide_user_id");
+
+            entity.Property(e => e.Status)
+                  .HasColumnName("status")
+                  .HasConversion<string>()
+                  .HasMaxLength(20)
+                  .IsRequired();
+
+            entity.Property(e => e.JoinCode).HasColumnName("join_code").HasMaxLength(12).IsRequired();
+            entity.Property(e => e.StartedUtc).HasColumnName("started_utc");
+            entity.Property(e => e.EndedUtc).HasColumnName("ended_utc");
+            entity.Property(e => e.CurrentWaypointId).HasColumnName("current_waypoint_id");
+            entity.Property(e => e.CurrentWaypointArrivedUtc).HasColumnName("current_waypoint_arrived_utc");
+            entity.Property(e => e.LastPositionUtc).HasColumnName("last_position_utc");
+            entity.Property(e => e.ProgressPercent).HasColumnName("progress_percent");
+            entity.Property(e => e.CreatedDate).HasColumnName("created_date");
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
+            entity.Property(e => e.IsActive).HasColumnName("is_active").HasDefaultValue(true).HasSentinel(true);
+            entity.Property(e => e.ModifiedDate).HasColumnName("modified_date");
+
+            entity.Property(e => e.LastPosition)
+                  .HasColumnName("last_position")
+                  .HasColumnType("geometry(Point, 4326)");
+
+            entity.HasOne(e => e.Tour)
+                  .WithMany(t => t.Sessions)
+                  .HasForeignKey(e => e.TourId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.GuideUser)
+                  .WithMany()
+                  .HasForeignKey(e => e.GuideUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.CurrentWaypoint)
+                  .WithMany()
+                  .HasForeignKey(e => e.CurrentWaypointId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            // KATILIM KODU YALNIZCA AÇIK OTURUMLAR ARASINDA BENZERSİZ.
+            //
+            // Kısmi (filtered) benzersiz index: kapanmış oturumları kapsam dışı
+            // bırakıyor ki eski bir turun kodu yeniden kullanılabilsin. Koşulsuz
+            // benzersiz index koysaydık kod havuzu zamanla tükenirdi.
+            entity.HasIndex(e => e.JoinCode)
+                  .IsUnique()
+                  .HasFilter("status IN ('Planned', 'Live', 'Paused') AND is_deleted = false");
+
+            // "Bu turun canlı oturumu var mı?" ve "benim oturumlarım" sorguları.
+            entity.HasIndex(e => new { e.TourId, e.Status });
+            entity.HasIndex(e => e.GuideUserId);
+
+            // Filtrede TUR var, REHBER YOK — bilinçli. Silinmiş bir tura bağlı
+            // oturum tutarsız olurdu (refresh_tokens'taki desen), ama rehberin
+            // hesabı kapandı diye YAPILMIŞ turların kaydı kaybolmamalı: oturum
+            // geçmişi tura aittir, rehbere değil.
+            entity.HasQueryFilter(e => !e.IsDeleted && !e.Tour!.IsDeleted);
+        });
+
+        modelBuilder.Entity<TourSessionParticipant>(entity =>
+        {
+            entity.ToTable("tour_session_participant");
+
+            // BİLEŞİK anahtar: aynı kişi aynı oturuma iki kez yazılamaz.
+            entity.HasKey(e => new { e.TourSessionId, e.UserId });
+
+            entity.Property(e => e.TourSessionId).HasColumnName("tour_session_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+
+            entity.Property(e => e.Role)
+                  .HasColumnName("role")
+                  .HasConversion<string>()
+                  .HasMaxLength(20)
+                  .IsRequired();
+
+            entity.Property(e => e.JoinedUtc).HasColumnName("joined_utc");
+            entity.Property(e => e.LeftUtc).HasColumnName("left_utc");
+
+            entity.HasOne(e => e.TourSession)
+                  .WithMany(s => s.Participants)
+                  .HasForeignKey(e => e.TourSessionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // "Bu kullanıcı şu an hangi turları izliyor?" sorgusu.
+            entity.HasIndex(e => e.UserId);
+
+            // Sahibi (oturum veya kullanıcı) silinmişse katılım da görünmesin —
+            // user_roles'taki filtrenin aynısı.
+            entity.HasQueryFilter(e => !e.TourSession!.IsDeleted && !e.User!.IsDeleted);
+
+            // Bu tablonun soft delete kolonları YOK ve bu bilinçli: katılım bir
+            // OLAY kaydı, düzenlenen bir varlık değil. "Ayrıldı" bilgisi silme
+            // bayrağıyla değil left_utc ile taşınıyor — böylece kimin ne zaman
+            // ayrıldığı da kayıtta kalıyor.
         });
     }
 

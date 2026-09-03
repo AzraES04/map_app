@@ -166,6 +166,37 @@ public static class PoiIkonlari
         {
             new IkonParcasi("M12 2.8l4.6 7.2h-2.4l4 6.2h-4.3v4.9h-3.8v-4.9H5.8l4-6.2H7.4L12 2.8z"),
         }),
+
+        // ---- Turistik kategoriler (OSM'den içe aktarılan duraklar) ----
+        //
+        // Üçü de aynı ilkeyle çizildi: basit geometri, dolgulu siluet, 24×24
+        // kutu. Hazır bir ikon kütüphanesi kullanmama gerekçesi dosya
+        // başlığında — bu simgeler GeoServer'ın SLD'sinde de aynen çiziliyor.
+
+        new("muze", "Müze", new[]
+        {
+            // Alınlık (üçgen çatı) + sütunlar + kaide: klasik müze cephesi.
+            new IkonParcasi("M12 2.6 21.4 8v1.9H2.6V8L12 2.6z"),
+            new IkonParcasi("M5.4 11.2h2.4v7.2H5.4z"),
+            new IkonParcasi("M10.8 11.2h2.4v7.2h-2.4z"),
+            new IkonParcasi("M16.2 11.2h2.4v7.2h-2.4z"),
+            new IkonParcasi("M3.2 19.6h17.6v1.9H3.2z"),
+        }),
+
+        new("anit", "Anıt", new[]
+        {
+            // Dikilitaş + iki kademeli kaide.
+            new IkonParcasi("M12 2.4l2.2 4.4v9.4H9.8V6.8L12 2.4z"),
+            new IkonParcasi("M7.4 17h9.2v1.7H7.4z"),
+            new IkonParcasi("M5.6 19.9h12.8v1.7H5.6z"),
+        }),
+
+        new("manzara", "Seyir noktası", new[]
+        {
+            // İki dağ silueti + güneş: "buradan manzara görünür" mesajı.
+            new IkonParcasi("M2.6 19.4 9 8.6l3.6 6 2-3.2 6.8 8H2.6z"),
+            new IkonParcasi("M17.2 3.8a2.3 2.3 0 1 0 0 4.6 2.3 2.3 0 0 0 0-4.6z"),
+        }),
     };
 
     private static readonly Dictionary<string, PoiIkonu> AnahtarIle =

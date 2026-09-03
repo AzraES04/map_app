@@ -230,4 +230,53 @@ public class UlasimController : YonetimControllerBase
     public Task<IActionResult> DurakSil(int id)
         => Calistir(async () =>
             await _service.DurakSilAsync(id) ? NoContent() : BulunamadiSonuc(id));
+
+    // ==================================================================
+    //  Ödev 19: araç simülasyonu
+    // ==================================================================
+
+    /// <summary>
+    /// Güzergahta araç simülasyonunu başlatır (Ödev 19 / Madde 1).
+    ///
+    /// "Simülasyon Başlatma" yetkisi ister — ödev metni gereği yalnızca
+    /// Admin ve Operatör rollerinde. Yetkisiz kullanıcı bu ucu çağırırsa
+    /// 403 alır; arayüz düğmeyi zaten göstermiyor ama asıl kontrol burada.
+    ///
+    /// Cevap, aracın BAŞLANGIÇ durumu. Sonraki konumlar SignalR ile geliyor
+    /// (<c>/hubs/simulasyon</c> → "KonumGuncellendi").
+    /// </summary>
+    [HttpPost("guzergahlar/{id:int}/simulasyon")]
+    [YetkiGerekli(Yetkiler.SimulasyonBaslatma)]
+    public Task<ActionResult<SimulasyonDurumDto>> SimulasyonBaslat(int id)
+        => Calistir<SimulasyonDurumDto>(async () =>
+        {
+            var durum = await _service.SimulasyonBaslatAsync(id);
+            return durum is null ? Bulunamadi(id) : Ok(durum);
+        });
+
+    /// <summary>
+    /// Çalışan simülasyonu durdurur. Çalışmıyorsa 404.
+    ///
+    /// Başlatmakla AYNI yetkiyi istiyor: durdurmak da bir müdahale, üstelik
+    /// bütün takipçilerin ekranından aracı kaldırıyor.
+    /// </summary>
+    [HttpDelete("guzergahlar/{id:int}/simulasyon")]
+    [YetkiGerekli(Yetkiler.SimulasyonBaslatma)]
+    public Task<IActionResult> SimulasyonDurdur(int id)
+        => Calistir(() => Task.FromResult<IActionResult>(
+            _service.SimulasyonDurdur(id)
+                ? NoContent()
+                : NotFound(new { message = $"{id} numaralı güzergahta çalışan bir simülasyon yok." })));
+
+    /// <summary>
+    /// Şu an çalışan bütün simülasyonlar.
+    ///
+    /// YETKİ İSTEMEZ (yalnızca <c>[Authorize]</c>): ödev "diğer kullanıcılar
+    /// takip edebilsin" diyor, takip etmek okuma işidir. Haritayı yeni açan
+    /// istemci bu uçtan "hangi hatlarda araç var?" öğreniyor — SignalR
+    /// yalnızca bundan SONRAKİ güncellemeleri gönderir.
+    /// </summary>
+    [HttpGet("simulasyonlar")]
+    public ActionResult<IReadOnlyList<SimulasyonDurumDto>> Simulasyonlar()
+        => Ok(_service.AktifSimulasyonlar());
 }

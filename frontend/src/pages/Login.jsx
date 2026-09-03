@@ -33,6 +33,7 @@ export default function Login() {
   // yalnızca şifre isteniyor. Şifre saklanmıyor (bkz. auth.js).
   const [username, setUsername] = useState(() => location.state?.username ?? '')
   const [password, setPassword] = useState('')
+  const [davetKodu, setDavetKodu] = useState('')
   const [error, setError] = useState(null)
   const [bilgi, setBilgi] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -161,7 +162,12 @@ export default function Login() {
     // Önce çıkış animasyonu, sonra sayfa geçişi. Ekran karardığı an harita
     // ekranı da uzay sahnesiyle açıldığı için arada görsel kopukluk olmuyor.
     setCikis(true)
-    setTimeout(() => navigate('/map', { replace: true }), CIKIS_SURESI)
+
+    // Giriş öncesi gitmek istediği adres varsa oraya (paylaşılan tur
+    // bağlantısı), yoksa haritaya. RequireAuth hedefi state ile taşıyor.
+    const hedef = location.state?.hedef ?? '/map'
+
+    setTimeout(() => navigate(hedef, { replace: true }), CIKIS_SURESI)
   }
 
   /**
@@ -199,7 +205,14 @@ export default function Login() {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      // Davet kodu İSTEĞE BAĞLI: boşsa hiç göndermiyoruz — sunucu
+      // tarafında "" ile null ayrımı yapmak yerine alanı yokmuş gibi
+      // bırakmak, eski (kodsuz) akışı hiç bozmuyor.
+      body: JSON.stringify({
+        username,
+        password,
+        ...(davetKodu.trim() ? { inviteCode: davetKodu.trim().toUpperCase() } : {}),
+      }),
     })
 
     if (!res.ok) {
@@ -391,6 +404,29 @@ export default function Login() {
           required
         />
 
+        {/* DAVET KODU — yalnızca kayıt modunda ve İSTEĞE BAĞLI.
+            Bir admin bu kodu paylaştıysa hesap otomatik ona bağlanır ve
+            onay beklemeden aktif olur; boş bırakılırsa eski akış (yönetici
+            onayı bekleyen kayıt) aynen sürer. */}
+        {kayitModu && (
+          <>
+            <label htmlFor="davet-kodu">Davet kodu (varsa)</label>
+            <input
+              id="davet-kodu"
+              value={davetKodu}
+              onChange={(e) => setDavetKodu(e.target.value.toUpperCase())}
+              placeholder="Yöneticinizden aldıysanız girin"
+              maxLength={24}
+              autoComplete="off"
+              style={{ letterSpacing: '2px', textTransform: 'uppercase' }}
+            />
+            <p className="login-hint" style={{ marginTop: 0 }}>
+              Doğru kod, hesabınızı o yöneticiye bağlar ve onay beklemeden
+              aktif eder.
+            </p>
+          </>
+        )}
+
         {/* "Beni hatırla" YALNIZCA giriş modunda. Kayıt olurken oturum
             açılmıyor (hesap yönetici onayı bekliyor), dolayısıyla
             hatırlanacak bir oturum da yok. */}
@@ -426,6 +462,18 @@ export default function Login() {
           <p className="login-hint">
             Kaydınız yönetici onayından sonra kullanıma açılır.
           </p>
+        )}
+
+        {/* MİSAFİR GİRİŞİ.
+            Turu izlemek için hesap gerekmiyor; katılım kodu yeterli. Bu
+            bağlantı olmasaydı, elinde yalnızca kod olan biri giriş ekranına
+            takılıp kalırdı — kullanıcının bildirdiği durum tam olarak
+            buydu. */}
+        {!kayitModu && (
+          <div className="login-misafir">
+            <span>Bir tura katılım kodunuz mu var?</span>
+            <a href="/tur">Hesapsız olarak görüntüleyin</a>
+          </div>
         )}
         </>
         )}

@@ -44,6 +44,14 @@ public class ExceptionHandlingMiddleware
             _logger.LogWarning(ex, "İş kuralı ihlali");
             await YazAsync(context, StatusCodes.Status400BadRequest, ex.Message);
         }
+        catch (DisServisException ex)
+        {
+            // Google Maps gibi bir dış servis yapılandırılmamış, kotası dolmuş
+            // ya da cevap vermiyor. GeoServerErisimException ile aynı karar:
+            // 503 ve mesaj istemciye gösteriliyor (eyleme dönüştürülebilir).
+            _logger.LogError(ex, "Dış servis kullanılamıyor");
+            await YazAsync(context, StatusCodes.Status503ServiceUnavailable, ex.Message);
+        }
         catch (GeoServerErisimException ex)
         {
             // Ödev 8: bağımlı olduğumuz DIŞ servis (GeoServer) yok ya da hata verdi.

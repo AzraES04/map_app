@@ -85,7 +85,10 @@ public class UserRepository : IUserRepository
         => _context.Users
             .AsNoTracking()
             .Include(u => u.UserRoles).ThenInclude(ur => ur.Role!).ThenInclude(r => r.RolePermissions)
-            .Include(u => u.UserPermissions).ThenInclude(up => up.Permission);
+            .Include(u => u.UserPermissions).ThenInclude(up => up.Permission)
+            // Listede "hangi admine bağlı" sütunu için — yalnızca kullanıcı
+            // adı okunuyor, ParentAdmin'in kendi rol/yetki ağacı gerekmiyor.
+            .Include(u => u.ParentAdmin);
 
     public async Task<List<User>> GetAllAsync()
         => await IliskileriyleBirlikte().OrderBy(u => u.Username).ToListAsync();
@@ -107,6 +110,13 @@ public class UserRepository : IUserRepository
         mevcut.IsActive = user.IsActive;
         mevcut.IsApproved = user.IsApproved;   // Ödev 10: yönetici onayı
 
+        // Null da YAZILIYOR: alanı boşaltıp kaydetmek numarayı silmenin
+        // doğal yolu (bkz. UserUpdateDto.PhoneNumber). Şifredeki "boşsa
+        // dokunma" kuralı buraya uygulanmıyor — orada boş bırakmanın
+        // sebebi hash'in istemciye hiç gitmemesiydi, burada öyle bir
+        // durum yok.
+        mevcut.PhoneNumber = user.PhoneNumber;
+
         // ModifiedDate elle yazılmıyor — AppDbContext.ApplyAuditRules() basıyor.
         await _context.SaveChangesAsync();
         return mevcut;
@@ -124,6 +134,27 @@ public class UserRepository : IUserRepository
         mevcut.TotpEnabled = enabled;
         await _context.SaveChangesAsync();
     }
+
+    // ---------- Admin-bağlı kullanıcılar (davet kodu) ----------
+
+    public async Task<User?> GetByInviteCodeAsync(string kod)
+        => await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.InviteCode == kod);
+
+    public async Task<string?> InviteCodeYazAsync(int userId, string kod)
+    {
+        var mevcut = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        if (mevcut is null)
+        {
+            return null;
+        }
+
+        mevcut.InviteCode = kod;
+        await _context.SaveChangesAsync();
+        return kod;
+    }
+
+    public Task<int> BagliKullaniciSayisiAsync(int adminId)
+        => _context.Users.CountAsync(u => u.ParentAdminId == adminId);
 
     public Task SetRolesAsync(int userId, IReadOnlyCollection<int> roleIds)
         => AtamalariEsitleAsync(

@@ -1994,6 +1994,34 @@ renkler bağlamaktan ibaret; tek bir bileşen kuralı bile tekrarlanmıyor.
   o palete göre tasarlandı; aydınlık zeminde yıldızlar görünmez. Rol değişkenleri
   `.login-wrapper` ağacının içinde geri çevriliyor.
 
+**Harita üstündeki kartlar da temayı takip ediyor.** Önceki tasarım ilkesi "koyu
+krom, aydınlık içerik"ti: üst bar ve panel koyu, harita üstündeki her kart beyaz.
+Sonuç, koyu bir arayüzün ortasında duran beyaz adacıklardı — "Türkiye" / "Dünya"
+düğmeleri, koordinat göstergesi, ölçek çubuğu, OpenLayers'ın kendi +/− düğmeleri
+ve bütün bilgi kutucukları.
+
+Şimdi bunların hepsi **login kartının reçetesini** kullanıyor: yarı saydam koyu
+cam (`--kart: rgba(15, 28, 33, 0.90)`), arkasını bulanıklaştıran bir süzgeç
+(`backdrop-filter`) ve üst kenarda ince bir ışık çizgisi (`--isik-ust`). Aydınlık
+temada aynı değişkenler eski beyaz değerlerine dönüyor; **tek bir bileşen kuralı
+bile iki kez yazılmadı**, yalnızca `--kart*` rolleri yeniden bağlandı.
+
+İki ayrıntı:
+
+- **OpenLayers'ın kendi denetimleri** de `ol.css` değişkenleri
+  (`--ol-background-color`…) `.map-container` kapsamında yeniden bağlanarak
+  koyulaştı. Her düğmeyi tek tek ezseydik, kütüphanenin ileride ekleyeceği
+  denetimler beyaz kalırdı.
+- **Vinyet:** haritanın kenarları koyu kroma doğru yumuşakça sönüyor
+  (`.map-alan::after`). Parlak dikdörtgen daha önce üst bara keskin bir çizgiyle
+  bitişiyordu; vinyet, login ekranındaki "kenarları mürekkebe düşen ışık"
+  düzeninin haritadaki karşılığı.
+
+> Yan düzeltme: `.taban-katman`'ın karanlık tema kuralı `[data-tema='karanlik']`
+> seçicisiyle yazılmıştı ve **hiçbir zaman eşleşmiyordu** — karanlık tema
+> özniteliği yazmıyor, siliyor (varsayılan palet zaten karanlık). Seçici
+> `:root:not([data-tema='aydinlik'])` olarak düzeltildi.
+
 **Yetkisiz kullanıcıda çizim bölümü hiç yok.** Ödev 7'den beri kural "yetkisi
 olmayan araç görünmesin" idi ama araçları **tek tek** gizliyordu: hiçbir çizim
 yetkisi olmayan bir hesapta "Çizim Araçları" başlığı, boş bir düğme kutusu, "Çizime
@@ -3286,9 +3314,23 @@ oluşurdu; sunucu rotanın tamamını tek seferde çizdiriyor.
 
 | Çizgi | Görünüm | Anlamı |
 |---|---|---|
-| Kayıtlı rota | hattın kendi rengi, düz | şu an veritabanında olan |
+| Kayıtlı rota | **gri**, ince, düz | şu an veritabanında olan |
 | **Önizleme** | **mavi, kalın, düz** | seçili alternatiften geçen **hattın tamamı** |
-| Alternatifler | turuncu, **kesikli** | tıklanabilir **bacak** önerileri |
+| Alternatifler | turuncu, **kesikli**, süre etiketli | tıklanabilir **bacak** önerileri |
+
+> **Kayıtlı rota neden GRİ?** Normalde hattın kendi rengiyle çiziliyor ve o
+> rengi kullanıcı seçiyor. Turuncu bir hat seçildiğinde kayıtlı rota ile
+> turuncu alternatifler aynı renge düşüyor, *"hangisi şu anki yolum?"* sorusu
+> cevapsız kalıyordu. Hattın rengini **soluklaştırmak çözüm değil** — soluk
+> turuncu yine turuncudur; renk ailesinden tamamen çıkmak gerekiyor. Bu yüzden
+> alternatifler ekrandayken **yalnızca o hat** griye çekiliyor (diğer hatlar
+> kendi renklerinde kalır) ve karşılaştırma üç ayrı dile oturuyor:
+> **gri** = şimdiki, **turuncu** = öneri, **mavi** = seçilen öneriyle bütün.
+>
+> Stil nesnesi bütün hatlar arasında paylaşıldığı için kalınlık ve renk **her
+> feature'da yeniden yazılıyor**; yalnızca "soluk" dalında yazsaydık, soluk bir
+> hattan sonra çizilen normal hat da ince kalırdı. Bu sızıntının kendi testi
+> var (`alternatifStili.test.jsx` → "paylaşılan stil nesnesi bulaşmaz").
 
 Harita tıklaması bilgi kutucuğunu **değiştirmiyor**: kullanıcı hâlâ aynı
 durağa bakıyor, yalnızca hangi yolu incelediği değişiyor. Kutucuğu kapatıp
@@ -3306,6 +3348,86 @@ isteyen kullanıcı farkında olmadan hattın rotasını değiştirirdi.
 > sığdırılamayacağı için seçilmiş, **gövdesi olan bir sorgu**. Yapısal
 > denetim testi (`YetkilendirmeDenetimiTests`) bu ucu yakaladı ve
 > gerekçesiyle istisna listesine yazıldı.
+
+### Alternatifler haritadan da BAŞLATILABİLİYOR
+
+İlk hâlde alternatifleri açmanın tek yolu durak kutucuğundaki *"Bu durağa giden
+yollar"* düğmesiydi; yani kullanıcının önce durağa tıklaması, sonra kutucuğu
+okuması gerekiyordu. Oysa haritada gördüğü şey **yolun kendisi**.
+
+Artık **hattın çizgisine tıklamak** o parçanın alternatiflerini doğrudan açıyor:
+bilgi kutucuğu bacağın **varış durağında** açılıyor ve liste dolu geliyor. Düğme
+kaldırılmadı — kutucuk zaten açıkken elini haritaya götürmek fazladan bir adım
+olurdu.
+
+**Hangi bacağa tıklandı?** Bu göründüğünden zor bir soru. İlk akla gelen çözüm
+(*"tıklanan noktaya en yakın iki durak"*) kıvrımlı rotalarda sessizce yanlış
+cevap veriyor: yol bir vadiyi dolaştığında ya da hat kendi üzerine kıvrıldığında
+kuş uçuşu en yakın durak çoğu zaman **başka bir bacağın** durağı oluyor.
+
+Bunun yerine **çizgi boyunca ilerleme** ölçülüyor (`frontend/src/hatBacagi.js`):
+
+1. Hem tıklanan nokta hem de her durak, rota çizgisine dik olarak izdüşürülüyor.
+2. Her izdüşümün çizgi başından itibaren kaç birim ilerde olduğu hesaplanıyor.
+3. Tıklamanın ilerlemesinden büyük **ilk durak**, o bacağın varış durağı.
+
+Modül OpenLayers'a hiç bağlı değil (girdisi düz koordinat dizileri), bu yüzden
+tek başına test edilebiliyor — `frontend/src/test/hatBacagi.test.js` içindeki
+"dar U" senaryosu tam olarak yukarıdaki tuzağı sınıyor: naif çözüm o testte
+kırmızıya dönüyor.
+
+Sıralama da bilinçli: tıklama önce **alternatif çizgisi**, sonra
+**durak/POI/çizim**, sonra **hat çizgisi**, en sonda boş alan olarak
+değerlendiriliyor. Alternatifler en üstte çizildiği için tıklamada da en önce
+onlar sorulur; durak simgesi hattın üstünde durur ve durağa tıklayan kişi
+bacağı değil durağı kastediyor.
+
+### Haritada tek tıklama GÖSTERİR, çift tıklama UYGULAR
+
+Alternatifler haritada tıklanmak için var, o yüzden tıklanabilir GÖRÜNMELERİ
+gerekiyor. İlk sürümde seçili olmayan alternatifler 3 piksel ve %42
+opaklıktaydı — arka planda duran soluk bir iz gibi. Şimdi üç kademe var:
+
+| Durum | Görünüm |
+|---|---|
+| Normal | 5 px, %88 opak turuncu, kesikli, **beyaz taban** |
+| Fare üzerinde | 6 px, açık turuncu |
+| Seçili | 7 px, dolgun turuncu, uzun kesikli |
+
+**Beyaz taban her çizgide var**: kalabalık bir haritada (bina, yol, POI) tek
+başına turuncu bir çizgi zeminde kayboluyor; taban, çizginin iki yanına ince
+bir "hava boşluğu" bırakıp onu zeminden koparıyor. Ayrıca her alternatifin
+**ortasında süresi yazıyor** ("12 dk", "14 dk (+2)") — listeye bakmadan hangi
+çizginin hangi seçenek olduğu anlaşılıyor. Etiketler `declutter` grubunda:
+iki alternatif dipdibe geçerse etiketlerden biri gizlenir, **çizgiler
+gizlenmez**.
+
+Tıklama toleransı da alternatiflerde daha geniş (12 px, hattınki 8): kesikli
+bir çizgide boşluğa denk gelen tıklama "ıskaladı" hissi veriyordu.
+
+Eylem ayrımı:
+
+- **Tek tıklama → göster.** Alternatif seçilir, hattın tamamı o yoldan
+  önizlenir. Hiçbir şey kaydedilmez.
+- **Çift tıklama → uygula.** Alternatif hattın **kalıcı rotası** olur
+  (`POST …/rota`, "Bu yolu kullan" düğmesiyle aynı uç). Yetkisi olmayana
+  yazılı sebebiyle uyarı çıkar; asıl kontrol yine sunucuda.
+
+Ayrımın sebebi: tek tıklama hiçbir şey yazmıyor. Her tıklamayı veritabanına
+yazsaydık, sadece bakmak isteyen kullanıcı farkında olmadan hattın rotasını
+değiştirirdi.
+
+> **Çift tıklamada harita neden yakınlaşmıyor?** OpenLayers'ta çift tıklama
+> varsayılan olarak zoom yapar (`DoubleClickZoom` etkileşimi).
+> `Map.handleMapBrowserEvent` önce **dinleyicileri** çağırıyor ve yalnızca
+> `dispatchEvent(...) !== false` ise etkileşimlere geçiyor; dinleyicimiz
+> `false` döndürerek zoom'u yutuyor. Bunu **sadece bir alternatifin
+> üstündeyken** yapıyoruz — haritanın geri kalanında çift tıklama hâlâ
+> yakınlaştırıyor.
+
+Listeyle harita da bağlandı: **liste satırının üstüne gelmek** haritadaki ilgili
+çizgiyi kalınlaştırıyor ("bu satır hangi çizgi?" sorusu tıklamadan
+cevaplanıyor).
 
 ### Kaydederken geometri değil, ARA NOKTA gönderiliyor
 
@@ -3363,6 +3485,137 @@ kalmamış bir yerden geçen tuhaf bir rota üretirdi.
 
 ---
 
+## Araç simülasyonu ve canlı takip (Ödev 19)
+
+Bir hatta "sefer" başlatılıyor: araç ilk duraktan son durağa doğru ilerliyor,
+konumu **SignalR** ile yayınlanıyor ve isteyen kullanıcılar onu canlı olarak
+takip ediyor.
+
+| Ödev maddesi | Karşılığı |
+|---|---|
+| Haritada **veya listede** güzergaha tıklayınca "Simülasyonu Başlat" | Hattın çizgisine tıklamak **güzergah kartını** açıyor; aynı düğmeler yan paneldeki hat listesinde de var |
+| Sadece **Admin ve Operatör** başlatabilsin | `Simülasyon Başlatma` yetkisi (seed onu bu iki role veriyor) |
+| İlk duraktan son durağa hareket eden **araç ikonu** | Hattın renginde otobüs simgesi + altında yüzde rozeti |
+| **SignalR** altyapısı | `/hubs/simulasyon` → `KonumGuncellendi` (500 ms'de bir) |
+| Diğer kullanıcılara **"Takip Et" / "Takibi Bırak"** | Hat başına SignalR **grubu**; katıl/ayrıl |
+| Araca tıklayınca **yüzde kaç tamamlandı** | Araç kartı: büyük yüzde + ilerleme çubuğu + hangi duraklar arasında |
+
+### Katmanlar nasıl ayrıldı?
+
+Simülasyonun üç parçası var ve üçü de farklı bir katmanda:
+
+| Parça | Nerede | Sorumluluğu |
+|---|---|---|
+| `SimulasyonMotoru` | Business / Ulasim | Saf matematik: "hattın %37'sindeyken araç nerede?" |
+| `SimulasyonServisi` | Business / Services | Çalışan seferlerin **belleklerdeki defteri** (singleton) |
+| `SimulasyonYayinci` | **API** / Services | Zamanlayıcı + SignalR yayını |
+
+Yayının API katmanında olması bilinçli: SignalR bir **taşıma** teknolojisi,
+yani sunum ayrıntısı. İş katmanı yalnızca "araç şu an nerede?" sorusunu
+cevaplıyor, cevabın kime nasıl gideceğini bilmiyor. Aynı ayrım Ödev 5'te
+`ICurrentUserService` için yapılmıştı: arayüz Business'ta, HttpContext'e bağlı
+gerçeklemesi API'de.
+
+**Defter neden singleton?** Simülasyon bir isteğe değil UYGULAMAYA ait:
+"başlat" isteği bittikten sonra da araç yolda ilerliyor ve başkaları onu
+takip ediyor. Bunun bir bedeli var — singleton bir sınıf, scoped olan
+`DbContext`'e dokunamaz. Bu yüzden veritabanını okuma işi `UlasimService`'te
+(scoped) kaldı; defter yalnızca hazır bir **anlık görüntü** alıyor
+(`SimulasyonKaynak`). Yan faydası: sefer sürerken hattın durakları
+değiştirilse bile araç, başladığı rotayı tamamlıyor.
+
+**Veritabanı yok — bilinçli.** Simülasyon geçici bir gösterim; sunucu yeniden
+başladığında yolda araç kalmaması doğru davranış. Kalıcı yapsaydık, kapanan
+bir sunucudan sonra "hâlâ yolda görünen ama ilerlemeyen" hayalet kayıtları
+temizlemek gerekirdi.
+
+### İlerleme ZAMANDAN türetiliyor
+
+Konumu "her tikte biraz ilerlet" diye biriktirmiyoruz; her tik, geçen süreden
+oranı **yeniden hesaplıyor**. Biriktirseydik gecikmiş ya da atlanmış bir tik
+aracı yavaşlatır, sunucu yük altındayken simülasyon sürüklenirdi. Şimdi tik
+sıklığı yalnızca akıcılığı etkiliyor, ilerlemeyi değil. (Testi:
+*"Ilerleme_ZAMANDAN_turetiliyor_tik_sayisindan_degil"* — tek bir tik atmadan,
+sadece saati ileri alarak %50'ye varıyor.)
+
+Sefer süresi **sabit** (`appsettings → Simulasyon:SureSaniye`, varsayılan 60 sn)
+ve gerçek sürüş süresi değil: en uzun hattımız 1 868 km, gerçek zamanlı
+oynatılsa jüri önünde hiçbir şey görünmezdi.
+
+### Boylam düzeltmesi
+
+Araç, hattın geometrisi üzerinde **orana göre** ilerliyor; bu yüzden "uzunluk"
+ölçüsü doğru olmak zorunda. Bir enlem derecesi her yerde ~111 km ama bir
+**boylam** derecesi kutuplara doğru daralıyor (Ankara'da ~%77'si). Düzeltme
+olmasaydı doğu-batı uzanan bir hat olduğundan uzun sayılır, araç yönüne göre
+yavaşlayıp hızlanırdı — hata mesajı vermeyen, yalnızca "tuhaf" görünen bir
+bozukluk. `SimulasyonMotoru.ParcaUzunlugu` boylamı `cos(enlem)` ile daraltıyor.
+
+### Kim ne alıyor? (yayının maliyeti)
+
+| Mesaj | Kime | Sıklık |
+|---|---|---|
+| `KonumGuncellendi` | Yalnızca o hattın **grubuna** (takip edenler) | 500 ms |
+| `SimulasyonBasladi` / `SimulasyonBitti` | **Herkese** | Sefer başına bir kez |
+
+İkinci satır, ödevin *"diğer kullanıcılar aynı güzergaha tıkladığında Takip Et
+butonu çıksın"* maddesi için gerekli: bir kullanıcı sefer başlattığında
+ötekilerin ekranında hiçbir şey değişmiyordu, çünkü konum mesajları yalnızca
+gruba gidiyor ve gruba henüz kimse katılmamış oluyor. Her tiki herkese
+yayınlamak da çözüm değildi (on hat çalışırken herkes on kat gereksiz mesaj
+alırdı); onun yerine **aktif hat kümesi** her tikte karşılaştırılıyor ve
+yalnızca değişim anlarında duyuru gidiyor.
+
+### JWT nasıl taşınıyor?
+
+Tarayıcının WebSocket API'si el sıkışmaya özel başlık ekleyemiyor, yani
+`Authorization: Bearer …` gönderilemiyor. SignalR'ın belgelenmiş çözümü
+token'ı adres satırında taşımak (`?access_token=…`). Sunucuda bu
+**yalnızca `/hubs` ile başlayan yollar** için okunuyor:
+
+```csharp
+options.Events = new JwtBearerEvents
+{
+    OnMessageReceived = context =>
+    {
+        var token = context.Request.Query["access_token"];
+        if (!string.IsNullOrEmpty(token)
+            && context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+        {
+            context.Token = token;
+        }
+        return Task.CompletedTask;
+    },
+};
+```
+
+Bütün isteklerde açsaydık, token'ın adres satırında taşınmasını
+**normalleştirirdik**: adresler sunucu günlüklerine, tarayıcı geçmişine ve
+`Referer` başlığına yazılır; başlıklar yazılmaz. Doğrulandı: aynı token
+adres satırında bir REST ucuna verildiğinde **401** dönüyor, hub'ın
+`negotiate` ucunda **200**.
+
+### Vite vekilinde `ws: true`
+
+Geliştirmede istemci `:5173`'e bağlanıyor, hub ise `:5000`'de. `vite.config.js`
+içindeki `/hubs` vekiline `ws: true` yazılmasaydı WebSocket yükseltmesi
+başarısız olur ve SignalR sessizce long-polling'e düşerdi — çalışır ama her
+mesaj için yeni bir HTTP isteği demek.
+
+### Ekrandaki karşılığı
+
+- Hattın çizgisine tıklamak → **güzergah kartı**: hat adı, durak sayısı, canlı
+  rozeti, simülasyon düğmeleri ve (Ödev 18'den) o parçanın yol alternatifleri.
+- Sefer başlayınca araç, **hattın renginde** bir otobüs simgesiyle çiziliyor;
+  altında yüzde rozeti var.
+- **Başlatan otomatik takip ediyor**: başlattığı şeyi göremeyen bir kullanıcı
+  bırakmamak için.
+- **"Takibi Bırak" aracı haritadan kaldırıyor.** Bırakılan araç ekranda
+  kalsaydı DONARDI: güncelleme gelmediği için konumu her saniye biraz daha
+  yanlış olurdu. Yanlış bilgi, bilgisizlikten kötüdür.
+- Sefer bitince araç kalkıyor, rozet sönüyor ve "sefer tamamlandı" bildirimi
+  çıkıyor.
+
 ## API Uçları
 
 | Metot | Yol | Açıklama |
@@ -3416,6 +3669,10 @@ kalmamış bir yerden geçen tuhaf bir rota üretirdi.
 | **GET** | **`/api/ulasim/duraklar`** | Bütün duraklar — **yetki istemez** |
 | **POST** | **`/api/ulasim/duraklar`** | `{ ad, guzergahId, wkt, aciklama? }` — **Durak Ekleme** |
 | **PUT/DELETE** | **`/api/ulasim/duraklar/{id}`** | Sahibi (Durak Ekleme) **veya** Güzergah Yönetimi |
+| **POST** | **`/api/ulasim/guzergahlar/{id}/simulasyon`** | Sefer başlatır; aracın başlangıç durumunu döner (Ödev 19) — **Simülasyon Başlatma** |
+| **DELETE** | **`/api/ulasim/guzergahlar/{id}/simulasyon`** | Seferi durdurur (204); çalışan sefer yoksa 404 — **Simülasyon Başlatma** |
+| **GET** | **`/api/ulasim/simulasyonlar`** | Şu an yolda olan araçlar — **yetki istemez** (takip etmek okuma işidir) |
+| **WS** | **`/hubs/simulasyon`** | SignalR: `Katil(guzergahId)` / `Ayril(guzergahId)`; sunucudan `KonumGuncellendi`, `SimulasyonBasladi`, `SimulasyonBitti` |
 
 > `/api/points`, `/api/lines`, `/api/polygons` ve `/api/analysis/intersect` uçlarının
 > **adresi değişmedi**; değişen, verinin arkada nereden geldiği. Frontend tarafında
@@ -3706,14 +3963,17 @@ StajProject/
     ├── poiIkon.js                → Simge parçaları → SVG / OpenLayers Icon (Ödev 15)
     ├── adminApi.js               → Yönetim paneli API çağrıları
     ├── poiApi.js                 → POI, kategori, arama, tatil, öneri uçları (Ödev 12-13)
-    ├── ulasimApi.js              → Güzergah ve durak uçları (Ödev 16)
+    ├── ulasimApi.js              → Güzergah, durak ve simülasyon uçları (Ödev 16/19)
+    ├── simulasyonHub.js          → SignalR bağlantısı ve grup üyelikleri (Ödev 19)
+    ├── aracIkonu.js              → Hattın renginde otobüs simgesi (Ödev 19)
     ├── mesai.js                  → Mesai planı yardımcıları, özet metin (Ödev 13)
     ├── yetkiler.js               → Yetki adları (backend Yetkiler.cs ile aynı)
     ├── auth.js                   → Token yönetimi, otomatik çıkış
     ├── geocode.js                → Nominatim yer arama + ters kodlama (Ödev 13)
     ├── icons.jsx                 → Inline SVG ikonlar
     ├── ErrorBoundary.jsx         → Beyaz ekran yerine hata kartı
-    ├── index.css                 → Tasarım sistemi (koyu krom / aydınlık içerik)
+    ├── hatBacagi.js              → Hat çizgisinde tıklanan bacağı bulma (saf math)
+    ├── index.css                 → Tasarım sistemi (koyu krom / aydınlık harita)
     └── pages/                    → Login.jsx · MapPage.jsx
                                     AdminLayout.jsx · AdminUsers.jsx · AdminRoles.jsx
                                     AdminPoi.jsx (POI listesi + kategori ağacı)
@@ -3742,7 +4002,8 @@ StajProject/
   üçü birden güncellenmelidir, aksi hâlde katman "bulunamadı" (404) döner.
 - **`describeGeometry`** içindeki uzunluk/alan değerleri Mercator düzleminde hesaplanır;
   Türkiye enlemlerinde gerçek değerden yaklaşık %30 sapar. Yalnızca bilgi amaçlıdır.
-- **Tasarım sistemi:** Üst bar ve panel koyu ("krom"), harita ve üzerindeki kartlar
-  aydınlık ("içerik"). Renk token'ları iki kademelidir (ham → anlamsal); etkileşim
-  durumları `color-mix()` ile türetilir. Metin/zemin kontrastları WCAG AA (≥4.5:1)
-  ölçütünü karşılar.
+- **Tasarım sistemi:** Üst bar, panel ve harita üstündeki kartlar koyu ("krom");
+  aydınlık kalan tek şey haritanın kendisi. Renk token'ları iki kademelidir
+  (ham → anlamsal); etkileşim durumları `color-mix()` ile türetilir. Metin/zemin
+  kontrastları WCAG AA (≥4.5:1) ölçütünü karşılar — koyu kartlarda ölçüm,
+  kartın saydamlığı hesaba katılarak *haritanın en açık tonu üzerinde* yapılır.

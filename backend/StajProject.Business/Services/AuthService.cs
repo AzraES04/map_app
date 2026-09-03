@@ -130,11 +130,36 @@ public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
             throw new IsKuraliException($"\"{kullaniciAdi}\" kullanıcı adı zaten alınmış.");
         }
 
+        // ---- DAVET KODU (isteğe bağlı) ----
+        //
+        // Doğru bir kod, kaydı bir admine bağlıyor VE onay beklemesini
+        // atlıyor: kodu paylaşan admin zaten vouch etmiş oluyor. Kod
+        // GİRİLİP DE YANLIŞSA sessizce yok saymıyoruz — kullanıcı "doğru
+        // kodu girdim" sanıp onay bekleyerek beklerdi; açıkça hata veriyoruz.
+        User? adminKullanici = null;
+
+        // BÜYÜK HARFE NORMALİZE — katılım koduyla (TurOturumServisi) aynı
+        // desen: kod telefonda okunup elle yazılıyor, "Xy7k" ile "XY7K"
+        // aynı kod sayılmalı. Yalnızca arayüz büyük harfe çevirseydi,
+        // uca doğrudan istek atan biri (ya da farklı bir istemci) küçük
+        // harfle geçerli bir kodu "geçersiz" bulurdu.
+        var davetKodu = request.InviteCode?.Trim().ToUpperInvariant();
+
+        if (!string.IsNullOrEmpty(davetKodu))
+        {
+            adminKullanici = await _userRepository.GetByInviteCodeAsync(davetKodu)
+                ?? throw new IsKuraliException("Davet kodu geçersiz.");
+        }
+
         var yeni = new User
         {
             Username = kullaniciAdi,
             IsActive = true,
-            IsApproved = false,   // asıl kural burada
+            // Davet koduyla gelen kayıt otomatik onaylı: admin kodu
+            // paylaşarak zaten vouch etmiş oluyor. Kodsuz kayıtta eski
+            // kural aynen sürüyor.
+            IsApproved = adminKullanici is not null,
+            ParentAdminId = adminKullanici?.Id,
         };
         yeni.PasswordHash = _passwordHasher.HashPassword(yeni, request.Password);
 
@@ -143,7 +168,9 @@ public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
         return new RegisterResponseDto
         {
             Username = kullaniciAdi,
-            Message = "Kaydınız alındı. Yönetici onayından sonra giriş yapabilirsiniz.",
+            Message = adminKullanici is not null
+                ? $"Kaydınız oluşturuldu ve {adminKullanici.Username} adminine bağlandı. Giriş yapabilirsiniz."
+                : "Kaydınız alındı. Yönetici onayından sonra giriş yapabilirsiniz.",
         };
     }
 

@@ -1,6 +1,7 @@
 using StajProject.Business.Auth;
 using StajProject.Business.DTOs;
 using StajProject.Business.Services;
+using StajProject.Business.Ulasim;
 using StajProject.Business.Validation;
 using StajProject.Entities;
 using StajProject.Tests.Fakes;
@@ -53,12 +54,17 @@ public class RotaTests
             new FakePermissionRepository(db), new FakeUserRepository(db), oturum);
 
         var osrm = new FakeOsrmClient();
+        // Ödev 19: simülasyon defteri ve ayarları GERÇEK nesneyle veriliyor.
+        // Sahte yazmadık çünkü ikisi de bellekte çalışan, dış dünyaya
+        // dokunmayan sınıflar — taklidi aslından karmaşık olurdu.
         var servis = new UlasimService(
             new FakeUlasimRepository(db),
             oturum,
             izinler,
             new FakeGeoPermissionService(),
-            osrm);
+            osrm,
+            new SimulasyonServisi(),
+            new SimulasyonAyarlari());
 
         return new Ortam(db, servis, osrm);
     }

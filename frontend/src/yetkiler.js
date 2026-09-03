@@ -26,6 +26,17 @@ export const YETKILER = {
   // Ödev 16 — ulaşım modülü
   durakEkleme: 'Durak Ekleme',
   guzergahYonetimi: 'Güzergah Yönetimi',
+
+  // Ödev 19 — araç simülasyonu. Ödev metni "sadece Admin ve Operatör
+  // başlatabilsin" diyor; rol adına değil YETKİYE bakıyoruz (seed bu yetkiyi
+  // o iki role veriyor). TAKİP ETMEK yetki istemiyor.
+  simulasyonBaslatma: 'Simülasyon Başlatma',
+
+  // Tur modülü — tur tanımlama, durak düzenleme ve canlı oturum başlatma
+  // (yani bir turda REHBER olabilme). Katılımcı olmak yetki istemiyor:
+  // yayını izlemek okuma işidir. Oturum İÇİNDEKİ Guide/Participant ayrımı
+  // ayrı bir şey ve turDurumu.js → TUR_ROLU içinde duruyor.
+  turYonetimi: 'Tur Yönetimi',
 }
 
 /**

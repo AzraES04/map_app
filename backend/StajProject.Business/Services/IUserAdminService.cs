@@ -56,4 +56,25 @@ public interface IUserAdminService
     /// Rolden gelen yetkiler bu listeye yazılmaz — zaten geçerliler.
     /// </summary>
     Task<UserPermissionsDto?> SetPermissionsAsync(int id, SetUserPermissionsDto dto);
+
+    // ---------- Admin-bağlı kullanıcılar (davet kodu) ----------
+
+    /// <summary>
+    /// Giriş yapan kullanıcının davet kodu. YOKSA ÜRETİR (idempotent):
+    /// ilk çağrıda oluşur, sonraki çağrılarda AYNI kod döner.
+    ///
+    /// Uç [YetkiGerekli(Yetkiler.KullaniciYonetimi)] altında — yalnızca bu
+    /// yetkiye sahip kullanıcılar davet kodu üretebiliyor; kod, yeni hesabı
+    /// otomatik onaylattığı için bu yetki sınırı bilinçli.
+    /// </summary>
+    Task<DavetKoduDto> DavetKodumAsync();
+
+    /// <summary>
+    /// Kodu YENİLER — eski kod artık kimseyi bu admine bağlamıyor.
+    ///
+    /// Kod yanlışlıkla paylaşıldığında (ekran görüntüsü, yanlış kişiye
+    /// mesaj) geri alma yolu bu; zaten kayıt olmuş kullanıcılar etkilenmez,
+    /// yalnızca YENİ kayıtlar eski kodu artık kullanamaz.
+    /// </summary>
+    Task<DavetKoduDto> DavetKoduYenileAsync();
 }

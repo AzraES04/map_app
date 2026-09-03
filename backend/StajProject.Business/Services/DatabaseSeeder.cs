@@ -106,6 +106,8 @@ public class DatabaseSeeder : IDatabaseSeeder
             Auth.Yetkiler.KullaniciYonetimi, Auth.Yetkiler.RolYonetimi,
             Auth.Yetkiler.CografiYetkiTanimlama,
             Auth.Yetkiler.PoiEkleme, Auth.Yetkiler.PoiYonetimi,
+            Auth.Yetkiler.SimulasyonBaslatma,
+            Auth.Yetkiler.TurYonetimi,
         }),
         (OperatorRolu, "Haritada çizim ve POI girişi yapar; kendi kayıtlarını düzenler ve siler.", new[]
         {
@@ -114,6 +116,13 @@ public class DatabaseSeeder : IDatabaseSeeder
             // Ödev 12: POI ekleme aracı OPERATÖRÜN işi. Kategori ağacına
             // dokunamaz — o "POI Yönetimi" yetkisiyle Admin'de.
             Auth.Yetkiler.PoiEkleme,
+
+            // Ödev 19: "Sadece Admin ve Operatör başlatabilsin."
+            Auth.Yetkiler.SimulasyonBaslatma,
+
+            // Tur modülü: rehberlik (tur açma, oturum başlatma) operatörün işi.
+            // Katılımcı olmak yetki istemiyor.
+            Auth.Yetkiler.TurYonetimi,
         }),
         (KullaniciRolu, "Yalnızca görüntüler; çizim ve POI girişi yapamaz.", new[]
         {
@@ -183,7 +192,18 @@ public class DatabaseSeeder : IDatabaseSeeder
     {
         // Ödev 12: POI girişi operatörün işi. Kategori ağacı ("POI Yönetimi")
         // bilinçli olarak verilmiyor — o Admin'de kalıyor.
-        (OperatorRolu, new[] { Auth.Yetkiler.PoiEkleme }),
+        //
+        // Ödev 19'un simülasyon yetkisi de burada: ÇALIŞAN bir kurulumda
+        // "Operatör" rolü zaten var olduğu için RolleriEkleAsync ona
+        // dokunmuyordu ve yeni modül sessizce erişilemez kalırdı.
+        // (Admin'e ayrıca gerek yok: AdminRolunuTamamlaAsync sistemde tanımlı
+        // her yetkiyi Admin'e zaten ekliyor.)
+        (OperatorRolu, new[]
+        {
+            Auth.Yetkiler.PoiEkleme,
+            Auth.Yetkiler.SimulasyonBaslatma,
+            Auth.Yetkiler.TurYonetimi,
+        }),
     };
 
     // ---------- Ödev 12: başlangıç POI kategorileri ----------

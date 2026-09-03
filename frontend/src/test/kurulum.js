@@ -21,3 +21,23 @@ import { afterEach } from 'vitest'
 // DOM'u da görür ve getByRole "birden çok eşleşme" diye patlar — ya da daha
 // kötüsü, yanlış elemanı bulup sessizce geçer.
 afterEach(() => cleanup())
+
+// ---------------------------------------------------------------------------
+//  ResizeObserver — jsdom'da YOK, OpenLayers'ta ŞART.
+//
+//  Misafir haritası (MisafirHarita.jsx) gerçek bir OpenLayers haritası kuruyor
+//  ve OL, kapsayıcının boyut değişimini ResizeObserver ile izliyor. jsdom bu
+//  API'yi uygulamıyor; polyfill olmadan haritayı çizen HER test
+//  "ReferenceError: ResizeObserver is not defined" ile düşüyor.
+//
+//  Boş bir uygulama yeterli: jsdom'da düzen hesabı zaten yok, yani gerçek bir
+//  boyut değişimi hiç olmuyor. Testlerin sorduğu şey haritanın ölçüsü değil,
+//  sayfanın çizilip çizilmediği.
+// ---------------------------------------------------------------------------
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}

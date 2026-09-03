@@ -3,6 +3,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using StajProject.DataAccess.Context;
 using StajProject.DataAccess.GeoServer;
+using StajProject.DataAccess.Google;
+using StajProject.DataAccess.Yerel;
 using StajProject.DataAccess.Osrm;
 using StajProject.DataAccess.Repositories;
 using StajProject.Entities;
@@ -67,6 +69,10 @@ public static class DataAccessRegistration
         // ihtiyacın ikisini de karşılayamıyor (gerekçe: IUlasimRepository).
         services.AddScoped<IUlasimRepository, UlasimRepository>();
 
+        // Tur modülü: şablon + canlı oturum. Tek depo çünkü ikisi hiçbir
+        // zaman ayrı okunmuyor (bkz. ITurRepository).
+        services.AddScoped<ITurRepository, TurRepository>();
+
         // Ödev 13 / Madde 1: POI artık GeoServer'da bir katman (vw_poi) ve
         // okuması oradan yapılıyor. Kayıt AddGeoServer içinde: çizim
         // tablolarındaki gibi Enabled bayrağına göre iki koldan biri seçiliyor.
@@ -74,6 +80,7 @@ public static class DataAccessRegistration
         // Ödev 8: GeoServer bağlantısı ve okuma yolunun seçimi
         AddGeoServer(services, configuration);
         AddOsrm(services, configuration);
+        AddGoogleMaps(services, configuration);
 
         return services;   // zincirlenebilsin diye
     }
@@ -96,6 +103,65 @@ public static class DataAccessRegistration
     /// sorusunu soruyor ve kayıt olmasaydı servis çözümlenemez, uygulama
     /// açılışta patlardı.
     /// </summary>
+    /// <summary>
+    /// Google Maps Platform — tur önerisinin mekan (Places) ve rota
+    /// (Directions) kaynağı.
+    ///
+    /// OSRM/GeoServer kayıtlarıyla aynı desen (ayarlar tekil, istemciler typed
+    /// client) ama iki fark var, ikisi de KOTA yüzünden:
+    ///
+    ///   • <see cref="IIstekButcesi"/> SINGLETON: günlük istek sayacı isteğe
+    ///     değil uygulamaya ait. Scoped olsaydı her HTTP isteğinde sıfırlanır,
+    ///     hiçbir şeyi sınırlamazdı.
+    ///   • <c>AddMemoryCache</c>: arama ve rota cevapları önbellekleniyor.
+    ///     Aynı şehir/tema için gelen ikinci istek Google'a hiç gitmiyor.
+    ///
+    /// Enabled kapalı ya da anahtar boş olsa bile kayıt yapılıyor: servis
+    /// çözümlenemezse uygulama açılışta patlardı ve "yapılandırılmamış" diye
+    /// anlamlı bir mesaj vermek de imkânsız olurdu.
+    /// </summary>
+    private static void AddGoogleMaps(IServiceCollection services, IConfiguration configuration)
+    {
+        var ayarlar = configuration.GetSection("GoogleMaps").Get<GoogleMapsSettings>()
+                      ?? new GoogleMapsSettings();
+
+        var yerel = configuration.GetSection("YerelTurKaynagi").Get<YerelKaynakSettings>()
+                    ?? new YerelKaynakSettings();
+
+        services.AddSingleton(ayarlar);
+        services.AddSingleton(yerel);
+        services.AddMemoryCache();
+        services.AddSingleton<IIstekButcesi, GunlukIstekButcesi>();
+
+        // ---- KAYNAK SEÇİMİ: tek karar, iki kol ----
+        //
+        // Anahtar girilmişse Google, girilmemişse OpenStreetMap + OSRM.
+        // Seçim BURADA, tek yerde yapılıyor; iş katmanı hangi kolun bağlı
+        // olduğunu bilmiyor, yalnızca IPlacesClient / IDirectionsClient
+        // arayüzlerini çağırıyor. Ödev 8'deki GeoServer/PostGIS anahtarının
+        // aynı fikri — "bağımlılık tersine çevirme"nin somut faydası.
+        //
+        // Anahtarsız kolun eksiği kullanıcıya sunucudan söyleniyor: OSM'de
+        // kullanıcı puanı olmadığı için 4.5+ süzgeci uygulanamıyor
+        // (bkz. IPlacesClient.PuanVerisiVar).
+        // OSM istemcisi HER İKİ KOLDA da kayıtlı (somut tiple): turistik POI
+        // içe aktarımı Google anahtarı olsa bile OSM'den okuyor — hem ücretsiz
+        // hem de lisansı veriyi saklamaya izin veren tek kaynak
+        // (bkz. TuristikPoiAktarici).
+        services.AddHttpClient<IOsmPlacesClient, OsmPlacesClient>();
+
+        if (ayarlar.KullanimaHazir)
+        {
+            services.AddHttpClient<IPlacesClient, PlacesClient>();
+            services.AddHttpClient<IDirectionsClient, DirectionsClient>();
+        }
+        else
+        {
+            services.AddScoped<IPlacesClient>(sp => sp.GetRequiredService<IOsmPlacesClient>());
+            services.AddHttpClient<IDirectionsClient, OsrmDirectionsClient>();
+        }
+    }
+
     private static void AddOsrm(IServiceCollection services, IConfiguration configuration)
     {
         var ayarlar = configuration.GetSection("Osrm").Get<OsrmSettings>()

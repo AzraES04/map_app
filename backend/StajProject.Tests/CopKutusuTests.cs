@@ -351,7 +351,83 @@ public class CopKutusuTests
     }
 
     // ==================================================================
-    //  4) Sorgu filtresi sızıntısı
+    //  4) Kalıcı silme
+    // ==================================================================
+
+    [Fact]
+    public async Task KaliciSilme_yetkisiOlanINCEDENkaldiriyor()
+    {
+        var o = OrtamKur(Yetkiler.KayitSilme);
+        var nokta = await SilinmisNoktaAsync(o.Db, "Kalıcı gidecek");
+
+        Assert.True(await o.Servis.KaliciSilAsync("nokta", nokta.Id));
+
+        // IgnoreQueryFilters ile bile bulunamıyor: geri almanın aksine
+        // (is_deleted=false), kayıt artık HİÇ yok.
+        Assert.Empty(await o.Db.Points.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
+    public async Task KaliciSilme_yetkiYOKSAreddediliyor()
+    {
+        var o = OrtamKur();   // yetkisiz
+        var nokta = await SilinmisNoktaAsync(o.Db);
+
+        await Assert.ThrowsAsync<IsKuraliException>(
+            () => o.Servis.KaliciSilAsync("nokta", nokta.Id));
+
+        // Reddedilen istek kaydı SİLMEMİŞ olmalı.
+        Assert.Single(await o.Db.Points.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
+    public async Task KaliciSilme_HENUZsilinmemisKAYDIkaldirmiyor()
+    {
+        var o = OrtamKur(Yetkiler.KayitSilme);
+
+        o.Db.Points.Add(new PointEntity { Name = "Aktif", Geom = new Point(1, 1) { SRID = 4326 } });
+        await o.Db.SaveChangesAsync();
+        var aktif = await o.Db.Points.IgnoreQueryFilters().FirstAsync();
+
+        // Kalıcı silme yalnızca ÇÖP KUTUSUNDAKİ (zaten soft-deleted) kaydı
+        // hedefliyor — bu ikinci bir kapı: aktif bir kayıt bu yoldan asla
+        // kalıcı silinemez.
+        Assert.False(await o.Servis.KaliciSilAsync("nokta", aktif.Id));
+        Assert.Single(await o.Db.Points.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
+    public async Task KaliciSilme_BAGLIKAYITvarsaANLASILIRmesajlaReddediyor()
+    {
+        var o = OrtamKur(Yetkiler.GuzergahYonetimi);
+        var hat = await SilinmisGuzergahAsync(o.Db, "Bağlı hat");
+
+        // Hat SİLİNMİŞ ama üzerinde hâlâ bir durak var (o da silinmiş
+        // olabilir — önemli olan referansın DURMASI).
+        o.Db.Duraklar.Add(new Durak
+        {
+            Ad = "Bağlı durak",
+            GuzergahId = hat.Id,
+            Geom = new Point(32.85, 39.92) { SRID = 4326 },
+            IsDeleted = true,
+            IsActive = false,
+        });
+        await o.Db.SaveChangesAsync();
+
+        // Ham veritabanı hatası (yabancı anahtar ihlali) yerine anlaşılır
+        // bir mesaj: "önce bağlı kayıtları çözün".
+        var hata = await Assert.ThrowsAsync<IsKuraliException>(
+            () => o.Servis.KaliciSilAsync("guzergah", hat.Id));
+
+        Assert.Contains("bağlı", hata.Message, StringComparison.OrdinalIgnoreCase);
+
+        // Reddedilen istek hattı SİLMEMİŞ olmalı.
+        Assert.NotEmpty(await o.Db.Guzergahlar.IgnoreQueryFilters()
+            .Where(g => g.Id == hat.Id).ToListAsync());
+    }
+
+    // ==================================================================
+    //  5) Sorgu filtresi sızıntısı
     // ==================================================================
 
     [Fact]

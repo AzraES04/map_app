@@ -95,6 +95,28 @@ public class UserDto
 
     /// <summary>Rol + doğrudan yetkilerin BİRLEŞİMİ; kullanıcının gerçek yetki sayısı.</summary>
     public int EffectivePermissionCount { get; set; }
+
+    /// <summary>
+    /// Bu kullanıcının BAĞLI OLDUĞU adminin kullanıcı adı; kendi başına
+    /// kaydolduysa (davet kodu girmediyse) null.
+    /// </summary>
+    public string? ParentAdminUsername { get; set; }
+
+    /// <summary>
+    /// Telefon numarası; girilmemişse null. Tur rehberi olan kullanıcılarda
+    /// bu numara, CANLI turun misafirlerine "Rehberi ara" düğmesi olarak
+    /// açılıyor (bkz. <c>User.PhoneNumber</c>).
+    /// </summary>
+    public string? PhoneNumber { get; set; }
+}
+
+/// <summary>Bir kullanıcının davet kodu ve ona bağlı kaç kişi olduğu.</summary>
+public class DavetKoduDto
+{
+    public string Kod { get; set; } = string.Empty;
+
+    /// <summary>Bu koda kayıt olmuş (ParentAdminId = ben) kullanıcı sayısı.</summary>
+    public int BagliKullaniciSayisi { get; set; }
 }
 
 /// <summary>Yeni kullanıcı isteği.</summary>
@@ -109,6 +131,13 @@ public class UserCreateDto
     public string Password { get; set; } = string.Empty;
 
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// İsteğe bağlı telefon numarası. Biçim doğrulaması yok, yalnızca uzunluk
+    /// sınırı — gerekçe <c>User.PhoneNumber</c> açıklamasında.
+    /// </summary>
+    [MaxLength(32, ErrorMessage = "Telefon numarası en fazla 32 karakter olabilir.")]
+    public string? PhoneNumber { get; set; }
 
     public List<int> RoleIds { get; set; } = new();
 }
@@ -128,6 +157,15 @@ public class UserUpdateDto
     public string? Password { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Telefon numarası. Şifreden FARKLI olarak boş göndermek numarayı
+    /// SİLER: form alanını temizleyip kaydetmek, "artık numaramı paylaşmak
+    /// istemiyorum" demenin doğal yolu. Şifrede aynı davranış hesabı
+    /// kilitlerdi; burada en kötü ihtimalle bir düğme kaybolur.
+    /// </summary>
+    [MaxLength(32, ErrorMessage = "Telefon numarası en fazla 32 karakter olabilir.")]
+    public string? PhoneNumber { get; set; }
 
     public List<int> RoleIds { get; set; } = new();
 }

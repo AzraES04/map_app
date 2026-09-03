@@ -6,6 +6,7 @@ using NetTopologySuite.Geometries;
 using StajProject.Business.Auth;
 using StajProject.Business.DTOs;
 using StajProject.Business.Geo;
+using StajProject.Business.Ulasim;
 using StajProject.Business.Validation;
 using StajProject.DataAccess.Osrm;
 using StajProject.DataAccess.Repositories;
@@ -37,18 +38,33 @@ public class UlasimService : IUlasimService
     /// </summary>
     private readonly IOsrmClient _osrm;
 
+    /// <summary>
+    /// Ödev 19: çalışan simülasyonların defteri (singleton).
+    ///
+    /// Servis onu YALNIZCA besliyor: veritabanından okuduğu hattı bir anlık
+    /// görüntüye çevirip veriyor. Zamanlayıcı ve yayın API katmanında —
+    /// iş katmanının SignalR'dan haberi yok.
+    /// </summary>
+    private readonly ISimulasyonServisi _simulasyon;
+
+    private readonly SimulasyonAyarlari _simulasyonAyarlari;
+
     public UlasimService(
         IUlasimRepository repository,
         ICurrentUserService currentUser,
         IPermissionService permissionService,
         IGeoPermissionService geoPermission,
-        IOsrmClient osrm)
+        IOsrmClient osrm,
+        ISimulasyonServisi simulasyon,
+        SimulasyonAyarlari simulasyonAyarlari)
     {
         _repository = repository;
         _currentUser = currentUser;
         _permissionService = permissionService;
         _geoPermission = geoPermission;
         _osrm = osrm;
+        _simulasyon = simulasyon;
+        _simulasyonAyarlari = simulasyonAyarlari;
     }
 
     // ======================================================================
@@ -978,4 +994,74 @@ public class UlasimService : IUlasimService
             IsActive = durak.IsActive,
         };
     }
+
+    // ======================================================================
+    //  Ödev 19: araç simülasyonu
+    // ======================================================================
+
+    public async Task<SimulasyonDurumDto?> SimulasyonBaslatAsync(int guzergahId)
+    {
+        var guzergah = await _repository.GuzergahGetirAsync(guzergahId);
+        if (guzergah is null)
+        {
+            return null;
+        }
+
+        var duraklar = guzergah.Duraklar
+            .Where(d => !d.IsDeleted)
+            .OrderBy(d => d.Sira)
+            .ToList();
+
+        if (duraklar.Count < SimulasyonAyarlari.EnAzDurak)
+        {
+            throw new IsKuraliException(
+                $"\"{guzergah.Ad}\" hattında en az {SimulasyonAyarlari.EnAzDurak} durak olmalı; "
+                + $"şu an {duraklar.Count} durak var.");
+        }
+
+        // ---- Aracın izleyeceği çizgi ----
+        //
+        // Öncelik KAYITLI ROTADA: yollara oturmuş çizgi, aracı binaların
+        // içinden geçirmiyor. Rota yoksa duraklardan geçen düz çizgiye
+        // düşüyoruz — modül OSRM kapalıyken de gösterilebilmeli
+        // (aynı yedeklenme haritadaki hat çiziminde de var).
+        var yol = guzergah.Rota is not null && guzergah.Rota.Coordinates.Length >= 2
+            ? guzergah.Rota.Coordinates.ToList()
+            : duraklar.Select(d => d.Geom.Coordinate).ToList();
+
+        var kumulatif = SimulasyonMotoru.Kumulatif(yol);
+
+        // Toplam mesafe: OSRM ölçtüyse ONUN metresi kullanılıyor. Yoksa
+        // dereceden kaba bir çevrim yapıyoruz — kuş uçuşu bir çizgide zaten
+        // yaklaşık bir sayı, ama ekranda "0 m" yazmasından iyi.
+        var toplamMetre = guzergah.RotaMesafeMetre
+                          ?? kumulatif[^1] * SimulasyonMotoru.DereceMetre;
+
+        var kaynak = new SimulasyonKaynak
+        {
+            GuzergahId = guzergah.Id,
+            GuzergahAdi = guzergah.Ad,
+            Renk = guzergah.Renk,
+            Yol = yol,
+            // Durakların hat üzerindeki oranı BİR KEZ hesaplanıyor: her tikte
+            // yeniden hesaplasaydık, saniyede iki kez bütün durakları bütün
+            // rota köşelerine izdüşürürdük.
+            Duraklar = duraklar
+                .Select(d => new SimulasyonDurak(
+                    d.Sira,
+                    d.Ad,
+                    SimulasyonMotoru.NoktaninOrani(yol, kumulatif, d.Geom.Coordinate)))
+                .ToList(),
+            ToplamMetre = toplamMetre,
+            ToplamSaniye = _simulasyonAyarlari.SureSaniye,
+            BaslatanKullaniciId = _currentUser.RequireUserId(),
+            BaslatanKullanici = _currentUser.UserName ?? "bilinmiyor",
+        };
+
+        return _simulasyon.Baslat(kaynak);
+    }
+
+    public bool SimulasyonDurdur(int guzergahId) => _simulasyon.Durdur(guzergahId);
+
+    public IReadOnlyList<SimulasyonDurumDto> AktifSimulasyonlar() => _simulasyon.TumDurumlar();
 }

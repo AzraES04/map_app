@@ -77,9 +77,19 @@ export const EN_AZ_ARAMA = 2
  *
  * @param {string} sorgu Kullanıcının yazdığı metin
  * @param {AbortSignal} signal Yeni tuşa basılınca eski isteği iptal etmek için
+ * @param {function} onUnauthorized 401 gelirse çağrılacak
+ * @param {number} [enFazla] İstenen sonuç sayısı. Verilmezse sunucunun
+ *   varsayılanı (8) kullanılır. SONUÇLARI SONRADAN SÜZEN çağıranlar (tur
+ *   düzenlemedeki şehir süzgeci) daha geniş bir aday havuzu istemeli:
+ *   sunucudan gelen 8 kaydın hepsi elenirse liste boş kalır ve kullanıcıya
+ *   arama bozukmuş gibi görünür.
  */
-export const poiAra = (sorgu, signal, onUnauthorized) =>
-  istek(`/api/poi/ara?q=${encodeURIComponent(sorgu)}`, { signal }, onUnauthorized)
+export const poiAra = (sorgu, signal, onUnauthorized, enFazla) =>
+  istek(
+    `/api/poi/ara?q=${encodeURIComponent(sorgu)}${enFazla ? `&enFazla=${enFazla}` : ''}`,
+    { signal },
+    onUnauthorized,
+  )
 
 /**
  * POI stillerinin TANIMLARI: [{ stil, kategoriId, ad, tamYol, renk, sekil }]

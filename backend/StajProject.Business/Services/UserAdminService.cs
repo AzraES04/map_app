@@ -55,6 +55,7 @@ public class UserAdminService : IUserAdminService
         {
             Username = kullaniciAdi,
             IsActive = dto.IsActive,
+            PhoneNumber = TelefonuTemizle(dto.PhoneNumber),
             CreatedAt = DateTime.UtcNow,
         };
         yeni.PasswordHash = _passwordHasher.HashPassword(yeni, dto.Password);
@@ -90,6 +91,7 @@ public class UserAdminService : IUserAdminService
             Id = id,
             Username = kullaniciAdi,
             IsActive = dto.IsActive,
+            PhoneNumber = TelefonuTemizle(dto.PhoneNumber),
             // Şifre boş bırakıldıysa mevcut hash aynen korunur.
             PasswordHash = mevcut.PasswordHash,
         };
@@ -355,6 +357,84 @@ public class UserAdminService : IUserAdminService
                 .ToList(),
             DirectPermissionCount = kullanici.UserPermissions.Count,
             EffectivePermissionCount = etkin.Count,
+            ParentAdminUsername = kullanici.ParentAdmin?.Username,
+            PhoneNumber = kullanici.PhoneNumber,
         };
+    }
+
+    /// <summary>
+    /// Telefon numarasını normalleştirir: kırpar, boşsa <c>null</c> yapar.
+    ///
+    /// Boş dizeyi null'a çevirmek önemli: <c>""</c> saklansaydı "numara var"
+    /// sayılır, misafir ekranında hiçbir yere gitmeyen bir "Rehberi ara"
+    /// düğmesi çıkardı. Bir alanın "boş" olmasının TEK bir gösterimi olmalı.
+    /// </summary>
+    private static string? TelefonuTemizle(string? numara)
+    {
+        var temiz = numara?.Trim();
+        return string.IsNullOrEmpty(temiz) ? null : temiz;
+    }
+
+    // ---------- Admin-bağlı kullanıcılar (davet kodu) ----------
+
+    public async Task<DavetKoduDto> DavetKodumAsync()
+    {
+        var kullanici = await _userRepository.GetByIdAsync(_currentUser.RequireUserId())
+                         ?? throw new IsKuraliException("Kullanıcı bulunamadı.");
+
+        // ZATEN VARSA aynısı dönüyor: her çağrıda yeni kod üretseydik,
+        // panelini bir kez daha açan admin önceki paylaştığı kodu geçersiz
+        // kılmış olurdu — kayıt olmaya çalışan kişi "kod geçersiz" hatası alırdı.
+        var kod = kullanici.InviteCode ?? await UretVeYazAsync(kullanici.Id);
+
+        return new DavetKoduDto
+        {
+            Kod = kod,
+            BagliKullaniciSayisi = await _userRepository.BagliKullaniciSayisiAsync(kullanici.Id),
+        };
+    }
+
+    public async Task<DavetKoduDto> DavetKoduYenileAsync()
+    {
+        var kullaniciId = _currentUser.RequireUserId();
+        var kod = await UretVeYazAsync(kullaniciId);
+
+        return new DavetKoduDto
+        {
+            Kod = kod,
+            BagliKullaniciSayisi = await _userRepository.BagliKullaniciSayisiAsync(kullaniciId),
+        };
+    }
+
+    /// <summary>
+    /// Rastgele, okunması kolay bir kod üretir ve yazar.
+    ///
+    /// Alfabe TurOturumServisi'ndeki katılım koduyla AYNI ("ACDEFGHJKMNPQRTUVWXYZ2346789"):
+    /// karıştırılabilecek harfler (O/0, I/1/L, S/5, B/8) yok — kod telefonda
+    /// okunup elle yazılabilir. 8 haneli: 28^8 ≈ 3×10^11 olasılık.
+    /// </summary>
+    private async Task<string> UretVeYazAsync(int userId)
+    {
+        const string alfabe = "ACDEFGHJKMNPQRTUVWXYZ2346789";
+
+        string kod;
+        User? cakisan;
+
+        do
+        {
+            // stackalloc async metotta kullanılamıyor (preview özelliği);
+            // ısıtmada göz ardı edilebilecek boyutta bir dizi ayırıyoruz.
+            var rastgele = System.Security.Cryptography.RandomNumberGenerator.GetBytes(8);
+            kod = new string(rastgele.Select(b => alfabe[b % alfabe.Length]).ToArray());
+
+            // ÇAKIŞMA İHTİMALİ ÇOK DÜŞÜK ama sıfır değil; benzersizliği
+            // veritabanındaki kısmi index de garanti ediyor, burada
+            // yalnızca üretim sırasında bir yeniden deneme payı.
+            cakisan = await _userRepository.GetByInviteCodeAsync(kod);
+        }
+        while (cakisan is not null);
+
+        await _userRepository.InviteCodeYazAsync(userId, kod);
+        return kod;
     }
 }

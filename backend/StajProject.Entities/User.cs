@@ -92,4 +92,50 @@ public class User : IAuditableEntity
     /// <see cref="UserPermission"/> açıklamasına bak.
     /// </summary>
     public ICollection<UserPermission> UserPermissions { get; set; } = new List<UserPermission>();
+
+    // ---------- Admin-bağlı kullanıcılar (davet kodu) ----------
+
+    /// <summary>
+    /// Bu kullanıcının DAVET KODU — "Kullanıcı Yönetimi" yetkisi olan her
+    /// kullanıcı kendi kodunu üretebilir.
+    ///
+    /// Kayıt formunda bu kod girilirse yeni hesap otomatik olarak bu
+    /// kullanıcının altına bağlanır (bkz. <see cref="ParentAdminId"/>) ve
+    /// manuel onay beklemeden aktif olur — admin kodu paylaşarak zaten
+    /// vouch etmiş oluyor.
+    ///
+    /// Yetkisi olmayan kullanıcıda null: davet edemeyen birinin kodu olmaz.
+    /// </summary>
+    public string? InviteCode { get; set; }
+
+    /// <summary>
+    /// Bu kullanıcının BAĞLI OLDUĞU admin — kayıt sırasında davet koduyla
+    /// atanır. Kendi başına kaydolan (kod girmeyen) kullanıcıda null.
+    ///
+    /// Kendine referans (self-FK), CASCADE DEĞİL RESTRICT: üst kullanıcı
+    /// silinirse (soft delete) altındakilerin bağı sessizce kopmamalı;
+    /// önce onların taşınması ya da açıkça çözülmesi gerekir.
+    /// </summary>
+    public int? ParentAdminId { get; set; }
+
+    public User? ParentAdmin { get; set; }
+
+    // ---------- İletişim ----------
+
+    /// <summary>
+    /// Kullanıcının telefon numarası. Zorunlu DEĞİL; girilmezse null.
+    ///
+    /// ---- NEDEN VAR? ----
+    /// Tura katılan misafirin rehbere ulaşabilmesi için. Uygulama içinde
+    /// mesajlaşma yok ve olması da gerekmiyor: grup ayrıldığında insanın
+    /// istediği şey telefonla aramak, bildirim beklemek değil.
+    ///
+    /// ---- KİME GÖRÜNÜR? ----
+    /// Yalnızca CANLI bir turun misafirlerine ve yalnızca REHBERİNKİ
+    /// (bkz. <c>MisafirTurDto.GuidePhone</c>). Numara girmek isteğe bağlı
+    /// olduğu için rehber bu paylaşımı boş bırakarak kapatabiliyor —
+    /// ayrı bir "numaramı paylaş" anahtarı eklemek, boş alanın zaten
+    /// söylediği şeyi ikinci kez sormak olurdu.
+    /// </summary>
+    public string? PhoneNumber { get; set; }
 }

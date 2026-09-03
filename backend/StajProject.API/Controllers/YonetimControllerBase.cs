@@ -46,6 +46,17 @@ public abstract class YonetimControllerBase : ControllerBase
             _logger.LogWarning(ex, "İş kuralı ihlali");
             return BadRequest(new { message = ex.Message });
         }
+        catch (DisServisException ex)
+        {
+            // Dış bir servis (Google Maps, OSRM…) yapılandırılmamış ya da cevap
+            // vermiyor. 500 demek yanıltıcı olurdu ("bizim kodumuz çöktü");
+            // doğrusu 503: geçici, sonra tekrar denenebilir. Mesaj istemciye
+            // gösteriliyor çünkü eyleme dönüştürülebilir yazılıyor
+            // (GeoServerErisimException'daki kararın aynısı).
+            _logger.LogError(ex, "Dış servis kullanılamıyor");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { message = ex.Message });
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Beklenmeyen hata");
@@ -70,6 +81,12 @@ public abstract class YonetimControllerBase : ControllerBase
         {
             _logger.LogWarning(ex, "İş kuralı ihlali");
             return BadRequest(new { message = ex.Message });
+        }
+        catch (DisServisException ex)
+        {
+            _logger.LogError(ex, "Dış servis kullanılamıyor");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { message = ex.Message });
         }
         catch (Exception ex)
         {

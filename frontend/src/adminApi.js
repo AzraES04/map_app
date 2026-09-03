@@ -190,6 +190,21 @@ export function kullaniciOnayla(id, onUnauthorized) {
 }
 
 /**
+ * Giriş yapan kullanıcının DAVET KODU — yoksa sunucu üretir.
+ *
+ * Kod, kayıt formuna yazılınca yeni hesabı bu kullanıcıya bağlıyor ve onay
+ * beklemeden aktif ediyor.
+ */
+export function davetKodum(onUnauthorized) {
+  return istek('/api/admin/users/davet-kodu', {}, onUnauthorized)
+}
+
+/** Kodu yeniler — eski kod artık kimseyi bu admine bağlamaz. */
+export function davetKoduYenile(onUnauthorized) {
+  return istek('/api/admin/users/davet-kodu/yenile', { method: 'POST' }, onUnauthorized)
+}
+
+/**
  * Yetki alanı olarak seçilebilecek KAYITLI poligonlar (Ödev 11).
  * Sahibi kim olursa olsun hepsi geliyor: yönetici herhangi bir alanı
  * referans alabilmeli.
@@ -251,3 +266,12 @@ export const copKutusu = (onUnauthorized) =>
  */
 export const copGeriAl = (tur, id, onUnauthorized) =>
   istek(`/api/cop/${tur}/${id}/geri-al`, { method: 'POST' }, onUnauthorized)
+
+/**
+ * Bir kaydı VERİTABANINDAN TAMAMEN SİLER — geri alma yok.
+ *
+ * `geriAlinabilir` alanı bu düğme için de geçerli: kalıcı silme aynı
+ * yetkiyi istiyor (silen yetki neyse, kalıcı silmek de onu istiyor).
+ */
+export const copKaliciSil = (tur, id, onUnauthorized) =>
+  istek(`/api/cop/${tur}/${id}`, { method: 'DELETE' }, onUnauthorized)

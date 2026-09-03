@@ -62,6 +62,18 @@ export const YONETIM_EKRANLARI = [
     ikon: 'guzergah',
   },
   {
+    // HAZIR TURLAR ve canlı gruplar.
+    //
+    // Kaydedilen turlar sunucuda duruyordu ama hiçbir yerde listelenmiyordu:
+    // bir turu ikinci kez kullanmanın yolu yoktu, her grup için baştan öneri
+    // üretmek gerekiyordu. Gerekçenin tamamı AdminTur.jsx başlığında.
+    yol: '/admin/tur',
+    baslik: 'Tur Yönetimi',
+    altyazi: 'Hazır turlar / Canlı gruplar',
+    yetki: YETKILER.turYonetimi,
+    ikon: 'tur',
+  },
+  {
     // Çöp kutusu — silinen HER şey (nokta, çizgi, poligon, POI, kategori,
     // durak, güzergah, kullanıcı, rol) burada duruyor ve geri alınabiliyor.
     //

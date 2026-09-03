@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Login from './pages/Login.jsx'
 import MapPage from './pages/MapPage.jsx'
 import AdminLayout from './pages/AdminLayout.jsx'
@@ -6,13 +6,30 @@ import AdminUsers from './pages/AdminUsers.jsx'
 import AdminRoles from './pages/AdminRoles.jsx'
 import AdminPoi from './pages/AdminPoi.jsx'
 import AdminGuzergah from './pages/AdminGuzergah.jsx'
+import AdminTur from './pages/AdminTur.jsx'
 import Guvenlik from './pages/Guvenlik.jsx'
 import CopKutusu from './pages/CopKutusu.jsx'
+import TurMisafir from './pages/TurMisafir.jsx'
 import { isAuthenticated } from './auth'
 
-// Korumalı rota: geçerli token yoksa login'e yönlendirir
+// Korumalı rota: geçerli token yoksa login'e yönlendirir.
+//
+// HEDEF ADRES TAŞINIYOR (`state.hedef`). Sebebi paylaşılan tur bağlantısı:
+// gruba gönderilen /tur/K7QF2M adresini açan kişi çoğu zaman GİRİŞ YAPMAMIŞ
+// oluyor. Hedefi taşımasaydık giriş sonrası haritaya düşer, tura hiç
+// katılmazdı — ve bunu fark etmesinin bir yolu da olmazdı.
 function RequireAuth({ children }) {
-  return isAuthenticated() ? children : <Navigate to="/login" replace />
+  const location = useLocation()
+
+  if (isAuthenticated()) return children
+
+  return (
+    <Navigate
+      to="/login"
+      replace
+      state={{ hedef: location.pathname + location.search }}
+    />
+  )
 }
 
 export default function App() {
@@ -39,6 +56,20 @@ export default function App() {
           path="/cop"
           element={<RequireAuth><CopKutusu /></RequireAuth>}
         />
+        {/* ---------- MİSAFİR TUR EKRANI ----------
+            RequireAuth ALTINDA DEĞİL — ve bu, düzeltilen hatanın kendisi.
+
+            Önceki sürümde bu rota giriş gerektiriyordu: paylaşılan bağlantıya
+            tıklayan kişi önce login ekranına düşüyor, giriş yaparsa da
+            haritanın tamamına yönlendiriliyordu. Kullanıcının söylediği gibi
+            "kayıt yapmadan giriş yapmadan sadece verilen kod kullanılarak
+            misafir olarak" turu görebilmesi gerekiyor.
+
+            Ekran salt okuma ve kendi başına duruyor; arkasındaki uç da
+            kimliksiz ama eleyerek kurulmuş (bkz. MisafirTurDto). */}
+        <Route path="/tur" element={<TurMisafir />} />
+        <Route path="/tur/:kod" element={<TurMisafir />} />
+
         <Route
           path="/map"
           element={
@@ -77,6 +108,8 @@ export default function App() {
           <Route path="poi" element={<AdminPoi />} />
           {/* Ödev 16: güzergah tanımı + durakların sürükle-bırak sıralaması */}
           <Route path="guzergah" element={<AdminGuzergah />} />
+          {/* Hazır turlar: kaydedilmiş turu her grup için yeniden başlatma */}
+          <Route path="tur" element={<AdminTur />} />
         </Route>
 
         {/* Kök adres: giriş yapılmışsa haritaya, yapılmamışsa login'e */}

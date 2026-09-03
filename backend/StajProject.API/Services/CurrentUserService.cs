@@ -38,6 +38,26 @@ public class CurrentUserService : ICurrentUserService
         }
     }
 
+    /// <summary>
+    /// JWT'deki "unique_name" claim'i. ASP.NET onu <see cref="ClaimTypes.Name"/>
+    /// olarak eşliyor; eşleme davranışı değişirse diye ham adı da deniyoruz
+    /// (UserId'deki aynı ihtiyat).
+    /// </summary>
+    public string? UserName
+    {
+        get
+        {
+            var kullanici = _accessor.HttpContext?.User;
+            if (kullanici?.Identity?.IsAuthenticated != true)
+            {
+                return null;
+            }
+
+            return kullanici.FindFirst(ClaimTypes.Name)?.Value
+                   ?? kullanici.FindFirst(JwtRegisteredClaimNames.UniqueName)?.Value;
+        }
+    }
+
     public int RequireUserId()
         => UserId ?? throw new WktFormatException("Bu işlem için giriş yapmış olmanız gerekiyor.");
 }

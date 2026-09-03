@@ -103,4 +103,41 @@ public class CopKutusuController : ControllerBase
                 new { message = "Kayıt geri alınamadı." });
         }
     }
+
+    /// <summary>
+    /// Bir kaydı VERİTABANINDAN TAMAMEN SİLER — geri alma yok.
+    ///
+    /// DELETE, çünkü uç geri dönüşü olmayan bir işlem yapıyor. Arayüz bunu
+    /// çağırmadan önce kullanıcıya açıkça sormalı ("bu işlem geri
+    /// alınamaz") — sunucu tarafında ek bir onay adımı yok, çünkü çöp
+    /// kutusuna düşmüş bir kayıt zaten bir kez "sil" denmiş bir kayıt.
+    /// </summary>
+    [HttpDelete("{tur}/{id:int}")]
+    public async Task<IActionResult> KaliciSil(string tur, int id)
+    {
+        try
+        {
+            if (!await _service.KaliciSilAsync(tur, id))
+            {
+                return NotFound(new
+                {
+                    message = "Kayıt bulunamadı ya da henüz silinmemiş (önce çöp kutusuna düşmesi gerekir).",
+                });
+            }
+
+            return NoContent();
+        }
+        catch (IsKuraliException ex)
+        {
+            // Yetki yok, tür tanınmıyor ya da başka kayıtlar hâlâ bağlı.
+            _logger.LogWarning(ex, "Kalıcı silme reddedildi: {Tur}/{Id}", tur, id);
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Kalıcı silme sırasında beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "Kayıt kalıcı silinemedi." });
+        }
+    }
 }

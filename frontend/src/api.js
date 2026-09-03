@@ -123,6 +123,29 @@ export async function konumAnalizi(istek, onUnauthorized) {
 }
 
 /**
+ * POST /api/analysis/erisilebilirlik — TOPLU TAŞIMA ERİŞİLEBİLİRLİK ANALİZİ.
+ *
+ * Konum Analizi'yle AYNI cevap biçimi (bir skor ızgarası) ama farklı bir
+ * soruya bakıyor: "buradan en yakın durağa kaç metre var?" Hedef bölge
+ * seçimi de aynı iki yoldan biri (wkt / ilPlakalari).
+ *
+ * @param {{wkt?: string, ilPlakalari?: number[], yalnizcaAktif?: boolean}} istek
+ */
+export async function erisilebilirlikAnalizi(istek, onUnauthorized) {
+  const res = await authFetch(
+    '/api/analysis/erisilebilirlik',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(istek),
+    },
+    onUnauthorized,
+  )
+  if (!res.ok) throw await apiHatasi(res)
+  return res.json()
+}
+
+/**
  * GET /api/geoserver/durum — veri kaynağının durumu (Ödev 8).
  *
  * Harita paneli bunu açılışta bir kez okur: "Veri kaynağı: GeoServer WFS"

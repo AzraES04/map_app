@@ -33,6 +33,16 @@ export default defineConfig({
         target: 'http://localhost:5000',
         changeOrigin: true,
       },
+
+      // Ödev 19: SignalR kanalı. `ws: true` ŞART — bu yol WebSocket'e
+      // yükseltiliyor ve vekil bunu bilmezse el sıkışma 400 ile düşer.
+      // (Yükseltme başarısız olsaydı SignalR sessizce long-polling'e
+      // düşerdi; çalışır ama her mesaj için yeni HTTP isteği demek.)
+      '/hubs': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })

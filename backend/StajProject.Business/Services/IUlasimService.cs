@@ -99,4 +99,35 @@ public interface IUlasimService
     /// durağı / OSRM kapalı / tek makul yol var — üçü de farklı durumlar).
     /// </summary>
     Task<RotaAlternatifleriDto?> DurakAlternatifleriAsync(int durakId);
+
+    // ---------- Ödev 19: araç simülasyonu ----------
+
+    /// <summary>
+    /// Bir güzergahta araç simülasyonunu başlatır (Ödev 19 / Madde 1).
+    ///
+    /// "Simülasyon Başlatma" yetkisi ister (uçta kontrol ediliyor).
+    /// Güzergah yoksa null; iki duraktan azsa iş kuralı hatası.
+    ///
+    /// Araç, hattın KAYITLI ROTASINI izliyor; rota yoksa duraklardan geçen
+    /// düz çizgiyi. Simülasyonu OSRM'e bağlamadık: rota motoru kapalıyken de
+    /// modülün gösterilebilir olması gerekiyor.
+    /// </summary>
+    Task<SimulasyonDurumDto?> SimulasyonBaslatAsync(int guzergahId);
+
+    /// <summary>
+    /// Simülasyonu durdurur. Çalışan simülasyon yoksa false.
+    /// Başlatmakla aynı yetkiyi ister — durdurmak da bir MÜDAHALEDİR ve
+    /// takipçilerin ekranındaki aracı kaldırır.
+    /// </summary>
+    bool SimulasyonDurdur(int guzergahId);
+
+    /// <summary>
+    /// Şu an çalışan bütün simülasyonlar.
+    ///
+    /// Haritayı YENİ AÇAN istemci için: SignalR yalnızca bundan SONRAKİ
+    /// güncellemeleri gönderir, o an yolda olan araçları bilmez. Bu uç
+    /// olmasaydı, kullanıcı sayfayı yenilediğinde çalışan simülasyon
+    /// bir sonraki tike kadar görünmez olurdu.
+    /// </summary>
+    IReadOnlyList<SimulasyonDurumDto> AktifSimulasyonlar();
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Map from 'ol/Map'
 import View from 'ol/View'
@@ -31,13 +31,21 @@ import {
 } from '../auth'
 import { yerAra, yeriCoz } from '../geocode'
 import Dunya from '../Dunya'
+import Yildizlar from '../Yildizlar'
+import { useTurSimulasyonu } from '../useTurSimulasyonu'
+import TurSimulasyonKontrolu from '../TurSimulasyonKontrolu.jsx'
+import MapBot from '../MapBot.jsx'
+import {
+  poidenDurak, duragiEkle, duragiCikar, duragiTasi, rotaHesapGovdesi,
+  turMerkezi, sehirIcindekiler,
+} from '../turDuzenleme'
 import {
   DRAW_TYPES, DRAW_TYPE_KEYS, geometryToWkt, wktToFeature, describeGeometry,
   RENK_SECENEKLERI, ANALIZ_RENGI,
 } from '../geo'
 import {
   listele, kaydet, sil, geriAl, guncelle, aktiflikDegistir, kesisimAnalizi,
-  geoServerDurumu, konumAnalizi,
+  geoServerDurumu, konumAnalizi, erisilebilirlikAnalizi,
 } from '../api'
 import {
   wmsKatmaniOlustur, isiHaritasiKatmaniOlustur, ISI_GRADYANI,
@@ -48,6 +56,8 @@ import { izgaraKaynagiOlustur, uygunlukKatmaniOlustur, uygunlukRengiCss } from '
 import {
   cizgiUzunlugu, okSayisi, okOranlari, okAcisi, soluklastir, rotaOzeti,
 } from '../rotaOklari'
+// Ödev 18 (ek): haritada hattın çizgisine tıklayınca hangi bacağa denk geldi?
+import { bacakBul, alternatifEtiketi } from '../hatBacagi'
 // Ödev 15: kategoriye özgü POI simgeleri (çizim verisi sunucudan geliyor)
 import { ikonHaritasiKur, ikonBul, ikonSvg } from '../poiIkon'
 import { kendiYetkilerim, calismaAlanim, illeriGetir } from '../adminApi'
@@ -65,13 +75,37 @@ import {
   guzergahlariListele, durakEkle as durakEkleIstek, durakSil as durakSilIstek,
   durakGuncelle as durakGuncelleIstek,
   durakAlternatifleri as durakAlternatifleriIstek, rotaOlustur, rotaOnizle,
+  simulasyonBaslat as simulasyonBaslatIstek,
+  simulasyonDurdur as simulasyonDurdurIstek,
+  aktifSimulasyonlar as aktifSimulasyonlarIstek,
 } from '../ulasimApi'
+// Ödev 19: canlı araç konumları — SignalR bağlantısı tek bir modülde
+import {
+  hubaBaglan, konumDinle, guzergahiTakipEt, takibiBirak as takibiBirakIstek,
+  baglantiyiKapat, simulasyonDegisimiDinle,
+} from '../simulasyonHub'
+import { aracIkonu } from '../aracIkonu'
 import { YETKILER, EKLEME_YETKISI } from '../yetkiler'
 // Ödev 16: "Yönetim" düğmesi artık menünün TANIMINA bakıyor
 import { ilkYonetimEkrani } from '../yonetimMenusu'
 import HesapSecici from '../HesapSecici.jsx'
 import TemaDugmesi from '../TemaDugmesi.jsx'
 import KonumAnaliziPaneli from './KonumAnaliziPaneli.jsx'
+import ErisilebilirlikPaneli from './ErisilebilirlikPaneli.jsx'
+// Tur modülü: planlama formu + canlı tur ekranı. İkisi de kendi durumunu
+// turDurumu.js'teki indirgeyicide tutuyor; MapPage yalnızca haritaya çizimi
+// ve panelin açılıp kapanmasını biliyor (KonumAnaliziPaneli ile aynı ayrım).
+import TourBuilder from './TourBuilder.jsx'
+import ActiveTourView from './ActiveTourView.jsx'
+import { ILK_DURUM as TUR_ILK_DURUM, turReducer } from '../turDurumu'
+import {
+  turKaydet, oturumAc, oturumlarim as oturumlarimIstek, turGetir, turBaglantisi,
+  turRotasiHesapla,
+} from '../turApi'
+import { EYLEM as TUR_EYLEM, izlenenOturum } from '../turDurumu'
+import { programUret } from '../turProgrami'
+import { yolTarifiniAc } from '../haritaLinki'
+import { noktaCoz, dakikaMetni, mesafeMetni } from '../turIlerleme'
 import {
   TipIkonu, DuzenleIkonu, SilIkonu, DunyaIkonu, AnalizIkonu, IsiIkonu,
   SaatIkonu, RolIkonu, PoiIkonu, DurakIkonu, GuzergahIkonu,
@@ -167,6 +201,12 @@ const POI_RENGI = '#8e44ad'
 // belirsiz olurdu; üstelik ikisinin yetkisi de farklı (POI Ekleme ↔
 // Durak Ekleme) — ödev notu ulaşım rolünün POI ekleyememesini istiyor.
 const DURAK = 'Durak'
+
+// Ödev 19: haritada tıklanabilen İKİ yeni şey daha var — hattın ÇİZGİSİ
+// (simülasyon düğmeleri onun kartında) ve hareket eden ARAÇ (yüzde bilgisi
+// onun kartında). Popup hangi kartı çizeceğini bu tiplerden anlıyor.
+const GUZERGAH = 'Guzergah'
+const ARAC = 'Arac'
 
 /** Durak formunun başlangıç hâli. */
 const BOS_DURAK_FORMU = { ad: '', guzergahId: '', aciklama: '' }
@@ -599,7 +639,23 @@ function durakStili() {
  * arasında hat kaybolurdu — gerçek metro haritaları da aynı numarayı
  * kullanıyor.
  */
-function guzergahStili() {
+/**
+ * Alternatifler ekrandayken KAYITLI rotanın rengi.
+ *
+ * Nötr gri, bilerek: hattın kendi rengi kullanıcı tarafından seçiliyor ve
+ * turuncu bir hat seçildiğinde kayıtlı rota ile turuncu alternatifler AYNI
+ * renkte görünüyordu — "hangisi şu anki yolum?" sorusu cevapsız kalıyordu.
+ * Hattın rengini soluklaştırmak da yetmez: soluk turuncu yine turuncudur.
+ * Renk ailesinden tamamen çıkmak gerekiyor.
+ *
+ * Böylece karşılaştırma üç ayrı dile oturuyor:
+ *   GRİ    → şu an kayıtlı olan
+ *   TURUNCU kesikli → öneriler
+ *   MAVİ   → seçilen öneriyle hattın tamamı nasıl görünürdü
+ */
+const SOLUK_HAT = 'rgba(148, 163, 173, 0.85)'
+
+export function guzergahStili() {
   const taban = new Style({
     stroke: new Stroke({ color: 'rgba(255,255,255,0.85)', width: 8, lineCap: 'round', lineJoin: 'round' }),
   })
@@ -613,9 +669,23 @@ function guzergahStili() {
     const renk = feature.get('renk') || '#2d7dd2'
     const rotaVar = Boolean(feature.get('rotaVar'))
     const guncel = feature.get('rotaGuncel') !== false
+    // Bu hattın alternatifleri şu an ekranda mı? (bkz. SOLUK_HAT)
+    const soluk = Boolean(feature.get('soluk'))
 
-    hat.getStroke().setColor(guncel ? renk : soluklastir(renk))
-    taban.getStroke().setColor(guncel ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.45)')
+    const cizgiRengi = soluk
+      ? SOLUK_HAT
+      : (guncel ? renk : soluklastir(renk))
+
+    hat.getStroke().setColor(cizgiRengi)
+    taban.getStroke().setColor(
+      soluk ? 'rgba(255,255,255,0.45)' : (guncel ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.45)'),
+    )
+
+    // Kalınlık da HER SEFERİNDE yazılıyor. Stil nesnesi bütün hatlar
+    // arasında PAYLAŞILIYOR; yalnızca soluk dalında değiştirseydik bir
+    // sonraki hat da ince çizilirdi (aynı tuzağın lineDash hâli aşağıda).
+    hat.getStroke().setWidth(soluk ? 3 : 4)
+    taban.getStroke().setWidth(soluk ? 6 : 8)
 
     // lineDash'i açıkça null'a çekmek ŞART: stil nesnesi bütün hatlar
     // arasında PAYLAŞILIYOR, bir önceki feature'dan kalan desen aksi hâlde
@@ -625,12 +695,27 @@ function guzergahStili() {
     // Ödev 17: "Rota yönü harita üzerinde ok işaretleri ile gösterilmelidir."
     // Oklar yalnızca GERÇEK rotada gösteriliyor: düz kuş uçuşu çizgide
     // "yön" göstermek, olmayan bir güzergah hakkında bilgi vermek olurdu.
+    // Renk zaten yukarıda hesaplandı; ikinci parametre `true` çünkü
+    // soluklaştırma bir kez uygulandı, ok bir daha soluklaştırmasın.
     const oklar = rotaVar
-      ? yonOklari(feature.getGeometry(), renk, guncel)
+      ? yonOklari(feature.getGeometry(), cizgiRengi, true)
       : []
 
     return [taban, hat, ...oklar]
   }
+}
+
+/**
+ * Bir hattın kayıtlı rotasını griye çeker / rengine geri döndürür.
+ *
+ * Yalnızca ALTERNATİFLERİ AÇILAN hat soluyor; haritadaki diğer hatlar kendi
+ * renklerinde kalıyor. Hepsini birden soldursaydık kullanıcı "bütün ulaşım
+ * ağı mı değişiyor?" diye düşünürdü — değişen tek şey bir bacak.
+ */
+function hattiSoluklastir(kaynak, guzergahId) {
+  kaynak?.getFeatures().forEach((f) => {
+    f.set('soluk', guzergahId !== null && f.get('guzergahId') === guzergahId)
+  })
 }
 
 /**
@@ -666,6 +751,33 @@ function yonOklari(cizgi, renk, guncel) {
 }
 
 /**
+ * SİMÜLASYON ARACI (Ödev 19 / Madde 1).
+ *
+ * Simge hattın renginde (bkz. aracIkonu.js), ALTINDA da yüzde rozeti var.
+ * Rozet neden simgenin bir parçası değil de metin? Yüzde saniyede iki kez
+ * değişiyor; simgenin içine yazsaydık her güncellemede yeni bir SVG üretip
+ * yeniden yüklemek gerekirdi. Metin stili aynı simgeyi kullanmaya devam
+ * ediyor, yalnızca yazı değişiyor.
+ */
+export function aracStili() {
+  return (feature) => new Style({
+    image: aracIkonu(feature.get('renk') || '#2d7dd2'),
+    text: new Text({
+      text: `%${Math.round(feature.get('yuzde') ?? 0)}`,
+      offsetY: 24,
+      font: '650 12px system-ui, -apple-system, Segoe UI, sans-serif',
+      fill: new Fill({ color: '#f4efe6' }),
+      backgroundFill: new Fill({ color: 'rgba(24, 38, 44, 0.94)' }),
+      backgroundStroke: new Stroke({
+        color: feature.get('renk') || '#2d7dd2',
+        width: 1.5,
+      }),
+      padding: [2, 6, 2, 6],
+    }),
+  })
+}
+
+/**
  * ALTERNATİF ROTA ÇİZGİLERİ (Ödev 18).
  *
  * Üç durum, üç görünüm:
@@ -679,25 +791,68 @@ function yonOklari(cizgi, renk, guncel) {
  * Beyaz taban yalnızca SEÇİLİDE var: üç çizgiye birden taban koymak, hepsi
  * kalınlaşınca haritayı okunmaz hâle getiriyordu.
  */
-function alternatifStili() {
-  const taban = new Style({
-    stroke: new Stroke({ color: 'rgba(255,255,255,0.75)', width: 9, lineCap: 'round' }),
-  })
-
+export function alternatifStili() {
   return (feature) => {
     const secili = feature.get('secili')
+    const vurgulu = feature.get('vurgu')          // fare üzerinde mi?
+    const etiket = feature.get('etiket') || ''
 
-    const cizgi = new Style({
+    // Üç kademe. Seçili olmayan alternatif de KALIN ve DOYGUN: bunlar
+    // tıklanmak için var, "arka planda duran soluk bir iz" değil.
+    const kalinlik = secili ? 7 : (vurgulu ? 6 : 5)
+    const renk = secili
+      ? '#f0a83f'
+      : (vurgulu ? '#f0b45c' : 'rgba(232, 161, 60, 0.88)')
+
+    // Beyaz taban HER ÇİZGİDE var: harita kalabalıklaştığında (bina, yol,
+    // POI) tek başına turuncu bir çizgi zeminde kayboluyor. Taban, çizginin
+    // etrafına ince bir "hava boşluğu" bırakıp onu zeminden koparıyor.
+    const taban = new Style({
       stroke: new Stroke({
-        color: secili ? '#e8a13c' : 'rgba(232, 161, 60, 0.42)',
-        width: secili ? 5 : 3,
-        lineDash: [9, 7],
+        color: secili ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.8)',
+        width: kalinlik + 5,
         lineCap: 'round',
         lineJoin: 'round',
       }),
     })
 
-    return secili ? [taban, cizgi] : [cizgi]
+    const cizgi = new Style({
+      stroke: new Stroke({
+        color: renk,
+        width: kalinlik,
+        // KESİKLİ kalıyorlar: hiçbiri kaydedilmiş değil. Seçilinin kesikleri
+        // daha uzun — "neredeyse gerçek" hissi veriyor ama hâlâ kesikli.
+        lineDash: secili ? [16, 8] : [11, 8],
+        lineCap: 'round',
+        lineJoin: 'round',
+      }),
+    })
+
+    // ---- Etiket: "12 dk", "14 dk (+2)" ----
+    //
+    // Google Haritalar'daki gibi süre doğrudan çizginin üstünde. Listeye
+    // bakmadan hangi çizginin hangi seçenek olduğu anlaşılıyor; çizgiler
+    // uçlarda üst üste bindiği için ORTA NOKTAYA konuyor (en çok ayrıştıkları
+    // yer orası).
+    const geom = feature.getGeometry()
+    const etiketStili = etiket && typeof geom?.getCoordinateAt === 'function'
+      ? new Style({
+        geometry: new PointGeom(geom.getCoordinateAt(0.5)),
+        text: new Text({
+          text: etiket,
+          font: '650 12px system-ui, -apple-system, Segoe UI, sans-serif',
+          fill: new Fill({ color: secili ? '#231806' : '#f4efe6' }),
+          backgroundFill: new Fill({
+            color: secili ? '#f0a83f' : 'rgba(24, 38, 44, 0.94)',
+          }),
+          backgroundStroke: new Stroke({ color: 'rgba(255,255,255,0.85)', width: 1.5 }),
+          padding: [3, 7, 3, 7],
+          overflow: true,
+        }),
+      })
+      : null
+
+    return [taban, cizgi, ...(etiketStili ? [etiketStili] : [])]
   }
 }
 
@@ -728,6 +883,78 @@ function onizlemeStili() {
       }),
     }),
   ]
+}
+
+/**
+ * TUR ÖNERİSİ (rota + numaralı duraklar).
+ *
+ * ---- ÇİZGİ NEDEN ARTIK DÜZ (KESİKLİ DEĞİL)? ----
+ * Önce kesikliydi, gerekçesi "öneri henüz kaydedilmedi" demekti. Ama
+ * kesikli bir çizginin üstüne 11 piksellik numaralı madalyonlar
+ * bindiğinde ortaya çıkan şey bir rota değil, KOPUK PARÇALAR oluyordu:
+ * kullanıcının şikâyeti tam olarak "rotalar birbirine bağlı görünmüyor"
+ * idi. Çizginin ilk işi güzergâhı BİRLEŞTİRMEK; "kaydedilmedi" mesajını
+ * zaten panel veriyor ("Turu Kaydet ve Paylaş" düğmesi orada duruyor).
+ *
+ * Kesikli biçim ise anlamlı olduğu tek yere taşındı: rota yol ağından
+ * hesaplanamadığında çizilen KUŞ UÇUŞU bağlantı (bkz. 'baglanti'
+ * özelliği). Orada kesiklilik gerçek bir şey söylüyor — "bu çizgi bir
+ * yol değil".
+ *
+ * Duraklar numaralı: ekrandaki durak listesi ile harita gözle eşleşsin
+ * (durakStili'ndeki numaranın aynı gerekçesi).
+ */
+function turOnerisiStili() {
+  // GERÇEK ROTA: yol ağına oturmuş, kesintisiz mor çizgi. Altındaki beyaz
+  // kontur uydu/koyu altlıkta da seçilmesini sağlıyor.
+  const rota = [
+    new Style({
+      stroke: new Stroke({ color: 'rgba(255,255,255,0.9)', width: 10, lineCap: 'round' }),
+    }),
+    new Style({
+      stroke: new Stroke({
+        color: '#7b5cd6',
+        width: 5.5,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }),
+    }),
+  ]
+
+  // KUŞ UÇUŞU BAĞLANTI: rota servisi cevap vermediğinde durakları yine de
+  // birbirine bağlıyor — ama İNCE, SOLUK ve KESİKLİ. Gerçek rotayla aynı
+  // görünseydi kullanıcı olmayan bir yolu var sanardı; hiç çizmeseydik
+  // (eski davranış) haritada birbiriyle ilgisiz numaralı noktalar kalırdı.
+  const baglanti = new Style({
+    stroke: new Stroke({
+      color: 'rgba(123, 92, 214, 0.55)',
+      width: 2.5,
+      lineDash: [6, 6],
+      lineCap: 'round',
+    }),
+  })
+
+  const durak = new Style({
+    image: new Circle({
+      radius: 11,
+      fill: new Fill({ color: '#7b5cd6' }),
+      stroke: new Stroke({ color: '#ffffff', width: 2.5 }),
+      declutterMode: 'obstacle',
+    }),
+    text: new Text({
+      font: '700 10px system-ui, -apple-system, "Segoe UI", sans-serif',
+      fill: new Fill({ color: '#ffffff' }),
+      offsetY: 1,
+    }),
+  })
+
+  return (feature) => {
+    if (feature.getGeometry()?.getType() === 'Point') {
+      durak.getText().setText(String(feature.get('sira') ?? ''))
+      return durak
+    }
+    return feature.get('baglanti') ? baglanti : rota
+  }
 }
 
 /** Henüz kaydedilmemiş çizim: kesikli turuncu — "bu geçici" mesajını verir. */
@@ -971,6 +1198,7 @@ export default function MapPage() {
   const konumAlanKaynagiRef = useRef(null)
   const konumAdayKaynagiRef = useRef(null)
   const konumIsiKatmanRef = useRef(null)
+  const erisilebilirlikIsiKatmanRef = useRef(null)
   const izinliAlanRef = useRef(null)    // coğrafi yetki sınırı (Ödev 7)
   // Ödev 16 — ulaşım: durak noktaları ve onlardan türeyen güzergah çizgileri
   const durakKaynagiRef = useRef(null)
@@ -978,6 +1206,26 @@ export default function MapPage() {
   // Katmanın kendisi de lazım: tıklama testi hangi katmanların dikkate
   // alınacağını katman nesnesiyle süzüyor (bkz. kayitKatmanlari).
   const durakKatmanRef = useRef(null)
+  // Hat çizgisinin katmanı AYRI tutuluyor: kayıt katmanlarına eklenmedi
+  // (çizgiye tıklamak bilgi kartı açmıyor, o bir GÖRÜNÜM), ama Ödev 18'in
+  // "haritadan bacak seç" adımı yalnızca bu katmanı sorgulamak zorunda.
+  const guzergahKatmanRef = useRef(null)
+  // Ödev 19: hareket eden araçlar. AYRI katman çünkü bunlar veritabanında
+  // olmayan, saniyede iki kez değişen GEÇİCİ nesneler; hat ve durak
+  // kaynaklarıyla karıştırsaydık her yayında o kaynakları da tazelemek
+  // gerekirdi (ve tıklama testi "bu bir durak mı araç mı?" diye sorardı).
+  const aracKaynagiRef = useRef(null)
+  const aracKatmanRef = useRef(null)
+  // Güzergahların son hâli, tıklama dinleyicisinin okuyabileceği biçimde.
+  // State'i okusaydık dinleyiciyi her veri değişiminde yeniden kurmamız
+  // gerekirdi; ref sayesinde dinleyici kararlı kalıyor.
+  const guzergahlarRef = useRef([])
+
+  // Tur önerisinin haritadaki çizimi (rota + numaralı duraklar).
+  // AYRI kaynak: öneri KAYDEDİLMEMİŞ geçici bir çizim; güzergah kaynağına
+  // koysaydık ekranı temizlemek için gerçek hatları da silmek gerekirdi
+  // (alternatif rota katmanındaki gerekçenin aynısı).
+  const turKaynagiRef = useRef(null)
 
   const poiKaynagiRef = useRef(null)    // POI katmanının kaynağı (Ödev 12)
   const poiKatmanRef = useRef(null)
@@ -1032,6 +1280,44 @@ export default function MapPage() {
   const [konumHata, setKonumHata] = useState(null)
   // Panelde "Haritada çiz" ile belirlenen alanın WKT'si (kaydedilmez).
   const [konumAlanWkt, setKonumAlanWkt] = useState(null)
+
+  // ---- Toplu taşıma erişilebilirlik analizi ----
+  // Konum Analizi'yle AYNI kalıp (açılıp kapanan panel, ayrı bir ısı
+  // katmanı) ama KENDİ state'i: ikisi aynı anda açık kalabilir ve
+  // birbirinin sonucunu haritadan silmemeli.
+  const [erisilebilirlikPaneliAcik, setErisilebilirlikPaneliAcik] = useState(false)
+  const [erisilebilirlikSonuc, setErisilebilirlikSonuc] = useState(null)
+  const [erisilebilirlikYukleniyor, setErisilebilirlikYukleniyor] = useState(false)
+  const [erisilebilirlikHata, setErisilebilirlikHata] = useState(null)
+
+  // ---- Tur modülü ----
+  // Panel, konum analizi paneliyle aynı kalıpta: düğmeyle açılıp kapanıyor.
+  const [turPaneliAcik, setTurPaneliAcik] = useState(false)
+
+  // Sunucudan gelen SON tur önerisi. State'te duruyor çünkü haritaya çizimi
+  // buradan besleniyor; öneri KAYDEDİLMİŞ bir tur değil (id = 0).
+  const [turOnerisi, setTurOnerisi] = useState(null)
+
+  // Öneriyi ÜRETEN istek (başlangıç saati, günlük süre, ulaşım tipi).
+  // Program bu bilgilerden kuruluyor; öneri cevabında yoklar çünkü sunucu
+  // saat planı yapmıyor — duraklar aynı kalırken saat değiştiğinde yeni bir
+  // rota isteği atmanın anlamı yok.
+  const [turIstegi, setTurIstegi] = useState(null)
+
+  // Canlı tur oturumunun durumu (turDurumu.js indirgeyicisi).
+  // ActiveTourView bunu okuyor; oturum yoksa hiçbir şey çizmiyor.
+  const [turDurum, turDispatch] = useReducer(turReducer, TUR_ILK_DURUM)
+
+  // Kaydedilip paylaşıma açılan turun bilgisi: { kod, baglanti }.
+  // Ayrı state çünkü ÖNERİ ile KAYDEDİLMİŞ tur farklı şeyler; öneri
+  // temizlense de paylaşım kutusu ekranda kalmalı (kod hâlâ geçerli).
+  const [turPaylasimi, setTurPaylasimi] = useState(null)
+  // Kaydettikten sonra paylaşım bölümünü göze sokmak için (aşağıya bakınız).
+  const paylasimBolumuRef = useRef(null)
+  const [turKaydediliyor, setTurKaydediliyor] = useState(false)
+  const [turPaylasimHatasi, setTurPaylasimHatasi] = useState(null)
+  const [baglantiKopyalandi, setBaglantiKopyalandi] = useState(false)
+
   // İl listesi — panel ilk açıldığında bir kez indiriliyor (81 satır, geometrisiz).
   const [iller, setIller] = useState([])
   const [illerHatasi, setIllerHatasi] = useState(null)
@@ -1148,6 +1434,8 @@ export default function MapPage() {
 
   /** Alternatif çizgilerinin kaynağı — geçici, kaydedilmemiş öneriler. */
   const alternatifKaynagiRef = useRef(null)
+  /** Aynı katmanın kendisi: tıklama ve FARE ÜZERİNDE testleri onunla süzülüyor. */
+  const alternatifKatmanRef = useRef(null)
 
   /**
    * ÖNİZLEME katmanının kaynağı: seçilen alternatiften geçen HATTIN TAMAMI.
@@ -1178,6 +1466,25 @@ export default function MapPage() {
    */
   const alternatifVeriRef = useRef(null)
 
+  /**
+   * `alternatifleriGetir` fonksiyonunun son hâli.
+   *
+   * Fonksiyonun kendisi dosyanın çok ilerisinde (istek atan eylemlerin
+   * yanında) duruyor; harita tıklaması ise burada kurulan effect'in içinden
+   * onu çağırmak zorunda. Doğrudan çağırsaydık iki seçenek kalırdı: ya
+   * fonksiyonu buraya taşıyıp ilgili kodu dağıtacaktık, ya da effect'i her
+   * render'da yeniden kuracaktık. Ref üçüncü yol: effect kararlı kalıyor,
+   * fonksiyon yerinde duruyor.
+   */
+  const alternatifleriGetirRef = useRef(null)
+
+  /**
+   * `alternatifiUygula`'nın son hâli — haritadaki ÇİFT TIKLAMA bunu çağırıyor.
+   * Gerekçesi `alternatifleriGetirRef` ile aynı: fonksiyon dosyanın ilerisinde,
+   * dinleyici burada ve effect'in kararlı kalması gerekiyor.
+   */
+  const alternatifiUygulaRef = useRef(null)
+
   // Bu iki yardımcı, DURUMUN HEMEN ALTINDA duruyor — dosyanın ilerisindeki
   // diğer alternatif eylemleriyle birlikte değil. Sebebi teknik: ikisi de
   // harita tıklamasını kuran effect'in BAĞIMLILIK DİZİSİNDE geçiyor ve o dizi
@@ -1185,12 +1492,33 @@ export default function MapPage() {
   // ("before initialization" hatası); yazmasaydık de eslint haklı olarak
   // eksik bağımlılık uyarısı verirdi.
 
+  /**
+   * Fare hangi alternatifin üstünde? (stil onu kalınlaştırıp renklendiriyor)
+   *
+   * İKİ YERDEN çağrılıyor: haritada çizginin üstüne gelince ve LİSTEDE
+   * satırın üstüne gelince. İkincisi "listedeki hangi satır haritadaki hangi
+   * çizgi?" sorusunu tıklamadan cevaplıyor.
+   *
+   * Değişiklik yoksa hiçbir şey yazılmıyor: her fare hareketinde
+   * `feature.set` çağırmak katmanı boş yere yeniden çizdirirdi.
+   */
+  const vurguluAlternatifRef = useRef(null)
+  const alternatifVurgula = useCallback((sira) => {
+    if (sira === vurguluAlternatifRef.current) return
+    vurguluAlternatifRef.current = sira
+    alternatifKaynagiRef.current?.getFeatures().forEach((f) => {
+      f.set('vurgu', f.get('alternatifSira') === sira)
+    })
+  }, [])
+
   /** Alternatif çizgilerini ve önizlemeyi haritadan sil. */
   const alternatifleriTemizle = useCallback(() => {
     alternatifKaynagiRef.current?.clear()
     onizlemeKaynagiRef.current?.clear()
+    hattiSoluklastir(guzergahKaynagiRef.current, null)   // hat kendi rengine dönsün
     alternatifVeriRef.current = null
     seciliAlternatifRef.current = 0
+    vurguluAlternatifRef.current = null
     setAlternatifler(null)
     setSeciliAlternatif(0)
     setOnizlemeYukleniyor(false)
@@ -1264,6 +1592,32 @@ export default function MapPage() {
   const [durakForm, setDurakForm] = useState(BOS_DURAK_FORMU)
   const [durakKaydediliyor, setDurakKaydediliyor] = useState(false)
   const [ulasimGorunur, setUlasimGorunur] = useState(true)
+
+  // ---- Ödev 19: araç simülasyonu ----
+  //
+  // guzergahId → son bilinen durum. Düğmelerin hangi hâlde olacağını
+  // ("Başlat" mı "Durdur" mu, "Takip Et" mi "Takibi Bırak" mı) bu belirliyor.
+  const [simulasyonlar, setSimulasyonlar] = useState({})
+
+  // Hangi hatların yayın grubuna katıldık? Takip AÇIKÇA seçiliyor: her
+  // simülasyonu herkese göndermek, on hat çalışırken herkesi on kat
+  // gereksiz mesajla boğardı (ödev de "Takip Et" düğmesi istiyor).
+  const [takipEdilenler, setTakipEdilenler] = useState(() => new Set())
+
+  // İstek uçuşurken düğmeyi kilitlemek için — o an işlenen güzergah id'si.
+  const [simulasyonIsleniyor, setSimulasyonIsleniyor] = useState(null)
+
+  /**
+   * Takip listesinin REF kopyası.
+   *
+   * SignalR dinleyicisi bir kez kuruluyor ve state'in o anki hâlini
+   * kapanışında (closure) hapseder; ref okuyarak her mesajda GÜNCEL listeyi
+   * görüyoruz. Aynı gerekçe alternatifVeriRef'te de yazılı.
+   */
+  const takipEdilenlerRef = useRef(new Set())
+
+  /** Açık popup'ın son hâli — araç kartını yerinde güncellemek için. */
+  const seciliRef = useRef(null)
 
   // Ödev 17: "Katman kontrolü gibi güzergahlar üzerinde de aç/kapat
   // yapılabilsin."
@@ -1549,6 +1903,43 @@ export default function MapPage() {
     setKonumHata(null)
   }, [])
 
+  const erisilebilirlikTemizle = useCallback(() => {
+    erisilebilirlikIsiKatmanRef.current?.setSource(null)
+    erisilebilirlikIsiKatmanRef.current?.setVisible(false)
+    setErisilebilirlikSonuc(null)
+    setErisilebilirlikHata(null)
+  }, [])
+
+  /** Erişilebilirlik analizini çalıştırır ve yüzeyi haritaya basar. */
+  const erisilebilirlikCalistir = useCallback(async (istek) => {
+    setErisilebilirlikYukleniyor(true)
+    setErisilebilirlikHata(null)
+
+    try {
+      const sonuc = await erisilebilirlikAnalizi(istek, goLogin)
+      setErisilebilirlikSonuc(sonuc)
+
+      const kaynak = izgaraKaynagiOlustur(sonuc.izgara)
+      erisilebilirlikIsiKatmanRef.current?.setSource(kaynak)
+      erisilebilirlikIsiKatmanRef.current?.setVisible(Boolean(kaynak))
+
+      if (sonuc.alanWkt) {
+        const alanFeature = wktToFeature(sonuc.alanWkt)
+        if (alanFeature) {
+          mapRef.current?.getView().fit(alanFeature.getGeometry().getExtent(), {
+            padding: [70, 70, 70, 70],
+            duration: 500,
+            easing: easeOut,
+          })
+        }
+      }
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') setErisilebilirlikHata(err.message)
+    } finally {
+      setErisilebilirlikYukleniyor(false)
+    }
+  }, [goLogin])
+
   /**
    * Analizi çalıştırır ve sonucu haritaya basar.
    *
@@ -1651,13 +2042,19 @@ export default function MapPage() {
   }, [])
 
   /** Haritadaki bir geometriye tıklanınca popup'ı aç. */
-  const popupAc = useCallback((feature) => {
+  /**
+   * @param {import('ol/Feature').default} feature Tıklanan şekil
+   * @param {number[]} [konum] Kartın açılacağı yer. Verilmezse geometriden
+   *   türetiliyor. Hat ÇİZGİSİNDE bu fark ediyor: çizginin ortası ekranın
+   *   dışında olabilir, kullanıcı ise tıkladığı yerde kart bekler.
+   */
+  const popupAc = useCallback((feature, konum) => {
     const dto = feature.get('dto')
     const tip = feature.get('tip')
     if (!dto) return
 
     setSecili({ dto, tip, ozet: describeGeometry(feature.getGeometry()) })
-    popupOverlayRef.current?.setPosition(popupKonumu(feature.getGeometry()))
+    popupOverlayRef.current?.setPosition(konum ?? popupKonumu(feature.getGeometry()))
   }, [popupKonumu])
 
   // ------------------------------------------------------------------------
@@ -1890,6 +2287,10 @@ export default function MapPage() {
             hat.setId(`guzergah-${guzergah.id}`)
             hat.set('renk', guzergah.renk)
             hat.set('guzergahId', guzergah.id)          // hat bazlı aç/kapat için
+            // Ödev 19: çizgiye tıklayınca GÜZERGAH kartı açılıyor
+            // (simülasyon düğmeleri orada). popupAc bu iki alanı arıyor.
+            hat.set('tip', GUZERGAH)
+            hat.set('dto', guzergah)
             hat.set('rotaVar', Boolean(rotaCizgisi))    // düz mü, gerçek rota mı
             hat.set('rotaGuncel', guzergah.rotaGuncel !== false)
             guzergahKaynagi.addFeature(hat)
@@ -1897,6 +2298,9 @@ export default function MapPage() {
         })
       }
 
+      // Ref ÖNCE: harita tıklama dinleyicisi state'i değil bunu okuyor
+      // (bkz. guzergahlarRef). İkisi aynı veriyi taşıyor.
+      guzergahlarRef.current = gelen
       setGuzergahlar(gelen)
     } catch (err) {
       if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
@@ -2090,6 +2494,11 @@ export default function MapPage() {
     const konumIsiKatmani = uygunlukKatmaniOlustur()
     konumIsiKatmanRef.current = konumIsiKatmani
 
+    // AYRI bir katman: Konum Analizi ile Erişilebilirlik Analizi aynı anda
+    // açık kalabilir, biri diğerinin yüzeyini haritadan silmemeli.
+    const erisilebilirlikIsiKatmani = uygunlukKatmaniOlustur()
+    erisilebilirlikIsiKatmanRef.current = erisilebilirlikIsiKatmani
+
     // Ödev 16: ulaşım. İki ayrı kaynak çünkü ikisi farklı şeyler:
     // duraklar TIKLANABİLİR noktalar, güzergah çizgisi ise onlardan
     // türeyen bir GÖRÜNÜM — tıklama mantığına hiç girmemeli.
@@ -2099,6 +2508,10 @@ export default function MapPage() {
     const guzergahSource = new VectorSource()
     guzergahKaynagiRef.current = guzergahSource
 
+    // Ödev 19: simülasyon araçları
+    const aracSource = new VectorSource()
+    aracKaynagiRef.current = aracSource
+
     // Ödev 18: alternatif rota önerileri. AYRI kaynak, çünkü bunlar
     // KAYDEDİLMEMİŞ geçici çizimler — hattın gerçek rotasıyla aynı kaynağa
     // koysaydık, ekranı temizlemek için gerçek rotayı da silmek gerekirdi.
@@ -2107,6 +2520,11 @@ export default function MapPage() {
 
     const onizlemeSource = new VectorSource()
     onizlemeKaynagiRef.current = onizlemeSource
+
+    // Tur önerisi: rota çizgisi + numaralı duraklar. Baştan kuruluyor
+    // (sonuç gelince değil) ki katman sırası bir kez belirlensin.
+    const turSource = new VectorSource()
+    turKaynagiRef.current = turSource
 
     // Ödev 12: POI katmanı. Üç çizim katmanından AYRI çünkü ayrı bir tablo,
     // ayrı bir uç ve ayrı bir görünüm. Aynı kaynağa koysaydık "bu nokta
@@ -2164,7 +2582,9 @@ export default function MapPage() {
         poiKatmani,
         // Ödev 16: önce HAT (altta), sonra DURAKLAR (üstte). Ters sırada
         // kalın çizgi durak simgelerinin üzerinden geçer ve numaraları örterdi.
-        new VectorLayer({ source: guzergahSource, style: guzergahStili(), zIndex: 320 }),
+        (guzergahKatmanRef.current = new VectorLayer({
+          source: guzergahSource, style: guzergahStili(), zIndex: 320,
+        })),
 
         // Alternatifler hattın ÜSTÜNDE (325 > 320): kullanıcı onları
         // karşılaştırmak için açtı, mevcut rotanın altında kalırlarsa
@@ -2180,11 +2600,23 @@ export default function MapPage() {
           zIndex: 318,
         }),
 
-        new VectorLayer({
+        (alternatifKatmanRef.current = new VectorLayer({
           source: alternatifSource,
           style: alternatifStili(),
           zIndex: 325,
-        }),
+          // Süre etiketleri birbirinin üstüne binmesin. `declutter` yalnızca
+          // METNİ eliyor, çizgileri değil: iki alternatif dipdibe geçse bile
+          // ikisi de çizilmeye devam ediyor, sadece bir etiket gizleniyor.
+          declutter: 'alternatif-etiketleri',
+        })),
+        // Ödev 19: araç EN ÜSTTE (340 > 330). Durakların altında kalsaydı
+        // tam bir durağa yaklaştığında simgesi durak numarasının arkasına
+        // girer, "araç nerede?" sorusu cevapsız kalırdı.
+        (aracKatmanRef.current = new VectorLayer({
+          source: aracSource,
+          style: aracStili(),
+          zIndex: 340,
+        })),
         (durakKatmanRef.current = new VectorLayer({
           source: durakSource,
           style: durakStili(),
@@ -2193,6 +2625,14 @@ export default function MapPage() {
           declutter: DECLUTTER_GRUBU,
           zIndex: 330,
         })),
+        // Tur önerisi durakların ÜSTÜNDE (335 > 330): kullanıcı öneriyi az
+        // önce istedi, mevcut hat duraklarının altında kalırsa göremezdi.
+        new VectorLayer({
+          source: turSource,
+          style: turOnerisiStili(),
+          declutter: DECLUTTER_GRUBU,
+          zIndex: 335,
+        }),
         new VectorLayer({ source: drawSource, style: taslakStili }),
         // Bulunanlar analiz poligonunun ALTINDA: poligonun kesikli kenarı üstte kalsın
         new VectorLayer({ source: analizBulunanSource, style: analizBulunanStili }),
@@ -2200,6 +2640,11 @@ export default function MapPage() {
         // Ödev 14: uygunluk yüzeyi (zIndex 450, katmanın kendi tanımında),
         // üstünde analiz alanının sınırı ve aday madalyonları.
         konumIsiKatmani,
+        // Erişilebilirlik yüzeyi Konum Analizi'yle AYNI zIndex bandında —
+        // ikisi aynı görsel dili (ısı haritası) konuştuğu için katman
+        // sırasının aynı olması tutarlı; ikisi de açıksa sonuncusu üstte
+        // görünür, kullanıcı hangisiyle çalıştığını zaten biliyor.
+        erisilebilirlikIsiKatmani,
         new VectorLayer({ source: konumAlanSource, style: konumAlanStili, zIndex: 460 }),
         new VectorLayer({ source: konumAdaySource, style: konumAdayStili, zIndex: 470 }),
         new VectorLayer({ source: highlightSource, style: vurguStili }),
@@ -2742,8 +3187,12 @@ export default function MapPage() {
   // Açılışta değil, PANEL AÇILINCA: analiz panelini hiç açmayan bir kullanıcı
   // için bu istek boşuna olurdu. `iller.length` koşulu ikinci açılışta
   // yeniden indirmeyi engelliyor.
+  //
+  // ÜÇ panel de aynı listeye ihtiyaç duyuyor (konum analizi, erişilebilirlik
+  // analizi, tur planlama); ayrı ayrı istek atmıyoruz — `iller.length`
+  // koşulu ikinci ve üçüncü panelde indirmeyi zaten engelliyor.
   useEffect(() => {
-    if (!konumPaneliAcik || iller.length > 0) return
+    if ((!konumPaneliAcik && !erisilebilirlikPaneliAcik && !turPaneliAcik) || iller.length > 0) return
 
     let iptal = false
 
@@ -2754,7 +3203,450 @@ export default function MapPage() {
       })
 
     return () => { iptal = true }
-  }, [konumPaneliAcik, iller.length, goLogin])
+  }, [konumPaneliAcik, erisilebilirlikPaneliAcik, turPaneliAcik, iller.length, goLogin])
+
+  /**
+   * Öneriyi KAYDEDER ve canlı oturum açar — "Turu Paylaş" akışı.
+   *
+   * İki istek arka arkaya: önce şablon (kalıcı, id'li), sonra oturum (katılım
+   * kodu). Tek uçta birleştirmedik çünkü ikisi ayrı kararlar: kullanıcı turu
+   * kaydedip sonra da başlatabilir, ya da kaydedilmiş bir turdan ikinci bir
+   * oturum açabilir.
+   */
+  const turuKaydetVePaylas = useCallback(async () => {
+    if (!turOnerisi || turKaydediliyor) return
+
+    setTurKaydediliyor(true)
+    setTurPaylasimHatasi(null)
+
+    try {
+      const tur = await turKaydet({
+        name: turOnerisi.name,
+        description: turOnerisi.description ?? null,
+        color: turOnerisi.color ?? '#7b5cd6',
+        routeWkt: turOnerisi.routeWkt ?? null,
+        routeDistanceMeters: turOnerisi.routeDistanceMeters ?? null,
+        routeDurationSeconds: turOnerisi.routeDurationSeconds ?? null,
+        waypoints: (turOnerisi.waypoints ?? []).map((durak) => ({
+          name: durak.name,
+          placeId: durak.placeId,
+          poiId: durak.poiId ?? null,
+          venueType: durak.venueType,
+          dwellMinutes: durak.dwellMinutes,
+          wkt: durak.wkt,
+          note: durak.note ?? null,
+        })),
+      }, goLogin)
+
+      const oturum = await oturumAc(tur.id, true, goLogin)
+
+      // Kaydedilen tur ve açılan oturum AYNI eylemlerle duruma giriyor:
+      // ActiveTourView, verinin buradan mı yayından mı geldiğini bilmiyor.
+      turDispatch({ tur: TUR_EYLEM.TUR_KAYDEDILDI, turu: tur })
+      turDispatch({ tur: TUR_EYLEM.OTURUM_GUNCELLENDI, oturum })
+      turDispatch({ tur: TUR_EYLEM.OTURUM_IZLENIYOR, oturumId: oturum.id })
+
+      setTurPaylasimi({ kod: oturum.joinCode, baglanti: turBaglantisi(oturum.joinCode) })
+      setBaglantiKopyalandi(false)
+      bildir('ok', 'Tur kaydedildi ve paylaşıma açıldı.')
+
+      // PAYLAŞIM BÖLÜMÜNE KAYDIR.
+      //
+      // Kullanıcı geri bildirimi: "turu nasıl paylaşacağımızı anlamadım."
+      // Bağlantı üretiliyordu ama panelin AŞAĞISINDA, uzun tur programının
+      // ardında beliriyordu — ekranda görünmeyen bir şeyin var olduğu
+      // anlaşılmıyor. Kaydırma bir sonraki kareye bırakılıyor: bölüm henüz
+      // DOM'a girmedi.
+      requestAnimationFrame(() => {
+        paylasimBolumuRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') setTurPaylasimHatasi(err.message)
+    } finally {
+      setTurKaydediliyor(false)
+    }
+  }, [turOnerisi, turKaydediliyor, goLogin])
+
+  /** Paylaşım bağlantısını panoya kopyalar. */
+  const baglantiyiKopyala = async () => {
+    if (!turPaylasimi?.baglanti) return
+
+    try {
+      await navigator.clipboard.writeText(turPaylasimi.baglanti)
+      setBaglantiKopyalandi(true)
+    } catch {
+      // Pano izni yoksa (http, eski tarayıcı) sessiz kalmıyoruz: bağlantı
+      // zaten ekranda seçilebilir hâlde duruyor.
+      setTurPaylasimHatasi('Pano kullanılamadı; bağlantıyı elle kopyalayın.')
+    }
+  }
+
+  // ------------------------------------------------------------------------
+  //  Açılışta: katıldığım canlı tur var mı?
+  //
+  //  Hem rehber hem katılımcı için gerekli. Katılımcı paylaşılan bağlantıdan
+  //  /tur/:kod ekranında katılıp buraya yönlendiriliyor; oturumu BURADA
+  //  okumasaydık haritada canlı tur ekranı hiç açılmazdı.
+  //
+  //  Oturum listesi durakları TAŞIMIYOR (mesaj küçük kalsın diye), o yüzden
+  //  turun kendisi ayrıca çekiliyor — ActiveTourView mesafe ve süreleri durak
+  //  koordinatlarından hesaplıyor.
+  useEffect(() => {
+    let iptal = false
+
+    oturumlarimIstek(goLogin)
+      .then(async (oturumlar) => {
+        if (iptal || !oturumlar?.length) return
+
+        const oturum = oturumlar[0]
+        const tur = await turGetir(oturum.tourId, goLogin)
+        if (iptal) return
+
+        turDispatch({ tur: TUR_EYLEM.TUR_KAYDEDILDI, turu: tur })
+        turDispatch({ tur: TUR_EYLEM.OTURUM_GUNCELLENDI, oturum })
+        turDispatch({ tur: TUR_EYLEM.OTURUM_IZLENIYOR, oturumId: oturum.id })
+
+        if (oturum.joinCode) {
+          setTurPaylasimi({ kod: oturum.joinCode, baglanti: turBaglantisi(oturum.joinCode) })
+        }
+      })
+      .catch(() => {
+        // Tur modülü kullanılmıyor ya da uç yok: harita bundan etkilenmemeli.
+      })
+
+    return () => { iptal = true }
+  }, [goLogin])
+
+  // ---- ROTA DÜZENLEME (durak ekle / çıkar / taşı) ----
+  const [turDuzenlemeHatasi, setTurDuzenlemeHatasi] = useState(null)
+  const [turRotaHesaplaniyor, setTurRotaHesaplaniyor] = useState(false)
+  const [durakAramaMetni, setDurakAramaMetni] = useState('')
+  const [durakAramaSonuclari, setDurakAramaSonuclari] = useState([])
+
+  /**
+   * Durak listesi değişti: önce EKRANI güncelle, sonra rotayı iste.
+   *
+   * ---- NEDEN ÖNCE EKRAN? ----
+   * Rota isteği ağ üzerinden gidiyor. Cevabı bekleseydik "sil" düğmesine
+   * basan kullanıcı yarım saniye boyunca hiçbir şey olmamış gibi görürdü
+   * ve tekrar basardı. Durak listesi zaten istemcide doğru; eksik olan
+   * yalnızca yolun çizgisi.
+   *
+   * Rota gelemezse durak listesi KORUNUYOR, yalnızca uyarı yazılıyor:
+   * dış servisin geçici aksaklığı kullanıcının düzenlemesini çöpe atmasın
+   * (sunucu tarafı da aynı kararı veriyor, bkz. TurController.RotaHesapla).
+   */
+  const duraklariGuncelle = useCallback(async (yeniDuraklar) => {
+    setTurOnerisi((onceki) => (onceki ? { ...onceki, waypoints: yeniDuraklar } : onceki))
+
+    const govde = rotaHesapGovdesi(yeniDuraklar, turIstegi?.ulasimTipi)
+    if (!govde) {
+      setTurDuzenlemeHatasi('Durakların konumu okunamadığı için rota çizilemedi.')
+      return
+    }
+
+    setTurRotaHesaplaniyor(true)
+    try {
+      const sonuc = await turRotasiHesapla(govde, goLogin)
+
+      setTurOnerisi((onceki) => (onceki ? {
+        ...onceki,
+        routeWkt: sonuc.routeWkt ?? null,
+        routeDistanceMeters: sonuc.routeDistanceMeters ?? null,
+        routeDurationSeconds: sonuc.routeDurationSeconds ?? null,
+      } : onceki))
+
+      setTurDuzenlemeHatasi(sonuc.uyari ?? null)
+    } catch (err) {
+      setTurDuzenlemeHatasi(err.message || 'Rota yeniden hesaplanamadı.')
+    } finally {
+      setTurRotaHesaplaniyor(false)
+    }
+  }, [turIstegi, goLogin])
+
+  /** Ortak sarmalayıcı: saf hesabın hatasını göster, değiştiyse rotayı iste. */
+  const durakIslemi = useCallback((sonuc) => {
+    setTurDuzenlemeHatasi(sonuc.hata)
+    if (!sonuc.hata) duraklariGuncelle(sonuc.duraklar)
+  }, [duraklariGuncelle])
+
+  // Adlar "tur" ön ekli: ulaşım modülünde de bir duragiSil var ve ikisi
+  // farklı şeyler — biri hattın durağını veritabanından siliyor, bu ise
+  // henüz kaydedilmemiş bir öneriden durak çıkarıyor.
+  const turDuragiSil = useCallback((sira) => {
+    durakIslemi(duragiCikar(turOnerisi?.waypoints ?? [], sira))
+  }, [turOnerisi, durakIslemi])
+
+  const turDuragiTasi = useCallback((sira, yon) => {
+    durakIslemi(duragiTasi(turOnerisi?.waypoints ?? [], sira, yon))
+  }, [turOnerisi, durakIslemi])
+
+  const poiyiTuraEkle = useCallback((poi) => {
+    durakIslemi(duragiEkle(turOnerisi?.waypoints ?? [], poidenDurak(poi)))
+    setDurakAramaMetni('')
+    setDurakAramaSonuclari([])
+  }, [turOnerisi, durakIslemi])
+
+  /**
+   * MAP BOT'UN EYLEM DÜĞMELERİ — "Tur Planla'yı aç" gibi.
+   *
+   * ---- NEDEN BURADA, BOTUN İÇİNDE DEĞİL? ----
+   * Panelleri açan state MapPage'in; bot ona erişseydi, bir yardım
+   * penceresi uygulamanın yarısını sürüyor olurdu. Bot yalnızca "kullanıcı
+   * şu eylemi istedi" diyor, karşılığını burası veriyor. Bilinmeyen bir ad
+   * gelirse hiçbir şey olmuyor: bilgi tabanına eylemi yazıp karşılığını
+   * eklemeyi unutmak, çökme değil sessiz bir "yok" olmalı.
+   *
+   * Paneller AÇILIYOR, kapatılmıyor (toggle değil): kullanıcı "aç" yazan
+   * bir düğmeye bastı; panel zaten açıksa onu kapatmak beklentinin tersi.
+   */
+  const mapBotEylemi = useCallback((eylemAdi) => {
+    switch (eylemAdi) {
+      case 'tur-panel':
+        setTurPaneliAcik(true)
+        break
+      case 'konum-analizi':
+        setKonumPaneliAcik(true)
+        break
+      case 'erisilebilirlik':
+        setErisilebilirlikPaneliAcik(true)
+        break
+      case 'poi-hepsi':
+        // Botun anlattığı "Hepsini göster" düğmesiyle AYNI işi yapıyor.
+        setPoiKategoriSecimi(new Set(poiStilleri.map((st) => st.kategoriId)))
+        break
+      case 'cop-kutusu':
+        navigate('/cop')
+        break
+      default:
+        break
+    }
+  }, [poiStilleri, navigate])
+
+  /**
+   * Tura eklenecek POI'yi arar.
+   *
+   * Mevcut POI arama ucu kullanılıyor (/api/poi/ara): turistik aktarımdan
+   * gelen müzeler, anıtlar ve yöresel lezzetler zaten o tabloda. Ayrı bir
+   * "tur için mekan ara" ucu açsaydık aynı veriyi iki yoldan sorardık.
+   */
+  useEffect(() => {
+    const metin = durakAramaMetni.trim()
+
+    if (metin.length < EN_AZ_ARAMA) {
+      setDurakAramaSonuclari([])
+      return undefined
+    }
+
+    // Her tuşta istek atmamak için gecikme; eskisi iptal ediliyor.
+    const kontrol = new AbortController()
+    const zamanlayici = setTimeout(() => {
+      // 25 ADAY isteniyor, 8 GÖSTERİLİYOR — arada şehir süzgeci var.
+      // Varsayılan 8 ile: "müze" araması tabloda önce İstanbul kayıtlarını
+      // buluyordu, şehir süzgeci hepsini eliyordu ve Ankara turunda liste
+      // BOŞ kalıyordu. Kullanıcıya "arama çalışmıyor" gibi görünen buydu;
+      // veri eksikliği değil, elenecek kadar geniş olmayan aday havuzu.
+      poiAra(metin, kontrol.signal, goLogin, 25)
+        .then((liste) => {
+          // ŞEHİR SÜZGECİ: arama ucu bütün tabloyu tarıyor ve tablo iki
+          // şehrin mekanlarını birden taşıyor. Ankara turuna İstanbul'dan
+          // durak eklemek rotayı 350 km uzatırdı (bkz. turDuzenleme.js).
+          const merkez = turMerkezi(turOnerisi?.waypoints)
+          setDurakAramaSonuclari(sehirIcindekiler(liste, merkez).slice(0, 8))
+        })
+        .catch(() => { /* iptal ya da ağ hatası: liste boş kalsın */ })
+    }, 250)
+
+    return () => {
+      clearTimeout(zamanlayici)
+      kontrol.abort()
+    }
+  }, [durakAramaMetni, goLogin, turOnerisi])
+
+  /**
+   * Önerinin GÜN GÜN, SAAT SAAT programı.
+   *
+   * Hesap saf bir modülde (turProgrami.js); burada yalnızca girdiler
+   * toplanıyor. Öneri ya da istek yoksa null — panel o zaman düz durak
+   * listesini gösteriyor.
+   */
+  const turProgrami = useMemo(() => {
+    if (!turOnerisi?.waypoints?.length) return null
+
+    const sure = turIstegi?.sure ?? {}
+
+    return programUret(turOnerisi.waypoints, {
+      baslangicSaati: sure.baslangicSaati ?? '09:00',
+      // Günübirlik turda "günlük saat" alanı boş geliyor; o zaman turun
+      // kendi toplam süresi günün kapasitesi oluyor.
+      gunlukSaat: sure.gunlukSaat ?? Math.max(1, Math.round((sure.toplamDakika ?? 480) / 60)),
+      ulasimTipi: turIstegi?.ulasimTipi ?? 'Yaya',
+      enFazlaGun: sure.birim === 'Gun' ? sure.deger : 1,
+      // GÜNLÜK DURAK SINIRI sunucudan geliyor: adayları seçerken de aynı
+      // sayı kullanılıyor. İstemcide tekrar tanımlasaydık iki taraf
+      // ayrışabilirdi — nitekim bir kez ayrıştı ve 13+1'lik bir program
+      // çıktı (bkz. turProgrami.js).
+      gunlukAzamiDurak: turOnerisi.gunlukAzamiDurak,
+    })
+  }, [turOnerisi, turIstegi])
+
+  /**
+   * SİMÜLE EDİLECEK TUR.
+   *
+   * Öncelik TAKİP EDİLEN CANLI TURDA: kullanıcı bir bağlantıyla tura
+   * katıldıysa ilgilendiği tur odur. Öyle biri yoksa ekrandaki öneri
+   * oynatılıyor — rehber, paylaşmadan önce rotayı görebilsin.
+   */
+  const simuleEdilecekTur = useMemo(() => {
+    const oturum = izlenenOturum(turDurum)
+    const canliTur = oturum ? turDurum.turlar[oturum.tourId] ?? null : null
+
+    return canliTur ?? turOnerisi ?? null
+  }, [turDurum, turOnerisi])
+
+  /**
+   * Simülasyona OTURUM da veriliyor.
+   *
+   * Kullanıcı geri bildirimi: "simülasyon rastgele bir şekilde değil de şu
+   * anda bulunan tur noktasında görünecek şekilde olsun." Oturum, grubun
+   * hangi durakta olduğunu taşıyor; kanca simgeyi oraya park ediyor ve
+   * oynat yalnızca sıradaki bacağı canlandırıyor (bkz. useTurSimulasyonu).
+   *
+   * Canlı tur yoksa null geçiyor: bir öneride henüz "şu an" diye bir şey
+   * olmadığı için önizleme baştan sona oynuyor.
+   */
+  const simuleEdilecekOturum = useMemo(() => {
+    const oturum = izlenenOturum(turDurum)
+    return oturum && turDurum.turlar[oturum.tourId] ? oturum : null
+  }, [turDurum])
+
+  const turSimulasyonu = useTurSimulasyonu(simuleEdilecekTur, simuleEdilecekOturum)
+
+  /**
+   * Simülasyon aracını haritaya çizer.
+   *
+   * ULAŞIM SİMÜLASYONUYLA AYNI KATMANI kullanıyor ama AYRI bir kimlikle
+   * ("arac-tur"): iki simülasyon aynı anda çalışabilir ve biri diğerinin
+   * simgesini silmemeli. Kimlikler sayısal güzergah id'lerinden geldiği
+   * için çakışma da yok.
+   *
+   * `tip` ÖZELLİKLE ATANMIYOR: ulaşım aracına tıklayınca güzergah kartı
+   * açılıyor; turun aracı tıklanınca açılacak öyle bir kayıt yok, boş bir
+   * kart göstermek olurdu.
+   */
+  useEffect(() => {
+    const kaynak = aracKaynagiRef.current
+    if (!kaynak) return
+
+    const id = 'arac-tur'
+    const mevcut = kaynak.getFeatureById(id)
+    const durum = turSimulasyonu.durum
+
+    if (!durum) {
+      if (mevcut) kaynak.removeFeature(mevcut)
+      return
+    }
+
+    const konum = fromLonLat([durum.lon, durum.lat])
+
+    // Feature yerinde güncelleniyor, yeniden oluşturulmuyor: saniyede 25
+    // kez silip eklemek katmanı baştan indeksletir ve simge titrerdi
+    // (araciCiz ile aynı gerekçe).
+    if (mevcut) {
+      mevcut.getGeometry().setCoordinates(konum)
+      mevcut.set('yuzde', durum.yuzde)
+      return
+    }
+
+    const feature = new Feature({ geometry: new PointGeom(konum) })
+    feature.setId(id)
+    feature.set('renk', simuleEdilecekTur?.color || '#7b5cd6')
+    feature.set('yuzde', durum.yuzde)
+    kaynak.addFeature(feature)
+  }, [turSimulasyonu.durum, simuleEdilecekTur])
+
+  /**
+   * İki durak arasının yol tarifini cihazın harita uygulamasında açar.
+   *
+   * Adım adım tarifi biz üretmiyoruz: trafik, tek yönler ve sesli navigasyon
+   * o uygulamada zaten var (bkz. haritaLinki.js). Bizim işimiz doğru iki
+   * noktayı ve seyahat kipini geçirmek.
+   */
+  const bacakTarifiniAc = useCallback((oncekiDurak, durak) => {
+    const hedef = noktaCoz(durak?.wkt)
+    if (!hedef) return
+
+    yolTarifiniAc({
+      lat: hedef.lat,
+      lon: hedef.lon,
+      ad: durak.name,
+      ulasimTipi: turIstegi?.ulasimTipi ?? 'Yaya',
+      baslangic: noktaCoz(oncekiDurak?.wkt) ?? undefined,
+    })
+  }, [turIstegi])
+
+  // ------------------------------------------------------------------------
+  //  Tur önerisini haritaya çiz
+  //
+  //  Öneri geldiğinde rota çizgisi ve numaralı duraklar tur katmanına
+  //  yazılıyor, ardından harita önerinin sınırlarına oturtuluyor. Öneri
+  //  temizlenince (null) katman da boşalıyor — ekranda kalan bir çizim,
+  //  panelde artık olmayan bir turu göstermeye devam ederdi.
+  useEffect(() => {
+    const kaynak = turKaynagiRef.current
+    if (!kaynak) return
+
+    kaynak.clear()
+    if (!turOnerisi) return
+
+    const oneriDuraklari = turOnerisi.waypoints ?? []
+
+    // Rota çizgisi: sunucu WKT olarak gönderiyor (LINESTRING).
+    if (turOnerisi.routeWkt) {
+      const rotaFeature = wktToFeature(turOnerisi.routeWkt)
+      if (rotaFeature) kaynak.addFeature(rotaFeature)
+    } else {
+      // ---- ROTA YOKSA: KUŞ UÇUŞU BAĞLANTI ----
+      //
+      // Rota servisi (OSRM) cevap vermediğinde sunucu çizgiyi null
+      // gönderiyor ve eskiden haritada YALNIZCA numaralı noktalar
+      // kalıyordu — birbiriyle ilgisi görünmeyen dağınık pinler. Şikâyet
+      // buydu: "rotalar birbirine bağlı görünsün".
+      //
+      // Bu çizgi bir YOL DEĞİL, sadece sıralamayı gösteren bir bağ; o
+      // yüzden 'baglanti' işaretiyle ekleniyor ve stil onu ince, soluk,
+      // kesikli çiziyor (bkz. turOnerisiStili). Gerçek rotayla aynı
+      // görünseydi olmayan bir güzergâhı var gibi gösterirdik.
+      const noktalar = oneriDuraklari
+        .map((d) => noktaCoz(d.wkt))
+        .filter(Boolean)
+        .map((n) => fromLonLat([n.lon, n.lat]))
+
+      if (noktalar.length >= 2) {
+        const bag = new Feature({ geometry: new LineStringGeom(noktalar) })
+        bag.set('baglanti', true)
+        kaynak.addFeature(bag)
+      }
+    }
+
+    oneriDuraklari.forEach((durak) => {
+      const feature = wktToFeature(durak.wkt)
+      if (!feature) return
+
+      feature.set('sira', durak.order)
+      feature.set('ad', durak.name)
+      kaynak.addFeature(feature)
+    })
+
+    const kapsam = kaynak.getExtent()
+    if (kaynak.getFeatures().length > 0) {
+      mapRef.current?.getView().fit(kapsam, {
+        padding: [80, 80, 80, 80],
+        duration: 500,
+        easing: easeOut,
+      })
+    }
+  }, [turOnerisi])
 
   // ------------------------------------------------------------------------
   //  Ödev 13 / Madde 4 — seçilen yerden AD ve KATEGORİ otomatik doluyor
@@ -3005,6 +3897,10 @@ export default function MapPage() {
     // bir görünüm — tıklanınca açılacak bir kartı da yok.)
     const kayitKatmanlari = [
       ...Object.values(layersRef.current), poiKatmanRef.current, durakKatmanRef.current,
+      // Ödev 19: "Hareket eden araca tıklandığında bilgi popup'ı açılsın."
+      // Araç da tıklanabilir bir nesne; kayıt katmanları listesine girmesi
+      // popup'ın açılması için yeterli (popupAc dto+tip arıyor, ikisi de var).
+      aracKatmanRef.current,
     ].filter(Boolean)
 
     /** Verilen pikselin altında kayıtlı bir geometri var mı? */
@@ -3016,6 +3912,90 @@ export default function MapPage() {
         // 8 piksellik tolerans tıklamayı çok daha kolay hale getiriyor.
         hitTolerance: 8,
       })
+
+    /**
+     * Verilen pikselin altında bir ALTERNATİF çizgisi var mı?
+     *
+     * Tolerans hattınkinden (8) BÜYÜK: alternatifler tıklanmak için var ve
+     * kesikli çizgide boşluğa denk gelen bir tıklama "ıskaladı" hissi
+     * veriyordu. 12 piksel, dokunmatik ekranda da rahat tutturuluyor.
+     */
+    const alternatiftekiFeature = (pixel) => {
+      // Ekranda alternatif YOKKEN hiç sorma. Bu kontrol fare hareketi için
+      // önemli: isabet testi katmanı gizli bir tuvale çizerek çalışıyor ve
+      // saniyede onlarca kez tekrarlanıyor. Alternatifler zamanın büyük
+      // bölümünde ekranda değil.
+      if (!alternatifVeriRef.current) return null
+
+      return map.forEachFeatureAtPixel(pixel, (feature) => feature, {
+        layerFilter: (layer) => layer === alternatifKatmanRef.current,
+        hitTolerance: 12,
+      })
+    }
+
+    /**
+     * Verilen pikselin altında bir GÜZERGAH ÇİZGİSİ var mı?
+     *
+     * Ayrı bir sorgu, çünkü hat çizgisi bilerek `kayitKatmanlari`nın dışında:
+     * ona tıklamak bir "kayıt" seçmiyor, bir BACAK seçiyor.
+     */
+    const hattakiFeature = (pixel) =>
+      map.forEachFeatureAtPixel(pixel, (feature) => feature, {
+        layerFilter: (layer) => layer === guzergahKatmanRef.current,
+        hitTolerance: 8,
+      })
+
+    /**
+     * HAT ÇİZGİSİNE TIKLAMA (Ödev 18 — harita üzerinden seçim).
+     *
+     * Ödev 18 alternatifleri yalnızca durak kutucuğundaki düğmeden
+     * açılabiliyordu; kullanıcının haritada gördüğü şey ise yolun kendisi.
+     * Artık çizginin bir parçasına tıklamak, o parçanın (bacağın)
+     * alternatiflerini doğrudan açıyor — Google Haritalar'da bir rota
+     * parçasına tıklamanın yaptığı iş.
+     *
+     * @returns {boolean} bir bacak açıldıysa true (tıklama TÜKETİLDİ,
+     *   harita kaymamalı ve popup kapanmamalı)
+     */
+    const hattaTiklandi = (pixel, koordinat) => {
+      const hat = hattakiFeature(pixel)
+      if (!hat) return false
+
+      const guzergah = guzergahlarRef.current
+        .find((g) => g.id === hat.get('guzergahId'))
+      const duraklar = guzergah?.duraklar ?? []
+
+      // Tek duraklı hatta "bacak" diye bir şey yok; çizgi de zaten çizilmiyor.
+      if (duraklar.length < 2) return false
+
+      const geom = hat.getGeometry()
+      if (typeof geom?.getCoordinates !== 'function') return false
+
+      // Durak koordinatları WKT'den çözülüyor: kaynaktaki feature'ları
+      // aramak yerine tek doğruluk kaynağı olan sunucu cevabını kullanıyoruz
+      // (haritadaki feature sürüklenmiş ama henüz kaydedilmemiş olabilir).
+      const bacak = bacakBul(
+        geom.getCoordinates(),
+        duraklar.map((d) => wktToFeature(d.wkt).getGeometry().getCoordinates()),
+        koordinat,
+      )
+      if (!bacak) return false
+
+      const varis = duraklar[bacak.varis]
+
+      // Kart, TIKLANAN YERDE ve GÜZERGAH kartı olarak açılıyor (Ödev 19):
+      // simülasyon düğmeleri ("Simülasyonu Başlat" / "Takip Et") orada.
+      // Ödev 18'in bacak alternatifleri de aynı kartın içinde — çizgiye
+      // tıklayan kullanıcı iki şeyi birden merak ediyor: "bu hat ne yapıyor?"
+      // ve "bu parça başka nasıl gidebilir?".
+      popupAc(hat, koordinat)
+
+      // Önceki bacağın çizgileri silinmezse iki bacağın alternatifleri aynı
+      // anda ekranda kalır ve hangisinin hangi durağa ait olduğu okunmaz.
+      alternatifleriTemizle()
+      alternatifleriGetirRef.current?.(varis)
+      return true
+    }
 
     // Son vurgulanan feature'ı hatırlıyoruz: her fare hareketinde katmanı
     // gereksiz yere temizleyip yeniden doldurmayalım (her seferinde yeniden çizim demek).
@@ -3062,13 +4042,63 @@ export default function MapPage() {
         return
       }
 
-      const feature = pikseldekiFeature(evt.pixel)
+      // ---- Alternatif çizgisinin üstünde miyiz? ----
+      // EN ÖNDE sorulur: alternatifler kayıtlı hattın üstünde çiziliyor ve
+      // ikisi çakıştığında kullanıcının kastettiği üstteki çizgidir.
+      const altFeature = alternatiftekiFeature(evt.pixel)
+      alternatifVurgula(altFeature ? altFeature.get('alternatifSira') : null)
+
+      const feature = altFeature ? null : pikseldekiFeature(evt.pixel)
+
+      // İmleç, hat çizgisinin üzerinde de "tıklanabilir" olmalı: artık
+      // çizgiye tıklamak bir bacak açıyor. Bu kontrol erken yapılıyor çünkü
+      // aşağıdaki vurgu kısayolu (aynı feature'da erken çıkış) boş alanla
+      // hat çizgisini ayırt edemez — ikisinde de feature null'dır.
+      const hatUzerinde = !feature && !altFeature && Boolean(hattakiFeature(evt.pixel))
+      map.getViewport().style.cursor =
+        (feature || altFeature || hatUzerinde) ? 'pointer' : ''
+
       const yeniId = feature ? feature.getId() : null
       if (yeniId === sonVurguId) return
 
       sonVurguId = yeniId
-      map.getViewport().style.cursor = feature ? 'pointer' : ''
       vurgulaFeature(feature)
+    }
+
+    /**
+     * ÇİFT TIKLAMA: alternatifi hattın KALICI rotası yap.
+     *
+     * Tek tıklama "göster", çift tıklama "uygula". Ayrımın sebebi, tek
+     * tıklamanın hiçbir şey yazmıyor olması: kullanıcı alternatifler arasında
+     * gezinirken her tıklamada veritabanına yazsaydık, sadece bakmak isteyen
+     * biri farkında olmadan hattın rotasını değiştirirdi.
+     *
+     * ⚠ HARİTANIN ZOOM'U NEDEN BOZULMUYOR?
+     * OpenLayers'ta çift tıklama varsayılan olarak yakınlaştırır
+     * (DoubleClickZoom etkileşimi). Map.handleMapBrowserEvent önce
+     * DİNLEYİCİLERİ çağırıyor ve `dispatchEvent(...) !== false` ise
+     * etkileşimlere geçiyor; `false` döndürerek zoom'u yutuyoruz. Bunu
+     * yalnızca bir alternatifin üstündeyken yapıyoruz — haritanın geri
+     * kalanında çift tıklama hâlâ yakınlaştırıyor.
+     */
+    const ciftTiklama = (evt) => {
+      if (activeTool) return undefined
+      const altFeature = alternatiftekiFeature(evt.pixel)
+      if (!altFeature) return undefined
+
+      const sira = altFeature.get('alternatifSira')
+
+      // Seçili görünümü ELDE veriyoruz, `alternatifSec` çağırmıyoruz: o
+      // fonksiyon sunucudan ÖNİZLEME de istiyor ve birazdan zaten kalıcı
+      // rotayı çizeceğiz — atılacak istek boşa giderdi.
+      alternatifKaynagiRef.current?.getFeatures().forEach((f) => {
+        f.set('secili', f.get('alternatifSira') === sira)
+      })
+
+      alternatifiUygulaRef.current?.(sira)
+
+      evt.stopPropagation()
+      return false                              // DoubleClickZoom devreye girmesin
     }
 
     // Fare haritadan çıkınca canlı ölçüm biter: ekranda kalan sayı artık
@@ -3108,19 +4138,9 @@ export default function MapPage() {
       // Bilgi kutucuğunu değiştirmiyor — kullanıcı hâlâ aynı durağa bakıyor,
       // yalnızca hangi yolu incelediğini değiştiriyor. Popup'ı kapatıp
       // yeniden açsaydık liste kaybolur, karşılaştırma imkânsızlaşırdı.
-      let alternatifSirasi = null
-      map.forEachFeatureAtPixel(
-        evt.pixel,
-        (f) => {
-          if (alternatifSirasi === null && f.get('alternatifSira') !== undefined) {
-            alternatifSirasi = f.get('alternatifSira')
-          }
-        },
-        { hitTolerance: 8 },
-      )
-
-      if (alternatifSirasi !== null) {
-        alternatifSec(alternatifSirasi)
+      const altFeature = alternatiftekiFeature(evt.pixel)
+      if (altFeature) {
+        alternatifSec(altFeature.get('alternatifSira'))
         return
       }
 
@@ -3132,30 +4152,40 @@ export default function MapPage() {
         // kart ekranda kayar, okumak zorlaşırdı. Yaklaşmak isteyen kartın
         // içindeki "Yakınlaş" düğmesini kullanıyor.
         popupAc(feature)
-      } else {
-        popupKapat()
+        return
+      }
 
-        // Boş alana tıklandı → oraya kaydır. AMA ısı haritası açıkken DEĞİL:
-        // her ölçümde harita kayıyordu; üstelik gs:Heatmap yoğunluğu her istek
-        // için yeniden normalleştirdiğinden kayan haritada aynı noktanın değeri
-        // de değişiyordu. Ölçüm yaparken harita sabit duruyor.
-        if (!isiAcikMi) {
-          map.getView().animate({ center: evt.coordinate, duration: 450, easing: easeOut })
-        }
+      // Durak/POI/çizim yoksa SIRA HATTA: çizginin üstüne tıklandıysa o
+      // bacağın yol alternatifleri açılıyor. Sıralama bilinçli — durak
+      // simgesi çizginin üstünde duruyor ve durağa tıklayan kişi bacağı
+      // değil durağı kastediyor.
+      if (hattaTiklandi(evt.pixel, evt.coordinate)) return
+
+      popupKapat()
+
+      // Boş alana tıklandı → oraya kaydır. AMA ısı haritası açıkken DEĞİL:
+      // her ölçümde harita kayıyordu; üstelik gs:Heatmap yoğunluğu her istek
+      // için yeniden normalleştirdiğinden kayan haritada aynı noktanın değeri
+      // de değişiyordu. Ölçüm yaparken harita sabit duruyor.
+      if (!isiAcikMi) {
+        map.getView().animate({ center: evt.coordinate, duration: 450, easing: easeOut })
       }
     }
 
     map.on('pointermove', fareHareketi)
     map.on('singleclick', tekTiklama)
+    map.on('dblclick', ciftTiklama)
     map.getViewport().addEventListener('pointerleave', fareCikti)
 
     return () => {
       map.un('pointermove', fareHareketi)
       map.un('singleclick', tekTiklama)
+      map.un('dblclick', ciftTiklama)
       map.getViewport().removeEventListener('pointerleave', fareCikti)
       map.getViewport().style.cursor = ''
     }
-  }, [activeTool, popupAc, popupKapat, vurgulaFeature, izinliMi, bildir, alternatifSec])
+  }, [activeTool, popupAc, popupKapat, vurgulaFeature, izinliMi, bildir,
+      alternatifSec, alternatifleriTemizle, alternatifVurgula])
 
   // ------------------------------------------------------------------------
   //  Klavye kısayolları
@@ -3774,6 +4804,10 @@ export default function MapPage() {
       // uygulanmamış olabilir.
       alternatifVeriRef.current = cevap
 
+      // Kayıtlı rota griye çekiliyor: turuncu alternatiflerle aynı renk
+      // ailesinde kalmasın (gerekçe: SOLUK_HAT).
+      hattiSoluklastir(guzergahKaynagiRef.current, cevap.guzergahId)
+
       const kaynak = alternatifKaynagiRef.current
       if (kaynak) {
         kaynak.clear()
@@ -3782,6 +4816,7 @@ export default function MapPage() {
           feature.setId(`alternatif-${i}`)
           feature.set('alternatifSira', i)
           feature.set('secili', i === 0)     // en iyisi baştan seçili
+          feature.set('etiket', alternatifEtiketi(alt))
           kaynak.addFeature(feature)
         })
       }
@@ -3802,6 +4837,28 @@ export default function MapPage() {
     }
   }
 
+  // Harita tıklaması bu fonksiyonu ref üzerinden çağırıyor (gerekçe:
+  // alternatifleriGetirRef). Bağımlılık dizisi YOK: her render'da tazeleniyor,
+  // böylece ref her zaman fonksiyonun güncel kapanışını (closure) tutuyor —
+  // eski bir kopya çağrılırsa eski `goLogin`/`bildir` kullanılırdı.
+  useEffect(() => {
+    alternatifleriGetirRef.current = alternatifleriGetir
+
+    // Çift tıklama YETKİ KONTROLÜNÜ de burada geçiyor: `yetkiVar` render
+    // kapsamında yaşıyor ve harita dinleyicisi ona doğrudan erişemez.
+    // Asıl kontrol yine sunucuda — bu yalnızca kullanıcıya sebebini söylüyor.
+    alternatifiUygulaRef.current = (sira) => {
+      if (!yetkiVar(YETKILER.guzergahYonetimi)) {
+        bildir('uyari', 'Bu yolu kalıcı yapmak için "Güzergah Yönetimi" yetkisi gerekiyor.')
+        return
+      }
+      // Üst üste çift tıklama iki kez POST etmesin: ilk istek dönene kadar
+      // düğme zaten kilitli, haritanın da aynı kilide uyması gerekiyor.
+      if (alternatifKaydediliyor) return
+      alternatifiUygula(sira)
+    }
+  })
+
   /**
    * Seçili alternatifi hattın rotasına uygula.
    *
@@ -3813,8 +4870,12 @@ export default function MapPage() {
    * kalanıyla ek yerinde kopukluk oluşurdu. Via noktası tek bir bütün rota
    * üretiyor.
    */
-  const alternatifiUygula = async () => {
-    const alt = alternatifler?.alternatifler?.[seciliAlternatif]
+  const alternatifiUygula = async (sira = seciliAlternatif) => {
+    // Veri REF'ten okunuyor, state'ten değil: haritadaki çift tıklama, seçimi
+    // yapan tıklamadan milisaniyeler sonra geliyor ve o an state henüz
+    // tazelenmemiş olabilir. Ref her iki yolda da güncel.
+    const veri = alternatifVeriRef.current ?? alternatifler
+    const alt = veri?.alternatifler?.[sira]
     if (!alt) return
 
     setAlternatifKaydediliyor(true)
@@ -3823,8 +4884,8 @@ export default function MapPage() {
       // Yalnızca koordinat gönderdiğimizde sunucu bacağı geometriden
       // tahmin ediyordu ve yanılıyordu; bacak zaten belli (bkz. RotaViaDto).
       await rotaOlustur(
-        alternatifler.guzergahId,
-        [{ durakId: alternatifler.durakId, wkt: alt.viaWkt }],
+        veri.guzergahId,
+        [{ durakId: veri.durakId, wkt: alt.viaWkt }],
         goLogin,
       )
       alternatifleriTemizle()
@@ -3834,6 +4895,233 @@ export default function MapPage() {
       if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
     } finally {
       setAlternatifKaydediliyor(false)
+    }
+  }
+
+  // ======================================================================
+  //  Ödev 19: araç simülasyonu
+  // ======================================================================
+
+  // Açık kartın son hâli ref'te de duruyor: SignalR dinleyicisi bir kez
+  // kuruluyor ve state'in o anki hâlini kapanışında (closure) hapsederdi.
+  useEffect(() => {
+    seciliRef.current = secili
+  }, [secili])
+
+  /**
+   * Aracı haritaya çizer / yerini günceller / sefer bitince kaldırır.
+   *
+   * Feature YENİDEN OLUŞTURULMUYOR, yerinde güncelleniyor: saniyede iki kez
+   * silip eklemek OpenLayers'a katmanı baştan indeksletir ve araç gözle
+   * görülür şekilde titrerdi.
+   */
+  const araciCiz = useCallback((durum) => {
+    const kaynak = aracKaynagiRef.current
+    if (!kaynak) return
+
+    const id = `arac-${durum.guzergahId}`
+    const mevcut = kaynak.getFeatureById(id)
+
+    if (durum.tamamlandi) {
+      if (mevcut) kaynak.removeFeature(mevcut)
+      return
+    }
+
+    const konum = fromLonLat([durum.lon, durum.lat])
+
+    if (mevcut) {
+      mevcut.getGeometry().setCoordinates(konum)
+      mevcut.set('yuzde', durum.yuzde)
+      mevcut.set('dto', durum)
+      return
+    }
+
+    const feature = new Feature({ geometry: new PointGeom(konum) })
+    feature.setId(id)
+    feature.set('tip', ARAC)          // tıklanınca hangi kartın açılacağı
+    feature.set('dto', durum)
+    feature.set('renk', durum.renk)
+    feature.set('yuzde', durum.yuzde)
+    feature.set('guzergahId', durum.guzergahId)
+    kaynak.addFeature(feature)
+  }, [])
+
+  /** Takip listesini hem ref'e hem state'e yazar (ikisi ayrı düşmesin). */
+  const takipListesiYaz = useCallback((degistir) => {
+    degistir(takipEdilenlerRef.current)
+    setTakipEdilenler(new Set(takipEdilenlerRef.current))
+  }, [])
+
+  /** Haritadaki aracı kaldır (takip bırakılınca ya da sefer bitince). */
+  const araciKaldir = useCallback((guzergahId) => {
+    const kaynak = aracKaynagiRef.current
+    const feature = kaynak?.getFeatureById(`arac-${guzergahId}`)
+    if (feature) kaynak.removeFeature(feature)
+  }, [])
+
+  /**
+   * SignalR'dan gelen her konum mesajı buradan geçiyor.
+   *
+   * Dört iş birden: aracı çiz, düğmelerin durumunu tazele, TAKİP açıksa
+   * haritayı ortala, araç kartı açıksa içeriğini ve yerini güncelle.
+   */
+  const konumGeldi = useCallback((durum) => {
+    araciCiz(durum)
+
+    setSimulasyonlar((onceki) => {
+      if (!durum.tamamlandi) return { ...onceki, [durum.guzergahId]: durum }
+      const kopya = { ...onceki }
+      delete kopya[durum.guzergahId]
+      return kopya
+    })
+
+    if (durum.tamamlandi) {
+      // Sefer bitti: gruptan çık, kartı kapat, kullanıcıya haber ver.
+      takibiBirakIstek(durum.guzergahId)
+      takipListesiYaz((liste) => liste.delete(durum.guzergahId))
+
+      if (seciliRef.current?.tip === ARAC
+          && seciliRef.current.dto.guzergahId === durum.guzergahId) {
+        popupKapat()
+      }
+
+      bildir('ok', `"${durum.guzergahAdi}" hattında sefer tamamlandı.`)
+      return
+    }
+
+    const konum = fromLonLat([durum.lon, durum.lat])
+
+    // "Takip Et": harita aracın peşinden gidiyor. animate DEĞİL setCenter:
+    // 500 ms'de bir yeni hedef geliyor, animasyonlar birbirini keserdi.
+    if (takipEdilenlerRef.current.has(durum.guzergahId)) {
+      mapRef.current?.getView().setCenter(konum)
+    }
+
+    // Araç kartı açıksa hem içeriği hem KONUMU tazeleniyor — kart araçla
+    // birlikte hareket etmezse yüzde bir yerde, araç başka yerde kalır.
+    const acikKart = seciliRef.current
+    if (acikKart?.tip === ARAC && acikKart.dto.guzergahId === durum.guzergahId) {
+      setSecili({ ...acikKart, dto: durum })
+      popupOverlayRef.current?.setPosition(konum)
+    }
+  }, [araciCiz, bildir, popupKapat, takipListesiYaz])
+
+  /**
+   * Bağlantıyı kur, yayını dinle ve o an YOLDA OLAN araçları öğren.
+   *
+   * REST isteği neden gerekli? SignalR yalnızca bundan SONRAKİ güncellemeleri
+   * gönderiyor. Sayfayı yenileyen kullanıcı, çalışan bir simülasyonu bu istek
+   * olmadan hiç göremezdi.
+   */
+  useEffect(() => {
+    let birakildi = false
+    hubaBaglan()
+    const dinlemeyiBirak = konumDinle(konumGeldi)
+
+    // Sefer BAŞLADI/BİTTİ duyurusu herkese gidiyor: başka bir kullanıcı
+    // sefer başlattığında bizim ekranımızda da "canlı" rozeti ve
+    // "Takip Et" düğmesi beliriyor. Ödev metninin "diğer kullanıcılar aynı
+    // güzergaha tıkladığında Takip Et butonu çıksın" maddesi bunu istiyor;
+    // bu duyuru olmasaydı düğme ancak sayfa yenilenince görünürdü.
+    const degisimiBirak = simulasyonDegisimiDinle((olay) => {
+      setSimulasyonlar((onceki) => {
+        if (olay.tur === 'basladi') {
+          return { ...onceki, [olay.durum.guzergahId]: olay.durum }
+        }
+
+        const kopya = { ...onceki }
+        delete kopya[olay.guzergahId]
+        return kopya
+      })
+    })
+
+    aktifSimulasyonlarIstek(goLogin)
+      .then((liste) => {
+        if (birakildi) return
+        setSimulasyonlar(Object.fromEntries(liste.map((d) => [d.guzergahId, d])))
+      })
+      .catch(() => {
+        /* simülasyon bir EK özellik; listesi alınamazsa harita çalışmayı sürdürür */
+      })
+
+    return () => {
+      birakildi = true
+      dinlemeyiBirak()
+      degisimiBirak()
+      // Haritadan çıkılıyor (çıkış yapıldı ya da yönetim paneline geçildi):
+      // açık kanal bırakmıyoruz, sunucu boşuna veri göndermesin.
+      baglantiyiKapat()
+      takipEdilenlerRef.current.clear()
+    }
+  }, [konumGeldi, goLogin])
+
+  /** "Takip Et" — hattın yayın grubuna katıl. */
+  const takibeBasla = useCallback(async (guzergahId) => {
+    const kuruldu = await guzergahiTakipEt(guzergahId)
+    if (!kuruldu) {
+      bildir('hata', 'Canlı bağlantı kurulamadı; sunucu kapalı olabilir.')
+      return false
+    }
+
+    takipListesiYaz((liste) => liste.add(guzergahId))
+    return true
+  }, [bildir, takipListesiYaz])
+
+  /** "Takibi Bırak" — gruptan çık ve aracı haritadan kaldır. */
+  const takibiBirakUI = useCallback(async (guzergahId) => {
+    await takibiBirakIstek(guzergahId)
+    takipListesiYaz((liste) => liste.delete(guzergahId))
+
+    // Araç kalsaydı DONARDI: artık güncelleme gelmiyor ve ekrandaki konum
+    // her saniye biraz daha yanlış olurdu. Yanlış bilgi, bilgisizlikten kötü.
+    araciKaldir(guzergahId)
+
+    if (seciliRef.current?.tip === ARAC
+        && seciliRef.current.dto.guzergahId === guzergahId) {
+      popupKapat()
+    }
+  }, [araciKaldir, popupKapat, takipListesiYaz])
+
+  /**
+   * "Simülasyonu Başlat" — sunucuya haber ver, aracı çiz ve OTOMATİK takip et.
+   *
+   * Başlatan neden kendiliğinden takip ediyor? Ödev, başlatanın aracı anlık
+   * konumuyla görmesini istiyor; bir düğmeye daha basmasını beklemek,
+   * başlattığı şeyi göremeyen bir kullanıcı bırakırdı.
+   */
+  const simulasyonuBaslat = async (guzergahId) => {
+    setSimulasyonIsleniyor(guzergahId)
+    try {
+      const durum = await simulasyonBaslatIstek(guzergahId, goLogin)
+      setSimulasyonlar((onceki) => ({ ...onceki, [guzergahId]: durum }))
+      araciCiz(durum)
+      await takibeBasla(guzergahId)
+      bildir('ok', `"${durum.guzergahAdi}" hattında sefer başladı.`)
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    } finally {
+      setSimulasyonIsleniyor(null)
+    }
+  }
+
+  /** "Simülasyonu Durdur" — herkesin ekranından aracı kaldırır. */
+  const simulasyonuDurdur = async (guzergahId) => {
+    setSimulasyonIsleniyor(guzergahId)
+    try {
+      await simulasyonDurdurIstek(guzergahId, goLogin)
+
+      setSimulasyonlar((onceki) => {
+        const kopya = { ...onceki }
+        delete kopya[guzergahId]
+        return kopya
+      })
+
+      await takibiBirakUI(guzergahId)
+      bildir('ok', 'Sefer durduruldu.')
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') bildir('hata', err.message)
+    } finally {
+      setSimulasyonIsleniyor(null)
     }
   }
 
@@ -3850,7 +5138,12 @@ export default function MapPage() {
    * çöküyordu; derleyici bunu yakalamıyor, yalnızca çalışma anında patlıyor.
    */
   useEffect(() => {
-    if (!secili || secili.tip !== DURAK) alternatifleriTemizle()
+    // Ödev 19 ile GÜZERGAH kartı da alternatifleri gösteriyor; ikisinden
+    // biri açıkken temizlemek, kartı açan tıklamanın kendi sonucunu
+    // silmesi olurdu.
+    if (!secili || (secili.tip !== DURAK && secili.tip !== GUZERGAH)) {
+      alternatifleriTemizle()
+    }
   }, [secili, alternatifleriTemizle])
 
   const poiyiSil = async (dto) => {
@@ -3995,6 +5288,171 @@ export default function MapPage() {
   const vurgula = (type, dto) => vurgulaFeature(featureBul(type, dto))
 
   const temizleVurgu = () => highlightSourceRef.current?.clear()
+
+  /**
+   * Bir hattın simülasyon düğmeleri.
+   *
+   * ÜÇ YERDE birden kullanılıyor: hat kartı, araç kartı ve yan paneldeki
+   * güzergah listesi. Üçüne ayrı ayrı yazsaydık "Takip Et" ile "Takibi
+   * Bırak" arasındaki geçiş kuralı üç yerde ayrı ayrı bozulabilirdi.
+   *
+   * Düğmelerin görünme kuralı ödev metninden birebir çıkıyor:
+   *   • sefer YOKSA + yetki VARSA        → "Simülasyonu Başlat"
+   *   • sefer VARSA                      → "Takip Et" / "Takibi Bırak" (herkese)
+   *   • sefer VARSA + yetki VARSA        → ayrıca "Durdur"
+   */
+  const simulasyonDugmeleri = (guzergahId) => {
+    const durum = simulasyonlar[guzergahId]
+    const takipte = takipEdilenler.has(guzergahId)
+    const mesgul = simulasyonIsleniyor === guzergahId
+    const baslatabilir = yetkiVar(YETKILER.simulasyonBaslatma)
+
+    if (!durum && !baslatabilir) return null
+
+    return (
+      <div className="popup-eylemler">
+        {!durum && baslatabilir && (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => simulasyonuBaslat(guzergahId)}
+            disabled={mesgul}
+          >
+            {mesgul ? 'Başlatılıyor…' : 'Simülasyonu Başlat'}
+          </button>
+        )}
+
+        {durum && (
+          <button
+            type="button"
+            className={takipte ? 'btn-ghost' : 'btn-primary'}
+            onClick={() => (takipte ? takibiBirakUI(guzergahId) : takibeBasla(guzergahId))}
+          >
+            {takipte ? 'Takibi Bırak' : 'Takip Et'}
+          </button>
+        )}
+
+        {durum && baslatabilir && (
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => simulasyonuDurdur(guzergahId)}
+            disabled={mesgul}
+          >
+            {mesgul ? 'Durduruluyor…' : 'Durdur'}
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  /**
+   * "Bu parçanın yolları" bölümü (Ödev 18).
+   *
+   * Ödev 19'da hat çizgisine tıklamak artık GÜZERGAH kartını açıyor; ama
+   * alternatifler hâlâ durak kartında da gösteriliyor. İki kartın aynı
+   * bloğu kopyalaması, ileride yalnızca birinin güncellenmesi demekti —
+   * bu yüzden tek bir fonksiyona alındı.
+   */
+  const alternatifBolumu = () => {
+    if (!alternatifler) return null
+
+    return (
+      <div className="alternatif-bolum">
+        <h4>
+          {alternatifler.oncekiDurakAdi
+            ? <>{alternatifler.oncekiDurakAdi} → {alternatifler.durakAdi}</>
+            : alternatifler.durakAdi}
+        </h4>
+
+        {alternatifler.alternatifler.length === 0 ? (
+          <p className="popup-ipucu">{alternatifler.mesaj}</p>
+        ) : (
+          <>
+            <ul className="alternatif-listesi">
+              {alternatifler.alternatifler.map((alt) => (
+                <li key={alt.sira}>
+                  <button
+                    type="button"
+                    className={`alternatif-satir${
+                      alt.sira === seciliAlternatif ? ' secili' : ''}`}
+                    onClick={() => alternatifSec(alt.sira)}
+                    /* Satırın üstüne gelmek haritadaki çizgiyi vurguluyor:
+                       "listedeki bu satır hangi çizgi?" sorusu tıklamadan
+                       cevaplanıyor. */
+                    onMouseEnter={() => alternatifVurgula(alt.sira)}
+                    onMouseLeave={() => alternatifVurgula(null)}
+                    onFocus={() => alternatifVurgula(alt.sira)}
+                    onBlur={() => alternatifVurgula(null)}
+                    aria-pressed={alt.sira === seciliAlternatif}
+                  >
+                    <span className="alternatif-no">{alt.sira + 1}</span>
+
+                    <span className="alternatif-govde">
+                      <strong>
+                        {(alt.mesafeMetre / 1000).toFixed(1)} km
+                        {' · ~'}{Math.round(alt.sureSaniye / 60)} dk
+                      </strong>
+                      <small>
+                        {alt.enIyi
+                          ? 'en hızlı — otomatik seçildi'
+                          : `+${Math.max(1, Math.round(alt.sureFarkiSaniye / 60))} dk daha uzun`}
+                      </small>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            {/* Tek yol bulunduğunda da mesaj var: kullanıcı "alternatifler
+                nerede?" diye düğmeye tekrar basmasın. */}
+            {alternatifler.mesaj && (
+              <p className="popup-ipucu">{alternatifler.mesaj}</p>
+            )}
+
+            <p className="tool-hint muted">
+              {onizlemeYukleniyor
+                ? 'Güzergah bu yoldan çiziliyor…'
+                : (
+                  <>
+                    Seçtiğiniz yol <strong>mavi</strong> ile hattın tamamı
+                    olarak çiziliyor; alternatifler <strong>kesikli</strong>
+                    ve üzerlerinde süreleri yazıyor.
+                    Haritada bir alternatife <strong>tek tıklamak</strong> onu
+                    seçer{yetkiVar(YETKILER.guzergahYonetimi)
+                      ? <>, <strong>çift tıklamak</strong> hattın kalıcı
+                        rotası yapar</>
+                      : ' (kalıcı yapmak için Güzergah Yönetimi yetkisi gerekiyor)'}.
+                    Başka bir parça için <strong>hattın çizgisine</strong>
+                    {' '}tıklayın.
+                  </>
+                )}
+            </p>
+
+            {yetkiVar(YETKILER.guzergahYonetimi) && (
+              <div className="popup-eylemler">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  /* Ok fonksiyonu ŞART: doğrudan verseydik React tıklama
+                     olayını ilk argüman olarak geçer ve `sira` bir olay
+                     nesnesi olurdu — düğme sessizce hiçbir şey yapmazdı. */
+                  onClick={() => alternatifiUygula()}
+                  disabled={alternatifKaydediliyor}
+                >
+                  {alternatifKaydediliyor ? 'Uygulanıyor…' : 'Bu yolu kullan'}
+                </button>
+                <button type="button" className="btn-ghost"
+                        onClick={alternatifleriTemizle}>
+                  Kapat
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
 
   /** Haritayı açılıştaki Türkiye görünümüne döndür. */
   const turkiyeyeDon = () => {
@@ -4146,6 +5604,26 @@ export default function MapPage() {
             harita div'inin çocuklarını OpenLayers yönetiyor, React'in oraya
             eleman eklemesi çakışma yaratırdı. */}
         <div className="map-alan">
+          {/* ---------- MAP BOT ----------
+              KONUMU BİLİNÇLİ: .map-alan'ın doğrudan çocuğu, .map-container'ın
+              DIŞINDA ve ondan ÖNCE.
+
+              Önce haritanın içine, popup div'inin hemen öncesine konmuştu ve
+              uygulama komple çöktü:
+              "Failed to execute 'insertBefore' on 'Node'".
+
+              Sebebi popup'ın başındaki uyarının ta kendisi — OpenLayers o
+              div'i DOM'dan alıp kendi kapsayıcısına taşıyor, React'in çocuk
+              listesiyle gerçek DOM ayrışıyor. Map Bot açılıp kapandıkça
+              (düğme ↔ pencere) React o noktaya yeni bir eleman koymak isteyip
+              artık orada olmayan popup'ın ÖNÜNE eklemeye çalışıyor ve patlıyor.
+
+              Dışarıda OpenLayers'ın hiçbir müdahalesi yok. .map-alan zaten
+              `position: relative` (vinyet için) — mutlak konumlanan bot
+              haritanın sağ altına doğru oturuyor ve panelin üstüne taşmıyor.
+              Akıştan çıktığı için flex düzenini de bozmuyor. */}
+          <MapBot onEylem={mapBotEylemi} />
+
           {/* uzay-renk: açılış sahnesi boyunca haritaya renk derecelendirmesi uygulanır
               (denizler derin maviye, karalar doygun ve koyu). Sahne kapanınca sınıf
               kalkar ve CSS geçişiyle normal harita renklerine yumuşakça döner. */}
@@ -4388,6 +5866,11 @@ export default function MapPage() {
               {/* Uzay: tüm alanı kaplar, ortasındaki dairesel delikten aşağısı görünür */}
               <div className="uzay-katmani" />
 
+              {/* YILDIZLAR — uzay katmanının üstünde, gezegenin altında.
+                  İniş sırasında gezegenden daha yavaş büyüyorlar; sahnenin
+                  derinlik hissi bu farktan geliyor (bkz. Yildizlar.jsx). */}
+              <Yildizlar />
+
               {/* GEZEGEN YÜZEYİ (mavi-yeşil dünya).
                   Deliğin içini dolduruyor; iniş başlayınca soluyor ve altındaki
                   gerçek harita ortaya çıkıyor. Gerekçe: Dunya.jsx başlığı. */}
@@ -4418,6 +5901,10 @@ export default function MapPage() {
             </button>
           </div>
 
+          {/* MAP BOT — sağ alt köşede duran danışma noktası.
+              Harita kapsayıcısının İÇİNDE ama pointer-events'i kendi
+              üzerinde: haritayı kapatmıyor, yalnızca kendi alanını
+              tıklanabilir kılıyor. */}
           {/* POPUP — EN SONDA OLMALI.
               OpenLayers Overlay, bu div'i DOM'dan alıp kendi kapsayıcısına taşır.
               Artık React'in çocuk listesiyle gerçek DOM uyuşmadığı için, React
@@ -4699,6 +6186,120 @@ export default function MapPage() {
                 Ödev metni: "Duraklara tıklandığında bilgi kutucuğu açılmalıdır."
                 Kart hattı ve sırayı öne çıkarıyor — bir durağa bakan kişinin ilk
                 sorusu "hangi hat, kaçıncı durak". */}
+            {/* ---------- Ödev 19: GÜZERGAH (HAT) KARTI ----------
+                "Haritada veya listede bir güzergaha tıklandığında
+                'Simülasyonu Başlat' butonu çıksın."
+
+                Hattın ÇİZGİSİNE tıklayınca açılıyor. Ödev 18'in bacak
+                alternatifleri de bu kartın içinde: çizgiye tıklayan kullanıcı
+                iki şeyi birden merak ediyor — "bu hat ne yapıyor?" ve
+                "bu parça başka nasıl gidebilir?" */}
+            {secili && secili.tip === GUZERGAH && !pending && !poiTaslak && !durakTaslak && (
+              <>
+                <div className="popup-baslik">
+                  <span className="dot" style={{ background: secili.dto.renk }} />
+                  <strong>{secili.dto.ad}</strong>
+                  <button type="button" className="popup-kapat" onClick={popupKapat}
+                          aria-label="Kapat">×</button>
+                </div>
+
+                <p className="durak-hat">
+                  <GuzergahIkonu size={14} />
+                  <span>{secili.dto.durakSayisi} durak</span>
+                  {simulasyonlar[secili.dto.id] && (
+                    <span className="canli-rozet">
+                      canlı · %{Math.round(simulasyonlar[secili.dto.id].yuzde)}
+                    </span>
+                  )}
+                </p>
+
+                {secili.dto.aciklama && (
+                  <p className="popup-aciklama">{secili.dto.aciklama}</p>
+                )}
+
+                {secili.dto.rotaWkt && (
+                  <dl className="popup-detay">
+                    <dt>Rota</dt>
+                    <dd>{rotaOzeti(secili.dto)}</dd>
+                  </dl>
+                )}
+
+                {simulasyonDugmeleri(secili.dto.id)}
+
+                {/* Yetkisi olmayan kullanıcı düğmeyi hiç görmüyor; sebebini
+                    yazmasaydık "bende neden yok?" sorusu cevapsız kalırdı. */}
+                {!yetkiVar(YETKILER.simulasyonBaslatma) && !simulasyonlar[secili.dto.id] && (
+                  <p className="tool-hint muted">
+                    Sefer başlatmak <strong>Simülasyon Başlatma</strong> yetkisi
+                    istiyor. Başlayan bir seferi ise herkes takip edebilir.
+                  </p>
+                )}
+
+                {alternatifYukleniyor && (
+                  <p className="tool-hint muted">Bu parçanın yolları aranıyor…</p>
+                )}
+
+                {alternatifBolumu()}
+              </>
+            )}
+
+            {/* ---------- Ödev 19: ARAÇ KARTI ----------
+                "Hareket eden araca tıklandığında bilgi popup'ı açılsın ve
+                güzergahın yüzde kaçının tamamlandığı bilgisi gösterilsin."
+
+                Kart araçla BİRLİKTE hareket ediyor: her konum mesajında
+                hem içeriği hem overlay'in konumu tazeleniyor (bkz. konumGeldi). */}
+            {secili && secili.tip === ARAC && (
+              <>
+                <div className="popup-baslik">
+                  <span className="dot" style={{ background: secili.dto.renk }} />
+                  <strong>{secili.dto.guzergahAdi}</strong>
+                  <button type="button" className="popup-kapat" onClick={popupKapat}
+                          aria-label="Kapat">×</button>
+                </div>
+
+                <div className="arac-yuzde">
+                  <strong>%{Math.round(secili.dto.yuzde)}</strong>
+                  <span>tamamlandı</span>
+                </div>
+
+                <div className="arac-cubuk" role="img"
+                     aria-label={`Güzergahın %${Math.round(secili.dto.yuzde)} kadarı tamamlandı`}>
+                  <span style={{
+                    width: `${secili.dto.yuzde}%`,
+                    background: secili.dto.renk,
+                  }} />
+                </div>
+
+                <dl className="popup-detay">
+                  <dt>Nerede</dt>
+                  <dd>
+                    {secili.dto.oncekiDurakAdi ?? 'hattın başında'}
+                    {secili.dto.sonrakiDurakAdi
+                      ? ` → ${secili.dto.sonrakiDurakAdi}`
+                      : ' (son durak)'}
+                  </dd>
+
+                  <dt>Yol</dt>
+                  <dd>
+                    {(secili.dto.alinanMetre / 1000).toFixed(1)} /
+                    {' '}{(secili.dto.toplamMetre / 1000).toFixed(1)} km
+                  </dd>
+
+                  <dt>Süre</dt>
+                  <dd>
+                    {Math.round(secili.dto.gecenSaniye)} /
+                    {' '}{Math.round(secili.dto.toplamSaniye)} sn
+                  </dd>
+
+                  <dt>Başlatan</dt>
+                  <dd>{secili.dto.baslatanKullanici}</dd>
+                </dl>
+
+                {simulasyonDugmeleri(secili.dto.guzergahId)}
+              </>
+            )}
+
             {secili && secili.tip === DURAK && !pending && !poiTaslak && !durakTaslak && (
               <>
                 <div className="popup-baslik">
@@ -4794,100 +6395,31 @@ export default function MapPage() {
                         istediğinde boşuna bir gecikme ve boşuna bir yük
                         olurdu. */}
                     {!alternatifler && (
-                      <div className="popup-eylemler">
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          onClick={() => alternatifleriGetir(secili.dto)}
-                          disabled={alternatifYukleniyor}
-                        >
-                          {alternatifYukleniyor
-                            ? 'Yollar aranıyor…'
-                            : 'Bu durağa giden yollar'}
-                        </button>
-                      </div>
+                      <>
+                        <div className="popup-eylemler">
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => alternatifleriGetir(secili.dto)}
+                            disabled={alternatifYukleniyor}
+                          >
+                            {alternatifYukleniyor
+                              ? 'Yollar aranıyor…'
+                              : 'Bu durağa giden yollar'}
+                          </button>
+                        </div>
+
+                        {/* Aynı işin haritadaki yolu. Düğmeyi kaldırmadık:
+                            kutucuk zaten açıkken elini haritaya götürmek
+                            gereksiz bir adım olurdu. */}
+                        <p className="tool-hint muted">
+                          Haritada <strong>hattın çizgisine</strong> tıklayarak
+                          da o parçanın yollarına bakabilirsiniz.
+                        </p>
+                      </>
                     )}
 
-                    {alternatifler && (
-                      <div className="alternatif-bolum">
-                        <h4>
-                          {alternatifler.oncekiDurakAdi
-                            ? <>{alternatifler.oncekiDurakAdi} → {alternatifler.durakAdi}</>
-                            : alternatifler.durakAdi}
-                        </h4>
-
-                        {alternatifler.alternatifler.length === 0 ? (
-                          <p className="popup-ipucu">{alternatifler.mesaj}</p>
-                        ) : (
-                          <>
-                            <ul className="alternatif-listesi">
-                              {alternatifler.alternatifler.map((alt) => (
-                                <li key={alt.sira}>
-                                  <button
-                                    type="button"
-                                    className={`alternatif-satir${
-                                      alt.sira === seciliAlternatif ? ' secili' : ''}`}
-                                    onClick={() => alternatifSec(alt.sira)}
-                                    aria-pressed={alt.sira === seciliAlternatif}
-                                  >
-                                    <span className="alternatif-no">{alt.sira + 1}</span>
-
-                                    <span className="alternatif-govde">
-                                      <strong>
-                                        {(alt.mesafeMetre / 1000).toFixed(1)} km
-                                        {' · ~'}{Math.round(alt.sureSaniye / 60)} dk
-                                      </strong>
-                                      <small>
-                                        {alt.enIyi
-                                          ? 'en hızlı — otomatik seçildi'
-                                          : `+${Math.max(1, Math.round(alt.sureFarkiSaniye / 60))} dk daha uzun`}
-                                      </small>
-                                    </span>
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-
-                            {/* Tek yol bulunduğunda da mesaj var: kullanıcı
-                                "alternatifler nerede?" diye düğmeye tekrar
-                                basmasın. */}
-                            {alternatifler.mesaj && (
-                              <p className="popup-ipucu">{alternatifler.mesaj}</p>
-                            )}
-
-                            <p className="tool-hint muted">
-                              {onizlemeYukleniyor
-                                ? 'Güzergah bu yoldan çiziliyor…'
-                                : (
-                                  <>
-                                    Seçtiğiniz yol <strong>mavi</strong> ile hattın tamamı
-                                    olarak çiziliyor; alternatifler <strong>kesikli</strong>.
-                                    Haritadaki kesikli çizgilere tıklayarak da
-                                    seçebilirsiniz. Hiçbiri kaydedilmiş değil.
-                                  </>
-                                )}
-                            </p>
-
-                            {yetkiVar(YETKILER.guzergahYonetimi) && (
-                              <div className="popup-eylemler">
-                                <button
-                                  type="button"
-                                  className="btn-primary"
-                                  onClick={alternatifiUygula}
-                                  disabled={alternatifKaydediliyor}
-                                >
-                                  {alternatifKaydediliyor ? 'Uygulanıyor…' : 'Bu yolu kullan'}
-                                </button>
-                                <button type="button" className="btn-ghost"
-                                        onClick={alternatifleriTemizle}>
-                                  Kapat
-                                </button>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
+                    {alternatifBolumu()}
 
                     {/* Düzenle/sil yalnızca yetkisi olana görünüyor. Asıl kontrol
                         sunucuda: sahibi olmayan bir operatör 400 alır. */}
@@ -5196,7 +6728,6 @@ export default function MapPage() {
 
         </div>
 
-
         <aside className="side-panel">
           {/* ---------- ⓪ POI LEJANDI (Ödev 13 / Madde 1) ----------
               Arama kutusu buradan haritanın üstündeki bara taşındı (Madde 2);
@@ -5217,11 +6748,40 @@ export default function MapPage() {
                   kurulumda daha da uzun olabilir. Açık bıraksaydık panelin
                   yarısını kaplar, altındaki çizim araçlarını aşağı iterdi.
                   Özet satırı kaç kategori olduğunu katlıyken de söylüyor. */}
-              {/* AKORDİYON VARSAYILAN AÇIK (open):
-                  POI'ler artık kapalı başlıyor ve kullanıcının onları
-                  açabileceği tek yer burası. Katlı bıraksaydık "POI'ler nerede?"
-                  sorusunun cevabı bir tık daha uzakta olurdu. */}
-              <details className="akordiyon panel-akordiyon" open>
+              {/* AKORDİYON VARSAYILAN KATLI.
+                  Önce açık bırakılmıştı ("POI'ler nerede?" sorusu bir tık
+                  uzakta kalmasın diye) ama kategori sayısı arttıkça liste
+                  panelin yarısını kaplar oldu: altındaki çizim araçları,
+                  ulaşım ve tur bölümleri ekranın dışına itiliyordu. Katlı
+                  hâlde özet satırı yine "kaç kategori açık" diyor, yani
+                  bilgi kaybolmuyor — yalnızca yer kaplamıyor. */}
+              {/* TOPLU SEÇİM AKORDİYONUN DIŞINDA.
+                  Liste katlı açıldığı için içeride kalsaydı POI'leri açmak
+                  "akordiyonu aç → düğmeye bas" olurdu; oysa kullanıcıların
+                  çoğu tek tek kategori seçmek değil, POI'leri GÖRMEK istiyor.
+                  Katlı listede bile tek tık yetiyor. */}
+              <div className="poi-toplu">
+                <button
+                  type="button"
+                  className="btn-ghost kucuk"
+                  onClick={() => setPoiKategoriSecimi(
+                    new Set(poiStilleri.map((st) => st.kategoriId)),
+                  )}
+                  disabled={poiKategoriSecimi.size === poiStilleri.length}
+                >
+                  Hepsini göster
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost kucuk"
+                  onClick={() => setPoiKategoriSecimi(new Set())}
+                  disabled={poiKategoriSecimi.size === 0}
+                >
+                  Hiçbirini
+                </button>
+              </div>
+
+              <details className="akordiyon panel-akordiyon">
                 <summary>
                   Gösterilecek kategoriler
                   <span className="akordiyon-ozet">
@@ -5232,30 +6792,6 @@ export default function MapPage() {
                 </summary>
 
                 <div className="akordiyon-govde">
-                  {/* Toplu seçim: on beş kategoriyi tek tek açmak zorunda
-                      bırakmak, "hepsini görmek" isteyen kullanıcıya on beş tık
-                      demek olurdu. */}
-                  <div className="poi-toplu">
-                    <button
-                      type="button"
-                      className="btn-ghost kucuk"
-                      onClick={() => setPoiKategoriSecimi(
-                        new Set(poiStilleri.map((st) => st.kategoriId)),
-                      )}
-                      disabled={poiKategoriSecimi.size === poiStilleri.length}
-                    >
-                      Hepsini göster
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost kucuk"
-                      onClick={() => setPoiKategoriSecimi(new Set())}
-                      disabled={poiKategoriSecimi.size === 0}
-                    >
-                      Hiçbirini
-                    </button>
-                  </div>
-
                   <ul className="poi-lejant secilebilir">
                     {poiStilleri.map((st) => (
                       <li key={st.stil} title={st.tamYol}>
@@ -5299,13 +6835,17 @@ export default function MapPage() {
                 </p>
               )}
 
+              {/* METİN KISALDI.
+                  Burada "simgeleri GeoServer çiziyor, her kategori için ayrı
+                  bir SLD, kategori tablosundan üretiliyor" yazıyordu. Hepsi
+                  doğru ama hiçbiri KULLANICIYA ait: haritaya bakan kişi
+                  simgenin hangi sunucuda üretildiğini bilmek zorunda değil.
+                  Mimari açıklama wms.js ve PoiIkonlari.cs başlıklarında
+                  duruyor; ekranda kalan tek şey kullanıcının işine yarayan
+                  davranış. */}
               <p className="arama-ipucu muted">
-                Simgeleri GeoServer çiziyor: <strong>her kategori için ayrı bir SLD</strong>,
-                kategori tablosundan üretiliyor. POI adları yakınlaşınca (z ≈ 12–13)
-                nokta üzerinde beliriyor.
-                <br />
-                Simge, kategoriye <strong>yönetim panelinden</strong> seçiliyor; seçilmemişse
-                üst kategorininki miras alınıyor.
+                POI adları yakınlaştıkça görünür. Simgeler kategoriye göre
+                değişir.
               </p>
 
               {bugunkuTatil && (
@@ -5355,51 +6895,64 @@ export default function MapPage() {
             </div>
             )}
 
-            {/* Ödev 12: POI ekleme aracı — OPERATÖRÜN aracı.
-                Ayrı satırda çünkü çizim tiplerinden biri değil: nokta koyar
-                ama farklı bir tabloya, kategori ve mesai bilgisiyle. */}
-            {aracKullanilabilir(POI) && (
-              <button
-                type="button"
-                className={`tool-btn genis poi${activeTool === POI ? ' active' : ''}`}
-                onClick={() => aracSec(POI)}
-                aria-pressed={activeTool === POI}
-                title="Haritaya kategorili bir ilgi noktası (POI) ekle"
-              >
-                <span className="tool-icon"><PoiIkonu /></span>
-                POI Ekle
-              </button>
-            )}
+            {/* ---------- İKİNCİ SIRA: POI · DURAK · DÜZENLE ----------
+                Üçü de "haritadaki bir KAYDA dokunan" araçlar — üstteki
+                nokta/çizgi/poligon ise serbest geometri çiziyor. Önceden üçü
+                alt alta tam genişlikte duruyordu ve panelin üçte birini
+                kaplıyordu; oysa aynı ailedenler ve tek satıra sığıyorlar.
 
-            {/* Ödev 16 / Madde 2: "Durak Ekle" aracı — ulaşım operatörünün aracı.
-                POI Ekle'den ayrı bir satır ve ayrı bir YETKİ: ödev notu, ulaşım
-                rolünün POI ekleyememesini istiyor. İki araç aynı yetkiye bağlı
-                olsaydı birini vermek diğerini de açardı. */}
-            {aracKullanilabilir(DURAK) && (
-              <button
-                type="button"
-                className={`tool-btn genis durak${activeTool === DURAK ? ' active' : ''}`}
-                onClick={() => aracSec(DURAK)}
-                aria-pressed={activeTool === DURAK}
-                title="Haritaya durak ekle ve bir güzergaha bağla"
-              >
-                <span className="tool-icon"><DurakIkonu /></span>
-                Durak Ekle
-              </button>
-            )}
+                Izgara auto-fit: yetkisi olmayan araç hiç çizilmediği için
+                bir kullanıcıda üçü de, başkasında yalnızca biri olabiliyor —
+                sabit üç sütun verseydik tek düğme üçte bir genişlikte,
+                ortada asılı kalırdı.
 
-            {/* Düzenleme aracı ayrı bir satırda: çizim yapmıyor, var olanı değiştiriyor */}
-            {guncelleyebilir && (
-              <button
-                type="button"
-                className={`tool-btn genis${activeTool === DUZENLE ? ' active' : ''}`}
-                onClick={() => aracSec(DUZENLE)}
-                aria-pressed={activeTool === DUZENLE}
-                title="Kaydedilmiş geometrileri sürükleyerek düzenle"
-              >
-                <span className="tool-icon"><DuzenleIkonu /></span>
-                Düzenle
-              </button>
+                Etiketler KISALDI ("POI Ekle" → "POI"): dar sütunda uzun metin
+                iki satıra kırılıyor ve düğmelerin yüksekliği eşitsizleşiyordu.
+                Ne yaptıkları title'da tam hâliyle yazıyor. */}
+            {(aracKullanilabilir(POI) || aracKullanilabilir(DURAK) || guncelleyebilir) && (
+              <div className="tool-group tool-group-uclu">
+                {aracKullanilabilir(POI) && (
+                  <button
+                    type="button"
+                    className={`tool-btn poi${activeTool === POI ? ' active' : ''}`}
+                    onClick={() => aracSec(POI)}
+                    aria-pressed={activeTool === POI}
+                    title="Haritaya kategorili bir ilgi noktası (POI) ekle"
+                  >
+                    <span className="tool-icon"><PoiIkonu /></span>
+                    POI
+                  </button>
+                )}
+
+                {/* Durak, POI'den AYRI BİR YETKİYE bağlı: ödev notu ulaşım
+                    rolünün POI ekleyememesini istiyor. Yan yana durmaları
+                    yetkilerinin ortak olduğu anlamına gelmiyor. */}
+                {aracKullanilabilir(DURAK) && (
+                  <button
+                    type="button"
+                    className={`tool-btn durak${activeTool === DURAK ? ' active' : ''}`}
+                    onClick={() => aracSec(DURAK)}
+                    aria-pressed={activeTool === DURAK}
+                    title="Haritaya durak ekle ve bir güzergaha bağla"
+                  >
+                    <span className="tool-icon"><DurakIkonu /></span>
+                    Durak
+                  </button>
+                )}
+
+                {guncelleyebilir && (
+                  <button
+                    type="button"
+                    className={`tool-btn${activeTool === DUZENLE ? ' active' : ''}`}
+                    onClick={() => aracSec(DUZENLE)}
+                    aria-pressed={activeTool === DUZENLE}
+                    title="Kaydedilmiş geometrileri sürükleyerek düzenle"
+                  >
+                    <span className="tool-icon"><DuzenleIkonu /></span>
+                    Düzenle
+                  </button>
+                )}
+              </div>
             )}
 
             {/* Envanter Analizi (Ödev 4 / Görev 3) — çizer, saymaya yarar, KAYDETMEZ */}
@@ -5450,45 +7003,70 @@ export default function MapPage() {
               </button>
             )}
 
+            {/* Toplu Taşıma Erişilebilirlik Analizi — Konum Analizi'yle AYNI
+                yetki ve AYNI görsel dil (ısı haritası), farklı bir soru:
+                "buradan en yakın durağa kaç metre var?" */}
+            {yetkiVar(YETKILER.analizCalistirma) && (
+              <button
+                type="button"
+                className={`tool-btn genis konum${erisilebilirlikPaneliAcik ? ' active' : ''}`}
+                onClick={() => setErisilebilirlikPaneliAcik((a) => !a)}
+                aria-pressed={erisilebilirlikPaneliAcik}
+                aria-expanded={erisilebilirlikPaneliAcik}
+                title="Seçilen şehirde toplu taşıma durağına uzaklık haritası"
+              >
+                <span className="tool-icon"><GuzergahIkonu /></span>
+                Erişilebilirlik
+              </button>
+            )}
+
+            {/* TUR PLANLA — paneli açıp kapatan düğme.
+                Yetki isteyen bir bölüm: tur önerisi isteği DIŞ ve ÜCRETLİ bir
+                servise (Google Maps) gidiyor, o yüzden "Tur Yönetimi" yetkisi
+                olmayan hesapta düğme hiç çizilmiyor. Asıl kontrol sunucuda. */}
+            {yetkiVar(YETKILER.turYonetimi) && (
+              <button
+                type="button"
+                className={`tool-btn genis${turPaneliAcik ? ' active' : ''}`}
+                onClick={() => setTurPaneliAcik((a) => !a)}
+                aria-pressed={turPaneliAcik}
+                aria-expanded={turPaneliAcik}
+                title="Şehir, süre ve temaya göre gezi rotası önerisi al"
+              >
+                <span className="tool-icon"><GuzergahIkonu /></span>
+                Tur Planla
+              </button>
+            )}
+
             {isiAcik && (
+              /* METİN KISALDI: burada "GeoServer'da üretiliyor, SLD içinde
+                 gs:Heatmap" yazıyordu. Doğru bir bilgi ama KULLANICIYA
+                 değil, geliştiriciye ait — ekranda yer kaplayıp yapılacak
+                 işi gölgeliyordu. Teknik gerekçe kodun içinde duruyor. */
               <p className="tool-hint">
-                Yoğunluk yüzeyi <strong>GeoServer'da</strong> üretiliyor
-                (SLD içindeki <code>gs:Heatmap</code>). Değerler her görüntü için
-                <strong> 0–1</strong> aralığına ölçekleniyor.
-                <br />
-                Haritada <strong>herhangi bir yere</strong> tıklayın — kayıtlı
-                nokta olması gerekmiyor, o noktanın değeri sağ altta çıkar.
+                Haritada <strong>herhangi bir yere</strong> tıklayın; o noktanın
+                yoğunluk değeri sağ altta çıkar.
               </p>
             )}
 
             {!cizimAraciVar ? null : activeTool === POI ? (
               <p className="tool-hint">
-                Haritada POI'nin yerine tıklayın; açılan formda <strong>isim</strong>,
-                <strong> kategori</strong> ve <strong>mesai saatleri</strong> girin.
-                <br />
-                Kategoriler yönetim panelindeki <strong>POI Yönetimi</strong> ekranından tanımlanır.
+                POI'nin yerine tıklayın; açılan formu doldurun.
               </p>
             ) : activeTool === ANALIZ ? (
               <p className="tool-hint">
-                Analiz alanını çizin; köşeleri tıklayıp çift tıkla bitirin.
-                <br />
-                Alanla <strong>en ufak teması</strong> olan envanterler de sayılır.
-                Bu poligon <strong>veritabanına kaydedilmez</strong>.
+                Alanı çizin: köşeleri tıklayıp çift tıkla bitirin. Poligon
+                kaydedilmez.
               </p>
             ) : activeTool === DUZENLE ? (
               <p className="tool-hint">
-                Köşeleri sürükleyerek şekli değiştirin. Kenara tıklamak yeni köşe ekler,
-                <kbd>Alt</kbd> + tıklamak köşeyi siler.
-                <br />
-                Fare mevcut köşelere yapışır; bırakınca değişiklik kaydedilir.
+                Köşeleri sürükleyin. Kenara tıklamak köşe ekler,
+                <kbd>Alt</kbd>+tıklamak siler.
               </p>
             ) : activeTool === DURAK ? (
               <p className="tool-hint">
-                Durağın yerine tıklayın; açılan formda <strong>durak adı</strong> girip
-                <strong> güzergahı</strong> seçin.
-                <br />
-                Durak seçilen hattın <strong>sonuna</strong> eklenir; sırası
-                <strong> Güzergah Yönetimi</strong> ekranından sürükle-bırakla değişir.
+                Durağın yerine tıklayın; adını girip güzergahı seçin. Durak
+                hattın sonuna eklenir.
               </p>
             ) : activeTool === KONUM_ALAN ? (
               /* Ödev 14 — bu araç KENDİ İPUCUNU zaten panelde veriyor; burada
@@ -5497,8 +7075,7 @@ export default function MapPage() {
                  çizim tipini tanıyor, dördüncü bir araç oraya düşerse ekran
                  komple hata sınırına çarpıyor (bir kez yaşandı). */
               <p className="tool-hint">
-                Konum analizinin <strong>hedef bölgesini</strong> çiziyorsunuz.
-                Köşeleri tıklayıp çift tıkla bitirin; kriterleri aşağıdaki
+                Hedef bölgeyi çizin; kriterleri aşağıdaki
                 <strong> Konum Analizi</strong> bölümünden vereceksiniz.
               </p>
             ) : DRAW_TYPES[activeTool] ? (
@@ -5514,10 +7091,19 @@ export default function MapPage() {
             {/* Kısayol künyesi — araç seçili değilken görünür, yer kaplamasın.
                 Çizim yetkisi yoksa kısayolların da bir anlamı yok. */}
             {!activeTool && cizimAraciVar && (
-              <p className="kisayol-kunye">
-                <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> araçlar ·
-                <kbd>P</kbd> POI · <kbd>D</kbd> düzenle · <kbd>A</kbd> analiz · <kbd>/</kbd> ara
-              </p>
+              /* KISAYOLLAR HİZALANDI.
+                 Tek paragraf hâlinde, aralarında "·" ile akıyordu: satır
+                 sonu nereye denk gelirse orada kırılıyor, "P" bir satırda
+                 "POI" diğerinde kalabiliyordu. Artık her kısayol kendi
+                 kutusunda ve kutular ızgaraya oturuyor — tuş ile karşılığı
+                 asla ayrılmıyor. */
+              <ul className="kisayol-kunye">
+                <li><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><span>araçlar</span></li>
+                <li><kbd>P</kbd><span>POI</span></li>
+                <li><kbd>D</kbd><span>düzenle</span></li>
+                <li><kbd>A</kbd><span>analiz</span></li>
+                <li><kbd>/</kbd><span>ara</span></li>
+              </ul>
             )}
 
             {/* Araçlar gizlendi ama sebebi yazılı: aksi hâlde EKSİK bir menü
@@ -5631,6 +7217,332 @@ export default function MapPage() {
             />
           )}
 
+          {erisilebilirlikPaneliAcik && yetkiVar(YETKILER.analizCalistirma) && (
+            <ErisilebilirlikPaneli
+              iller={iller}
+              illerHatasi={illerHatasi}
+              sonuc={erisilebilirlikSonuc}
+              yukleniyor={erisilebilirlikYukleniyor}
+              hata={erisilebilirlikHata}
+              onCalistir={erisilebilirlikCalistir}
+              onTemizle={erisilebilirlikTemizle}
+            />
+          )}
+
+          {/* ---------- TUR PLANLAMA ----------
+              Seçimleri toplayıp rota servisine gönderen form ayrı bir
+              bileşende (TourBuilder); MapPage yalnızca ÖNERİYİ alıp haritaya
+              çiziyor — konum analizi panelindeki sorumluluk sınırının aynısı. */}
+          {turPaneliAcik && yetkiVar(YETKILER.turYonetimi) && (
+            <TourBuilder
+              iller={iller}
+              illerHatasi={illerHatasi}
+              onUnauthorized={goLogin}
+              onSonuc={(oneri, istek) => {
+                setTurOnerisi(oneri)
+                setTurIstegi(istek)
+              }}
+            />
+          )}
+
+          {/* Önerinin haritadaki çizimini kaldırma düğmesi panelde değil
+              BURADA: çizim MapPage'in sorumluluğu, TourBuilder onu bilmiyor. */}
+          {turOnerisi && (
+            <section className="panel-section">
+              <h2>
+                <span className="tool-icon"><GuzergahIkonu /></span>
+                Tur Önerisi
+                <span className="sayi">{turOnerisi.waypoints?.length ?? 0}</span>
+              </h2>
+
+              {/* ROTA ÇİZİLEMEDİYSE SÖYLE.
+                  Haritada duraklar yine kesikli bir çizgiyle bağlanıyor ama
+                  o çizgi bir yol değil, sadece sıra. Bunu yazmasaydık
+                  kullanıcı kesikli çizgiyi gerçek güzergâh sanardı; sıra ve
+                  süreler de "kuş uçuşu" tahmine dayandığı için yanıltıcı
+                  olurdu. */}
+              {!turOnerisi.routeWkt && (turOnerisi.waypoints?.length ?? 0) >= 2 && (
+                <p className="analiz-not">
+                  Yol ağı servisi cevap vermediği için güzergâh yollara
+                  oturtulamadı. Haritadaki kesikli çizgi yalnızca durakların
+                  sırasını gösteriyor; mesafe ve süreler kuş uçuşu tahmindir.
+                </p>
+              )}
+
+              {/* PROGRAM: gün gün, saat saat.
+                  Düz durak listesi "kaçta neredeyim?" sorusunu cevaplamıyordu;
+                  çok günlü turda hangi durağın hangi güne düştüğü de
+                  görünmüyordu. Her bacakta cihazın harita uygulamasına giden
+                  bir yol tarifi bağlantısı var — adım adım tarifi orası
+                  veriyor (trafik ve tek yönler orada). */}
+              {turProgrami?.gunler.map((gun) => (
+                <div key={gun.gun} className="tur-gun">
+                  <div className="tur-gun-baslik">
+                    <strong>{gun.gun}. gün</strong>
+                    <span className="muted">
+                      {gun.baslangic} – {gun.bitis}
+                      {' · '}{dakikaMetni(gun.toplamDakika)}
+                    </span>
+                  </div>
+
+                  <ol className="tur-oneri-listesi">
+                    {gun.duraklar.map((durak) => (
+                      <li key={`${gun.gun}-${durak.order}`} className="tur-program-satiri">
+                        {/* Önceki duraktan buraya: mesafe, süre ve tarif
+                            bağlantısı. Günün ilk durağında yok — sabah nereden
+                            çıkılacağını bilmiyoruz. */}
+                        {durak.gelis && (
+                          <button
+                            type="button"
+                            className="tur-bacak"
+                            onClick={() => bacakTarifiniAc(durak.oncekiDurak, durak)}
+                            title="Bu bacağın yol tarifini haritada aç"
+                          >
+                            ↓ ≈ {mesafeMetni(durak.gelis.metre)}
+                            {' · '}≈ {dakikaMetni(durak.gelis.dakika)}
+                            <span className="tur-bacak-link">yol tarifi</span>
+                          </button>
+                        )}
+
+                        <div className="tur-program-durak">
+                          <span className="tur-oneri-sira">{durak.order}</span>
+
+                          {/* ÜÇ SATIRLI DÜZEN: ad · (saat + rozet).
+                              Yan yanayken satır panele sığmıyordu: sıra +
+                              ad + saat + üç düğme, 300 pikselin çok üstüne
+                              çıkıp listeyi yatay taşırıyor, aradaki bacak
+                              satırını tek harflik bir sütuna sıkıştırıyordu
+                              (canlıda görüldü).
+
+                              ROZET DE ADIN YANINDAN ALINDI. Orada dururken
+                              "Serbest zaman (+60 dk)" gibi uzun bir etiket
+                              adı iki-üç harfe kırpıyordu ("Ha… Serbest
+                              zaman (+60 dk)") — bakan kişi hangi mekan
+                              olduğunu okuyamıyordu. Artık ad kendi satırında
+                              ve gerekirse iki satıra sarıyor; saat ve rozet
+                              altta, ikincil bilgi olarak duruyor. */}
+                          <span className="tur-oneri-ad">
+                            <span className="tur-durak-ad">{durak.name}</span>
+
+                            <span className="tur-durak-meta">
+                              <span className="tur-program-saat">
+                                {durak.varis}–{durak.ayrilis}
+                              </span>
+                              {/* MOLA ROZETİ: yemek ve konaklama durakları
+                                  sıradan gezi duraklarından ayrılsın.
+                                  Yalnızca rol notu olanlarda çıkıyor — puan
+                                  notu ("Google puanı 4.7") rozete dönüşseydi
+                                  her satırda bir etiket olurdu. */}
+                              {durak.note && !durak.note.startsWith('Google') && (
+                                <span className="tur-mola-rozet">{durak.note}</span>
+                              )}
+                            </span>
+                          </span>
+
+                          {/* DÜZENLEME — yalnızca KAYDEDİLMEMİŞ öneride.
+                              Kaydedilmiş bir turun durakları paylaşılmış
+                              olabilir; onları buradan değiştirmek, bağlantıyı
+                              açmış kişilerin ekranını habersiz değiştirmek
+                              olurdu. */}
+                          <span className="tur-durak-islem">
+                            <button
+                              type="button"
+                              onClick={() => turDuragiTasi(durak.order, -1)}
+                              disabled={durak.order === 1 || turRotaHesaplaniyor}
+                              title="Yukarı taşı"
+                              aria-label={`${durak.name} durağını yukarı taşı`}
+                            >↑</button>
+                            <button
+                              type="button"
+                              onClick={() => turDuragiTasi(durak.order, 1)}
+                              disabled={durak.order === (turOnerisi.waypoints?.length ?? 0)
+                                        || turRotaHesaplaniyor}
+                              title="Aşağı taşı"
+                              aria-label={`${durak.name} durağını aşağı taşı`}
+                            >↓</button>
+                            <button
+                              type="button"
+                              className="sil"
+                              onClick={() => turDuragiSil(durak.order)}
+                              disabled={turRotaHesaplaniyor}
+                              title="Turdan çıkar"
+                              aria-label={`${durak.name} durağını turdan çıkar`}
+                            >×</button>
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+
+              {/* İSTENEN GÜN DOLMADIYSA SÖYLE.
+                  10 günlük tur isteyip bölgede 14 kayda değer mekan varsa
+                  yedi boş gün açmıyoruz (bkz. turProgrami.js) — ama sessiz
+                  kalsaydık kullanıcı "günlerin gerisi nerede?" diye kalırdı.
+                  Şikâyetin kendisi buydu. */}
+              {turProgrami && turProgrami.toplamGun < turProgrami.talepEdilenGun && (
+                <p className="analiz-not">
+                  {turProgrami.talepEdilenGun} gün istediniz; bölgede bulunan
+                  mekanlar {turProgrami.toplamGun} güne yetiyor. Boş gün
+                  eklemek yerine programı {turProgrami.toplamGun} güne
+                  yaydık — daha uzun bir tur için temayı genişletmeyi ya da
+                  komşu ilçeleri eklemeyi deneyin.
+                </p>
+              )}
+
+              {turProgrami?.sigmayan.length > 0 && (
+                <p className="analiz-engel">
+                  {turProgrami.sigmayan.length} durak verdiğiniz gün sayısına
+                  sığmadı: {turProgrami.sigmayan.map((d) => d.name).join(', ')}
+                </p>
+              )}
+
+              {/* ---------- DURAK EKLEME ----------
+                  Öneri bir başlangıç noktası, son söz değil: kullanıcı kendi
+                  bildiği bir yeri ekleyebilmeli. Arama, uygulamanın KENDİ POI
+                  tablosunda (/api/poi/ara) — turistik aktarımdan gelen
+                  müzeler, anıtlar ve yöresel lezzetler zaten orada. */}
+              <div className="tur-durak-ekle">
+                <label htmlFor="tur-durak-ara">Rotaya durak ekle</label>
+                <input
+                  id="tur-durak-ara"
+                  type="search"
+                  value={durakAramaMetni}
+                  onChange={(e) => setDurakAramaMetni(e.target.value)}
+                  placeholder="POI adı ara (en az 2 harf)"
+                  autoComplete="off"
+                />
+
+                {durakAramaSonuclari.length > 0 && (
+                  <ul className="tur-durak-sonuc">
+                    {durakAramaSonuclari.map((poi) => (
+                      <li key={poi.id}>
+                        <button type="button" onClick={() => poiyiTuraEkle(poi)}>
+                          <strong>{poi.isim}</strong>
+                          {poi.kategoriYolu && (
+                            <span className="muted"> · {poi.kategoriYolu}</span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* Rota yeniden çiziliyorken durak listesi ZATEN güncel;
+                    bekleyen tek şey yolun kendisi. Bunu söylemek, "bir şey
+                    olmadı mı?" sorusunu önlüyor. */}
+                {turRotaHesaplaniyor && (
+                  <p className="muted">Rota yeniden hesaplanıyor…</p>
+                )}
+
+                {turDuzenlemeHatasi && (
+                  <p className="analiz-engel">{turDuzenlemeHatasi}</p>
+                )}
+              </div>
+
+              {/* ÖNİZLEME: rehber, paylaşmadan önce rotayı oynatıp görsün.
+                  Takip edilen canlı bir tur varsa kontrol onu oynatıyor
+                  (bkz. simuleEdilecekTur). */}
+              <TurSimulasyonKontrolu
+                simulasyon={turSimulasyonu}
+                ipucu="Rotayı haritada baştan sona oynatarak turun nereden nereye gittiğini görebilirsiniz."
+              />
+
+              {/* Düğmenin NE YAPACAĞI önceden yazıyor: "Kaydet ve Paylaş"
+                  tek başına, paylaşımın bir bağlantı üretmek olduğunu
+                  söylemiyordu. */}
+              <p className="tool-hint muted">
+                Kaydedince tur sunucuda saklanır ve size bir
+                <strong> paylaşım bağlantısı </strong> verilir; o bağlantıyı
+                açan herkes turu canlı takip edebilir.
+              </p>
+
+              <button
+                type="button"
+                className="btn-primary genis"
+                onClick={turuKaydetVePaylas}
+                disabled={turKaydediliyor}
+                title="Turu kaydet, canlı oturum aç ve paylaşılabilir bağlantı üret"
+              >
+                {turKaydediliyor ? 'Kaydediliyor…' : 'Turu Kaydet ve Paylaş'}
+              </button>
+
+              <button
+                type="button"
+                className="btn-ghost genis"
+                onClick={() => setTurOnerisi(null)}
+              >
+                Öneriyi haritadan kaldır
+              </button>
+
+              {turPaylasimHatasi && <p className="analiz-hata">{turPaylasimHatasi}</p>}
+            </section>
+          )}
+
+          {/* ---------- PAYLAŞIM BAĞLANTISI ----------
+              Öneri kartından AYRI duruyor: kullanıcı öneriyi haritadan
+              kaldırsa bile kod hâlâ geçerli ve paylaşılabilir olmalı. */}
+          {turPaylasimi && (
+            <section className="panel-section tur-paylasim" ref={paylasimBolumuRef}>
+              <h2>
+                <span className="tool-icon"><GuzergahIkonu /></span>
+                Tur Paylaşımı
+              </h2>
+
+              {/* ÜÇ ADIM AÇIKÇA YAZIYOR.
+                  Kullanıcı geri bildirimi: "turu nasıl paylaşacağımızı
+                  anlamadım." Bağlantı ve kod ekrandaydı ama ne yapılacağı
+                  yazmıyordu — bir kutu içinde duran altı harfin ne işe
+                  yaradığı kendiliğinden anlaşılmıyor. */}
+              <ol className="tur-paylasim-adimlar">
+                <li>Aşağıdaki bağlantıyı kopyalayın.</li>
+                <li>Gruba gönderin (WhatsApp, e-posta, karekod…).</li>
+                <li>
+                  Açan kişi tura katılır; haritada sıradaki durağı, kalan
+                  süreyi ve rotayı görür. Bağlantıyı açamayan biri
+                  uygulamadan <strong>katılım kodunu</strong> yazarak da
+                  katılabilir.
+                </li>
+              </ol>
+
+              <div className="tur-paylasim-kod">
+                <span className="muted">Katılım kodu</span>
+                <strong>{turPaylasimi.kod}</strong>
+              </div>
+
+              {/* Bağlantı readOnly bir input: uzun metin kırpılmadan
+                  seçilebiliyor ve pano izni olmayan tarayıcıda elle
+                  kopyalanabiliyor. */}
+              <input
+                type="text"
+                className="tur-paylasim-baglanti"
+                value={turPaylasimi.baglanti ?? ''}
+                readOnly
+                onFocus={(e) => e.target.select()}
+                aria-label="Paylaşım bağlantısı"
+              />
+
+              <button type="button" className="btn-ghost genis" onClick={baglantiyiKopyala}>
+                {baglantiKopyalandi ? 'Kopyalandı' : 'Bağlantıyı kopyala'}
+              </button>
+            </section>
+          )}
+
+          {/* ---------- CANLI TUR ----------
+              Takip edilen bir oturum yoksa bileşen hiçbir şey çizmiyor, o
+              yüzden koşulsuz duruyor: tura katılan kullanıcı panelin hangi
+              bölümünü açtığına bakmaksızın canlı ekranı görmeli. */}
+          <ActiveTourView
+            durum={turDurum}
+            dispatch={turDispatch}
+            onUnauthorized={goLogin}
+            ulasimTipi={turIstegi?.ulasimTipi}
+            /* Simülasyon MapPage'de yaşıyor çünkü aracı çizen katman burada.
+               Canlı tur ekranı yalnızca düğmeyi gösteriyor. */
+            simulasyon={turSimulasyonu}
+          />
+
           {/* ---------- Ödev 16: ULAŞIM ----------
               Hatların lejantı + tek katman anahtarı. Yönetim ekranına
               gitmeden "hangi renk hangi hat" sorusunu cevaplıyor.
@@ -5700,6 +7612,20 @@ export default function MapPage() {
                           rota yok
                         </small>
                       )}
+
+                      {/* Ödev 19: "Haritada VEYA LİSTEDE bir güzergaha
+                          tıklandığında Simülasyonu Başlat butonu çıksın."
+                          Panel yolu, haritada hattı bulmayı gerektirmiyor. */}
+                      {g.durakSayisi >= 2 && (
+                        <div className="guzergah-simulasyon">
+                          {simulasyonlar[g.id] && (
+                            <span className="canli-rozet">
+                              canlı · %{Math.round(simulasyonlar[g.id].yuzde)}
+                            </span>
+                          )}
+                          {simulasyonDugmeleri(g.id)}
+                        </div>
+                      )}
                     </li>
                   )
                 })}
@@ -5709,6 +7635,16 @@ export default function MapPage() {
                 Kesikli çizgi <strong>kuş uçuşu</strong> demek: o hat için OSRM
                 rotası henüz üretilmemiş. Düz çizgi ve <strong>yön okları</strong>,
                 yollara oturmuş gerçek güzergahı gösteriyor.
+              </p>
+
+              {/* Yeni davranışın DUYURUSU. Haritada tıklanabilir hâle gelen
+                  bir şeyin keşfedilmesi imleç değişiminden ibaret kalırsa
+                  çoğu kullanıcı hiç denemiyor; tek cümle yeterli. */}
+              <p className="tool-hint muted">
+                Bir hattın <strong>çizgisine tıklayın</strong>: o parçanın
+                (önceki duraktan sonrakine) yol alternatifleri turuncu kesikli
+                çizgilerle açılır. Alternatife <strong>tek tıklama</strong> onu
+                gösterir, <strong>çift tıklama</strong> hattın kalıcı rotası yapar.
               </p>
             </section>
           )}
@@ -5769,11 +7705,14 @@ export default function MapPage() {
                   GeoServer WMS
                   <span className="sayi">resim</span>
                 </label>
-                <p className="katman-not">
-                  {geoDurum.ayakta
-                    ? 'Genel gösterim bu katmandan geliyor (sunucuda boyanmış resim). Üstteki üç vektör katmanı tıklama ve düzenleme için.'
-                    : 'GeoServer’a ulaşılamıyor — katman açılamıyor.'}
-                </p>
+                {/* Ayakta olduğunda AÇIKLAMA YOK: katmanın adı ve "resim"
+                    rozeti zaten ne olduğunu söylüyordu; iki cümlelik teknik
+                    not her açılışta okunması gereken bir şey değil. Yalnızca
+                    ULAŞILAMADIĞINDA konuşuyor — orada kullanıcının bilmesi
+                    gereken gerçek bir durum var. */}
+                {!geoDurum.ayakta && (
+                  <p className="katman-not">GeoServer’a ulaşılamıyor — katman açılamıyor.</p>
+                )}
               </>
             )}
 
@@ -5806,7 +7745,28 @@ export default function MapPage() {
                 {yetkiVar(YETKILER.poiEkleme) && <> <kbd>P</kbd> ile eklemeye başlayın.</>}
               </p>
             ) : (
-              <>
+              /* ---- LİSTE KATLI ----
+                 Turistik POI aktarımından sonra bu bölüm binlerce satır
+                 oldu ve panelde aşağı doğru akıp gidiyordu: altındaki
+                 "Kayıtlı Geometriler" bölümü ekranın dışına düşüyordu.
+
+                 Kaç POI olduğu BAŞLIKTA zaten yazıyor; listenin kendisi
+                 ise ancak aranırken gerekiyor. Katlı hâlde bilgi kaybı yok,
+                 yalnızca yer kazanıyoruz — POI Kategorileri bölümünde
+                 verilen kararla aynı.
+
+                 Açıkken de yüksekliği sınırlı (CSS: .poi-list-govde):
+                 listeyi açan biri panelin tamamını kaybetmesin diye kendi
+                 içinde kayıyor. */
+              <details className="akordiyon panel-akordiyon">
+                <summary>
+                  POI listesi
+                  <span className="akordiyon-ozet">
+                    {poiler.length.toLocaleString('tr-TR')} kayıt
+                  </span>
+                </summary>
+
+                <div className="akordiyon-govde poi-list-govde">
               <ul className="geom-list poi-list" onMouseLeave={temizleVurgu}>
                 {poiler.slice(0, poiListeSiniri).map((dto) => (
                   <li
@@ -5844,7 +7804,8 @@ export default function MapPage() {
                   </button>
                 </p>
               )}
-              </>
+                </div>
+              </details>
             )}
           </section>
 

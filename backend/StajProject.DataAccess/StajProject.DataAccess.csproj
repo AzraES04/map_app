@@ -21,6 +21,10 @@
                                 GeoServerSettings nesnesine bağlamak için -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.2" />
+
+    <!-- Google Maps istemcileri: arama ve rota cevaplari onbellekleniyor.
+         Kota koruyan en etkili tek karar bu (bkz. PlacesClient). -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="8.0.1" />
   </ItemGroup>
 
   <ItemGroup>

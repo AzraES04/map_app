@@ -178,3 +178,30 @@ export const rotaOnizle = (guzergahId, viaNoktalar = [], onUnauthorized) =>
 
 export const durakAlternatifleri = (durakId, onUnauthorized) =>
   istek(`/api/ulasim/duraklar/${durakId}/alternatifler`, {}, onUnauthorized)
+
+// ---------------------------------------------------------------------------
+//  Simülasyon (Ödev 19)
+// ---------------------------------------------------------------------------
+
+/**
+ * Simülasyonu başlatır ve aracın BAŞLANGIÇ durumunu döner.
+ * Sonraki konumlar SignalR'dan geliyor (bkz. simulasyonHub.js).
+ *
+ * "Simülasyon Başlatma" yetkisi ister — ödev metni gereği Admin ve Operatör.
+ */
+export const simulasyonBaslat = (guzergahId, onUnauthorized) =>
+  istek(`/api/ulasim/guzergahlar/${guzergahId}/simulasyon`, { method: 'POST' }, onUnauthorized)
+
+/** Çalışan simülasyonu durdurur; takipçilerin ekranından da araç kalkar. */
+export const simulasyonDurdur = (guzergahId, onUnauthorized) =>
+  istek(`/api/ulasim/guzergahlar/${guzergahId}/simulasyon`, { method: 'DELETE' }, onUnauthorized)
+
+/**
+ * Şu an çalışan bütün simülasyonlar.
+ *
+ * Haritayı yeni AÇAN istemci için: SignalR yalnızca bundan sonraki
+ * güncellemeleri gönderir, o an yolda olan araçları bilmez. Bu istek
+ * olmasaydı sayfayı yenileyen kullanıcı çalışan bir simülasyonu göremezdi.
+ */
+export const aktifSimulasyonlar = (onUnauthorized) =>
+  istek('/api/ulasim/simulasyonlar', {}, onUnauthorized)

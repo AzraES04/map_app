@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using StajProject.API.Hubs;
 using StajProject.API.Middleware;
 using StajProject.API.Services;
 using StajProject.Business;
@@ -55,6 +56,34 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
             ClockSkew = TimeSpan.Zero           // varsayılan 5 dk toleransı kaldır
         };
+
+        // ---- Ödev 19: SignalR bağlantısında token nereden okunacak? ----
+        //
+        // Tarayıcının WebSocket API'si el sıkışmaya ÖZEL BAŞLIK
+        // ekleyemiyor; yani "Authorization: Bearer ..." gönderilemiyor.
+        // SignalR'ın belgelenmiş çözümü token'ı adres satırında
+        // (?access_token=...) taşımak ve sunucuda buradan okumak.
+        //
+        // ⚠ Yalnızca /hubs ile başlayan yollar için. Bütün isteklerde
+        // açsaydık, token'ın adres satırında taşınmasını NORMALLEŞTİRİRDİK:
+        // adresler sunucu günlüklerine, tarayıcı geçmişine ve Referer
+        // başlığına yazılır — başlıklar yazılmaz. REST uçları eskisi gibi
+        // başlıkla çalışmaya devam ediyor.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var token = context.Request.Query["access_token"];
+                var yol = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(token) && yol.StartsWithSegments("/hubs"))
+                {
+                    context.Token = token;
+                }
+
+                return Task.CompletedTask;
+            },
+        };
     });
 builder.Services.AddAuthorization();
 
@@ -74,6 +103,18 @@ const string GirisPolitikasi = "giris";
 // tahmine karşı değil, kötüye kullanıma karşı bir tavan.
 const string YenilemePolitikasi = "yenileme";
 
+// MİSAFİR TUR GÖRÜNÜMÜ — kimliksiz açılan tek uç.
+//
+// Buradaki "parola" 6 karakterlik katılım kodu: 28 harflik alfabeden ~481
+// milyon olasılık. Dakikada 60 denemeyle kaba kuvvet 15 yıl sürer, yani
+// sınır tahmine karşı yeterli.
+//
+// Neden 60 (girişteki gibi 5 değil)? Çünkü misafir sayfası turu canlı takip
+// etmek için düzenli aralıkla soruyor ve bir grubun tamamı aynı otel
+// ağının/operatörün arkasından çıkabiliyor — tek IP'de onlarca kişi. Beş
+// istekle sınırlasaydık grubun yarısı turu göremezdi.
+const string MisafirPolitikasi = "misafir";
+
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy(GirisPolitikasi, httpContext =>
@@ -86,6 +127,16 @@ builder.Services.AddRateLimiter(options =>
                 PermitLimit = 5,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,   // sıraya alma, doğrudan reddet
+            }));
+
+    options.AddPolicy(MisafirPolitikasi, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "bilinmeyen",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
             }));
 
     options.AddPolicy(YenilemePolitikasi, httpContext =>
@@ -131,6 +182,27 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// ---- Ödev 19: canlı konum yayını ----
+//
+// AddSignalR yalnızca taşıma altyapısını kuruyor. Simülasyonun kendisi
+// (defter + ilerleme hesabı) iş katmanında; buradaki yayıncı ikisini
+// birleştiren SUNUM parçası: zamanlayıcıdan aldığı durumu SignalR
+// gruplarına dağıtıyor.
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<SimulasyonYayinci>();
+
+// TUR ÖNBELLEĞİNİ AÇILIŞTA ISIT.
+//
+// Overpass'ten ilk cevap 6-10 saniye sürüyor, ikincisi önbellekten anında
+// geliyor. Bu görev o ilk beklemeyi kullanıcının önünden alıp açılışa
+// taşıyor — Overpass'i hızlandıramıyoruz ama beklemeyi görünmez kılabiliriz.
+// Ayrıntılı gerekçe TurOnbellekIsiticisi başlığında.
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection("TurOnbellek").Get<TurOnbellekAyarlari>()
+    ?? new TurOnbellekAyarlari());
+
+builder.Services.AddHostedService<TurOnbellekIsiticisi>();
 
 // Swagger'a "Authorize" düğmesi ekle
 builder.Services.AddSwaggerGen(options =>
@@ -185,7 +257,13 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend", policy =>
         policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
               .AllowAnyHeader()
-              .AllowAnyMethod());
+              .AllowAnyMethod()
+              // Ödev 19: SignalR'ın el sıkışma (negotiate) isteği kimlik
+              // bilgisi taşıyabilmeli. AllowCredentials, joker köken
+              // ("*") ile BİRLİKTE kullanılamaz — zaten kökenleri tek tek
+              // yazdığımız için sorun yok, ama joker'e dönülürse
+              // uygulama açılışta hata verir. Bu bir güvenlik ağı.
+              .AllowCredentials());
 });
 
 var app = builder.Build();
@@ -236,5 +314,9 @@ app.UseAuthentication();   // önce kimlik doğrulama (token'ı çözer)
 app.UseAuthorization();    // sonra yetkilendirme ([Authorize] kontrolü)
 
 app.MapControllers();
+
+// Ödev 19: canlı yayın kanalı. Vite geliştirme sunucusu bu yolu da
+// vekilliyor (frontend/vite.config.js → "/hubs", ws: true).
+app.MapHub<SimulasyonHub>("/hubs/simulasyon");
 
 app.Run();

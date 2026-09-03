@@ -41,6 +41,13 @@ public class YetkilendirmeDenetimiTests
     /// </summary>
     private static readonly Dictionary<string, string> Istisnalar = new()
     {
+        ["TurController.MisafirYoklamaCevabi"] =
+            "Kimliksiz uç: yetki özniteliği takılamaz çünkü cevap veren "
+            + "misafirin hesabı yok. Yetkilendirmenin yerini KATILIM KODU "
+            + "alıyor (kod geçersizse 404) ve uç veritabanına yazmıyor — "
+            + "cevap yalnızca bellekteki yoklama sayacına gidiyor. "
+            + "Gerekçenin uzunu AnonimUclar listesinde.",
+
         // Giriş ve kayıt: kimlik doğrulamadan ÖNCE çalışıyorlar, yetki
         // aramak mantıksız olurdu (henüz kim olduğu bilinmiyor). İkisi de
         // [EnableRateLimiting("giris")] ile korunuyor.
@@ -73,6 +80,22 @@ public class YetkilendirmeDenetimiTests
         // Yeni bir "Çöp Kutusu Yönetimi" yetkisi UYDURULMADI: o yetkiye sahip
         // biri, silemeyeceği bir kaydı geri alabilir hâle gelirdi.
         ["CopKutusuController.GeriAl"] = "Yetki KAYIT TÜRÜNE göre değişiyor — kural serviste (CopKutusuTests).",
+        ["CopKutusuController.KaliciSil"] = "Aynı gerekçe: yetki KAYIT TÜRÜNE göre değişiyor, kural serviste (CopKutusuTests).",
+
+        // ---- Canlı tur oturumu ----
+        //
+        // Üçünde de gereken izin bir YETKİ değil, OTURUMLA KURULAN İLİŞKİ.
+        // "Tur Yönetimi" yetkisine bağlasaydık tur açabilen herkes
+        // BAŞKASININ grubunu yönlendirebilir ya da başkasının katılımını
+        // sonlandırabilirdi — hata vermeyen, yalnızca yanlış davranan bir açık.
+        //
+        // Kurallar serviste (TurOturumServisi) ve testleri TurOturumTests'te:
+        //   • Katilimci_turu_ilerletemiyor
+        //   • Baskasinin_turunun_oturumu_devralinamiyor
+        //   • Biten_turun_koduyla_katilinamiyor
+        ["TurController.OturumaKatil"] = "Katılmak izleme işi; kanıt KATILIM KODU, ayrıca [Authorize] (TurOturumTests).",
+        ["TurController.OturumGuncelle"] = "Yalnızca O OTURUMUN rehberi ilerletebilir — kural serviste (TurOturumTests).",
+        ["TurController.OturumdanAyril"] = "Kendi katılımını sonlandırma; başkasınınkine dokunamıyor (TurOturumTests).",
 
         // POI ve durak GÜNCELLEME/SİLME: gereken yetki
         // "X Yönetimi" VEYA ("X Ekleme" + kaydın sahibi olmak).
@@ -193,6 +216,95 @@ public class YetkilendirmeDenetimiTests
     [Fact]
     public void HerIstisnaGerekceTasir()
         => Assert.All(Istisnalar, x => Assert.False(string.IsNullOrWhiteSpace(x.Value), x.Key));
+
+    // ------------------------------------------------------------------
+    //  KİMLİKSİZ (anonim) uçlar
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// <c>[AllowAnonymous]</c> taşıyan uçlar ve gerekçeleri.
+    ///
+    /// ---- BU LİSTE NEDEN SONRADAN EKLENDİ? ----
+    /// Denetim yalnızca SINIF düzeyindeki <c>[Authorize]</c>'a bakıyordu.
+    /// Metot düzeyinde <c>[AllowAnonymous]</c> onu eziyor ve testler bunu
+    /// görmüyordu — nitekim misafir tur ucu eklendiğinde denetim hiç
+    /// kırılmadan geçti. Kimliksiz bir uç, güvenlik yüzeyinin en dikkat
+    /// isteyen parçası; sessizce eklenebiliyor olması başlı başına bir
+    /// açıktı.
+    /// </summary>
+    private static readonly Dictionary<string, string> AnonimUclar = new()
+    {
+        // AuthController BURADA YOK ve olmamalı: onun uçları [AllowAnonymous]
+        // taşımıyor, sınıfın kendisi [Authorize] altında değil. O durumu
+        // ButunControllerlarAuthorizeAltinda testi ayrıca kayda geçiriyor.
+        // Aynı istisnayı iki listede tutmak, birini güncelleyip diğerini
+        // unutmaya davetiye olurdu.
+        ["TurController.MisafirYoklamaCevabi"] =
+            "Yoklama cevabı: cevap verecek kişinin hesabı yok, katılım kodu "
+            + "o gruba ait olduğunun tek kanıtı. Yazdığı şey KAPALI bir "
+            + "kümeden ('Buradayim'|'Degilim'|'Acil') ve yalnızca bellekteki "
+            + "sayaca gidiyor — veritabanına hiçbir şey yazılmıyor. Serbest "
+            + "metin alsaydık uç, kimliksiz bir mesaj kutusuna dönerdi.",
+
+        ["TurController.Misafir"] =
+            "Paylaşılan tur bağlantısı: kullanıcı hesabı olmayan misafir, "
+            + "yalnızca katılım koduyla turu GÖRÜNTÜLÜYOR. Uç salt okuma; "
+            + "cevapta katılımcı adları, id'ler ve katılım kodu yok "
+            + "(bkz. MisafirTurDto). Kaba kuvvete karşı IP başına dakikada "
+            + "60 istek sınırı var.",
+    };
+
+    /// <summary>Sınıf ya da metot düzeyinde <c>[AllowAnonymous]</c> taşıyan uçlar.</summary>
+    private static IEnumerable<(Type Controller, MethodInfo Metot)> AnonimUcAdaylari()
+        => typeof(LocationsController).Assembly.GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract && typeof(ControllerBase).IsAssignableFrom(t))
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Where(m => m.GetCustomAttributes(inherit: true).OfType<AllowAnonymousAttribute>().Any())
+                .Select(m => (Controller: t, Metot: m)));
+
+    /// <summary>
+    /// Kimliksiz her uç, gerekçesiyle birlikte listede olmalı.
+    ///
+    /// Yeni bir <c>[AllowAnonymous]</c> eklemek artık bilinçli bir karar:
+    /// test kırılıyor ve düzeltmenin yolu, o ucun neden herkese açık
+    /// olduğunu yazmaktan geçiyor.
+    /// </summary>
+    [Fact]
+    public void HicbirAnonimUc_GEREKCESIZ_kalmaz()
+    {
+        var yazilmamislar = AnonimUcAdaylari()
+            .Select(x => $"{x.Controller.Name}.{x.Metot.Name}")
+            .Where(ad => !AnonimUclar.ContainsKey(ad))
+            .Distinct()
+            .OrderBy(ad => ad)
+            .ToList();
+
+        Assert.True(yazilmamislar.Count == 0,
+            "Şu uçlar [AllowAnonymous] taşıyor ama gerekçesi yazılmamış: "
+            + string.Join(", ", yazilmamislar)
+            + " — kimliksiz bir uç güvenlik yüzeyini genişletir. Gerçekten "
+            + "gerekiyorsa AnonimUclar sözlüğüne GEREKÇESİYLE yazın; "
+            + "gerekmiyorsa [AllowAnonymous] özniteliğini kaldırın.");
+    }
+
+    /// <summary>Anonim uç listesi de çürümesin (yazma uçlarındaki kuralın aynısı).</summary>
+    [Fact]
+    public void AnonimUcListesinde_karsiligi_olmayan_kalmaz()
+    {
+        var gercek = AnonimUcAdaylari()
+            .Select(x => $"{x.Controller.Name}.{x.Metot.Name}")
+            .ToHashSet();
+
+        var artiklar = AnonimUclar.Keys.Where(ad => !gercek.Contains(ad)).OrderBy(a => a).ToList();
+
+        Assert.True(artiklar.Count == 0,
+            "Anonim uç listesinde artık var olmayan uçlar var: "
+            + string.Join(", ", artiklar));
+    }
+
+    [Fact]
+    public void HerAnonimUcGerekceTasir()
+        => Assert.All(AnonimUclar, x => Assert.False(string.IsNullOrWhiteSpace(x.Value), x.Key));
 
     /// <summary>
     /// Bütün controller'lar <c>[Authorize]</c> altında olmalı — yetki

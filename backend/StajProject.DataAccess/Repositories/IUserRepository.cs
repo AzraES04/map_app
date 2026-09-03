@@ -60,4 +60,21 @@ public interface IUserRepository
     /// Ayrı metot, bu iki işlemin birbirine karışmasını imkânsız kılıyor.
     /// </summary>
     Task TotpAyarlaAsync(int userId, string? secret, bool enabled);
+
+    // ---------- Admin-bağlı kullanıcılar (davet kodu) ----------
+
+    /// <summary>Davet koduna sahip kullanıcı; yoksa null. Kayıt akışı bunu kullanıyor.</summary>
+    Task<User?> GetByInviteCodeAsync(string kod);
+
+    /// <summary>
+    /// Kullanıcının davet kodunu yazar (üretir/yeniler).
+    ///
+    /// TotpAyarlaAsync ile AYNI DESEN: UpdateAsync bilinçli bir alan
+    /// beyaz-listesi, bu alanı oraya eklemek başka bir güncellemenin
+    /// kodu sessizce silmesi riskini doğururdu.
+    /// </summary>
+    Task<string?> InviteCodeYazAsync(int userId, string kod);
+
+    /// <summary>Bu kullanıcıya bağlı (ParentAdminId = userId) kaç kullanıcı var?</summary>
+    Task<int> BagliKullaniciSayisiAsync(int adminId);
 }

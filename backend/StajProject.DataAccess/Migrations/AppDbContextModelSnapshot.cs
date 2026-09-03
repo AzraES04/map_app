@@ -823,6 +823,215 @@ namespace StajProject.DataAccess.Migrations
                     b.ToTable("role_permissions", (string)null);
                 });
 
+            modelBuilder.Entity("StajProject.Entities.Tour", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("color");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<int?>("GuideUserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("guide_user_id");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_date");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<LineString>("Route")
+                        .HasColumnType("geometry(LineString, 4326)")
+                        .HasColumnName("route");
+
+                    b.Property<DateTime?>("RouteCalculatedUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("route_calculated_utc");
+
+                    b.Property<double?>("RouteDistanceMeters")
+                        .HasColumnType("double precision")
+                        .HasColumnName("route_distance_meters");
+
+                    b.Property<double?>("RouteDurationSeconds")
+                        .HasColumnType("double precision")
+                        .HasColumnName("route_duration_seconds");
+
+                    b.Property<string>("RouteSignature")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("route_signature");
+
+                    b.Property<DateTime?>("ScheduledStartUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scheduled_start_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuideUserId");
+
+                    b.HasIndex("Route");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Route"), "gist");
+
+                    b.ToTable("tour", (string)null);
+                });
+
+            modelBuilder.Entity("StajProject.Entities.TourSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<DateTime?>("CurrentWaypointArrivedUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("current_waypoint_arrived_utc");
+
+                    b.Property<int?>("CurrentWaypointId")
+                        .HasColumnType("integer")
+                        .HasColumnName("current_waypoint_id");
+
+                    b.Property<DateTime?>("EndedUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_utc");
+
+                    b.Property<int>("GuideUserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("guide_user_id");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("JoinCode")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("join_code");
+
+                    b.Property<Point>("LastPosition")
+                        .HasColumnType("geometry(Point, 4326)")
+                        .HasColumnName("last_position");
+
+                    b.Property<DateTime?>("LastPositionUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_position_utc");
+
+                    b.Property<DateTime?>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_date");
+
+                    b.Property<double>("ProgressPercent")
+                        .HasColumnType("double precision")
+                        .HasColumnName("progress_percent");
+
+                    b.Property<DateTime?>("StartedUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("TourId")
+                        .HasColumnType("integer")
+                        .HasColumnName("tour_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CurrentWaypointId");
+
+                    b.HasIndex("GuideUserId");
+
+                    b.HasIndex("JoinCode")
+                        .IsUnique()
+                        .HasFilter("status IN ('Planned', 'Live', 'Paused') AND is_deleted = false");
+
+                    b.HasIndex("TourId", "Status");
+
+                    b.ToTable("tour_session", (string)null);
+                });
+
+            modelBuilder.Entity("StajProject.Entities.TourSessionParticipant", b =>
+                {
+                    b.Property<int>("TourSessionId")
+                        .HasColumnType("integer")
+                        .HasColumnName("tour_session_id");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime>("JoinedUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("joined_utc");
+
+                    b.Property<DateTime?>("LeftUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("left_utc");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("role");
+
+                    b.HasKey("TourSessionId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("tour_session_participant", (string)null);
+                });
+
             modelBuilder.Entity("StajProject.Entities.User", b =>
                 {
                     b.Property<int>("Id")
@@ -835,6 +1044,11 @@ namespace StajProject.DataAccess.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("InviteCode")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("invite_code");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -858,10 +1072,19 @@ namespace StajProject.DataAccess.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("modified_date");
 
+                    b.Property<int?>("ParentAdminId")
+                        .HasColumnType("integer")
+                        .HasColumnName("parent_admin_id");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("password_hash");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("phone_number");
 
                     b.Property<bool>("TotpEnabled")
                         .ValueGeneratedOnAdd()
@@ -881,6 +1104,12 @@ namespace StajProject.DataAccess.Migrations
                         .HasColumnName("username");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("InviteCode")
+                        .IsUnique()
+                        .HasFilter("is_deleted = false AND invite_code IS NOT NULL");
+
+                    b.HasIndex("ParentAdminId");
 
                     b.HasIndex("Username")
                         .IsUnique()
@@ -929,6 +1158,94 @@ namespace StajProject.DataAccess.Migrations
                     b.HasIndex("RoleId");
 
                     b.ToTable("user_roles", (string)null);
+                });
+
+            modelBuilder.Entity("StajProject.Entities.Waypoint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_date");
+
+                    b.Property<int>("DwellMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("dwell_minutes");
+
+                    b.Property<Point>("Geom")
+                        .IsRequired()
+                        .HasColumnType("geometry(Point, 4326)")
+                        .HasColumnName("geom");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_date");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("PlaceId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("place_id");
+
+                    b.Property<int?>("PoiId")
+                        .HasColumnType("integer")
+                        .HasColumnName("poi_id");
+
+                    b.Property<int>("TourId")
+                        .HasColumnType("integer")
+                        .HasColumnName("tour_id");
+
+                    b.Property<string>("VenueType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("venue_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Geom");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Geom"), "gist");
+
+                    b.HasIndex("PlaceId");
+
+                    b.HasIndex("PoiId");
+
+                    b.HasIndex("TourId", "Order");
+
+                    b.ToTable("waypoint", (string)null);
                 });
 
             modelBuilder.Entity("StajProject.Entities.Durak", b =>
@@ -1034,6 +1351,71 @@ namespace StajProject.DataAccess.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("StajProject.Entities.Tour", b =>
+                {
+                    b.HasOne("StajProject.Entities.User", "GuideUser")
+                        .WithMany()
+                        .HasForeignKey("GuideUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("GuideUser");
+                });
+
+            modelBuilder.Entity("StajProject.Entities.TourSession", b =>
+                {
+                    b.HasOne("StajProject.Entities.Waypoint", "CurrentWaypoint")
+                        .WithMany()
+                        .HasForeignKey("CurrentWaypointId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("StajProject.Entities.User", "GuideUser")
+                        .WithMany()
+                        .HasForeignKey("GuideUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("StajProject.Entities.Tour", "Tour")
+                        .WithMany("Sessions")
+                        .HasForeignKey("TourId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CurrentWaypoint");
+
+                    b.Navigation("GuideUser");
+
+                    b.Navigation("Tour");
+                });
+
+            modelBuilder.Entity("StajProject.Entities.TourSessionParticipant", b =>
+                {
+                    b.HasOne("StajProject.Entities.TourSession", "TourSession")
+                        .WithMany("Participants")
+                        .HasForeignKey("TourSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StajProject.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("TourSession");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("StajProject.Entities.User", b =>
+                {
+                    b.HasOne("StajProject.Entities.User", "ParentAdmin")
+                        .WithMany()
+                        .HasForeignKey("ParentAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ParentAdmin");
+                });
+
             modelBuilder.Entity("StajProject.Entities.UserPermission", b =>
                 {
                     b.HasOne("StajProject.Entities.Permission", "Permission")
@@ -1072,6 +1454,24 @@ namespace StajProject.DataAccess.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("StajProject.Entities.Waypoint", b =>
+                {
+                    b.HasOne("StajProject.Entities.Poi", "Poi")
+                        .WithMany()
+                        .HasForeignKey("PoiId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("StajProject.Entities.Tour", "Tour")
+                        .WithMany("Waypoints")
+                        .HasForeignKey("TourId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Poi");
+
+                    b.Navigation("Tour");
+                });
+
             modelBuilder.Entity("StajProject.Entities.Guzergah", b =>
                 {
                     b.Navigation("Duraklar");
@@ -1096,6 +1496,18 @@ namespace StajProject.DataAccess.Migrations
                     b.Navigation("RolePermissions");
 
                     b.Navigation("UserRoles");
+                });
+
+            modelBuilder.Entity("StajProject.Entities.Tour", b =>
+                {
+                    b.Navigation("Sessions");
+
+                    b.Navigation("Waypoints");
+                });
+
+            modelBuilder.Entity("StajProject.Entities.TourSession", b =>
+                {
+                    b.Navigation("Participants");
                 });
 
             modelBuilder.Entity("StajProject.Entities.User", b =>

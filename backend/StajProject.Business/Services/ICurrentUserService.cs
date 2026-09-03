@@ -15,6 +15,16 @@ public interface ICurrentUserService
     int? UserId { get; }
 
     /// <summary>
+    /// Giriş yapmış kullanıcının ADI; kimlik yoksa null.
+    ///
+    /// Ödev 19 ile eklendi: simülasyonu kimin başlattığı, canlı yayını
+    /// dinleyen HERKESE gidiyor ("kemal başlattı"). Id yeterli olmazdı —
+    /// yayını alan istemcinin kullanıcı listesine erişimi yok ve olmamalı.
+    /// Ad zaten JWT'nin içinde (unique_name), fazladan sorgu gerektirmiyor.
+    /// </summary>
+    string? UserName { get; }
+
+    /// <summary>
     /// Kimlik doğrulanmış kullanıcının id'sini döner, yoksa hata fırlatır.
     /// Sahiplik gerektiren işlemlerde (kayıt oluşturma, süzme) kullanılır.
     /// </summary>

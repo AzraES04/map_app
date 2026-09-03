@@ -1,6 +1,7 @@
 using StajProject.Business.Auth;
 using StajProject.Business.DTOs;
 using StajProject.Business.Services;
+using StajProject.Business.Ulasim;
 using StajProject.Entities;
 using StajProject.Tests.Fakes;
 using Xunit;
@@ -47,9 +48,13 @@ public class RotaAlternatifTests
             new FakePermissionRepository(db), new FakeUserRepository(db), oturum);
 
         var osrm = new FakeOsrmClient();
+        // Ödev 19: simülasyon defteri ve ayarları GERÇEK nesneyle veriliyor.
+        // Sahte yazmadık çünkü ikisi de bellekte çalışan, dış dünyaya
+        // dokunmayan sınıflar — taklidi aslından karmaşık olurdu.
         return new Ortam(db, new UlasimService(
             new FakeUlasimRepository(db), oturum, izinler,
-            new FakeGeoPermissionService(), osrm), osrm);
+            new FakeGeoPermissionService(), osrm,
+            new SimulasyonServisi(), new SimulasyonAyarlari()), osrm);
     }
 
     private static async Task<GuzergahDto> HatKurAsync(Ortam o, params (double Lon, double Lat)[] duraklar)

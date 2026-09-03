@@ -51,4 +51,20 @@ public interface ICopKutusuRepository
     /// Tür tanınmıyorsa <see cref="ArgumentException"/>.
     /// </returns>
     Task<bool> GeriAlAsync(string tur, int id);
+
+    /// <summary>
+    /// Bir kaydı VERİTABANINDAN TAMAMEN SİLER — geri alma yok.
+    ///
+    /// Yalnızca ZATEN silinmiş (soft-deleted) kayıtlarda çalışır: çöp
+    /// kutusunda görünmeyen bir kayıt kalıcı silinemez, önce normal silme
+    /// yolundan geçmesi gerekiyor. Bu, yanlışlıkla aktif bir kaydın
+    /// kalıcı silinmesine karşı ikinci bir kapı.
+    /// </summary>
+    /// <returns>
+    /// Kayıt yoksa ya da henüz soft-delete edilmemişse false. Başka
+    /// kayıtlar buna referans veriyorsa (yabancı anahtar) servis katmanı
+    /// bunu <see cref="Validation.IsKuraliException"/>'a çevirip anlaşılır
+    /// bir mesajla döner.
+    /// </returns>
+    Task<bool> KaliciSilAsync(string tur, int id);
 }

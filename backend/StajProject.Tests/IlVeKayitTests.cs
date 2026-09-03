@@ -415,6 +415,69 @@ public class IlVeKayitTests
         Assert.Contains("zaten alınmış", hata.Message);
     }
 
+    // ------------------------------------------------------------------
+    //  DAVET KODU — admin-bağlı kullanıcılar
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Davet_kodu_dogruysa_hesap_admine_baglanip_otomatik_onayli_aciliyor()
+    {
+        using var db = YeniContext();
+        var repo = new UserRepository(db);
+
+        var admin = new User { Username = "yonetici", PasswordHash = "x", InviteCode = "TEST1234" };
+        db.Users.Add(admin);
+        await db.SaveChangesAsync();
+
+        var sonuc = await AuthServisi(db).RegisterAsync(new RegisterRequestDto
+        {
+            Username = "yeni", Password = "deneme123", InviteCode = "test1234",
+        });
+
+        var kullanici = await db.Users.SingleAsync(u => u.Username == "yeni");
+
+        // Admin kodu paylaşarak zaten vouch etmiş oluyor — onay beklemiyor.
+        Assert.True(kullanici.IsApproved);
+        Assert.Equal(admin.Id, kullanici.ParentAdminId);
+        Assert.Contains("yonetici", sonuc.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Gecersiz_davet_kodu_ACIKCA_reddediliyor()
+    {
+        using var db = YeniContext();
+
+        // Yanlış kod SESSİZCE yok sayılmamalı: kullanıcı "doğru kodu
+        // girdim" sanıp onay bekleyerek beklerdi.
+        var hata = await Assert.ThrowsAsync<IsKuraliException>(() =>
+            AuthServisi(db).RegisterAsync(new RegisterRequestDto
+            {
+                Username = "yeni", Password = "deneme123", InviteCode = "YOKBOYLE",
+            }));
+
+        Assert.Contains("geçersiz", hata.Message, StringComparison.OrdinalIgnoreCase);
+
+        // Reddedilen istek hesap da AÇMAMALI.
+        Assert.False(await db.Users.AnyAsync(u => u.Username == "yeni"));
+    }
+
+    [Fact]
+    public async Task Kodsuz_kayitta_eski_akis_aynen_suruyor()
+    {
+        using var db = YeniContext();
+
+        var sonuc = await AuthServisi(db).RegisterAsync(new RegisterRequestDto
+        {
+            Username = "yeni", Password = "deneme123",
+        });
+
+        var kullanici = await db.Users.SingleAsync(u => u.Username == "yeni");
+
+        Assert.False(kullanici.IsApproved);
+        Assert.Null(kullanici.ParentAdminId);
+        Assert.Contains("onay", sonuc.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task OnaysizHesap_DogruSifreyleBileGirisYapamaz()
     {

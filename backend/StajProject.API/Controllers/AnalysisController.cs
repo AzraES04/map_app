@@ -21,15 +21,18 @@ public class AnalysisController : ControllerBase
 {
     private readonly IAnalysisService _analysisService;
     private readonly IKonumAnaliziService _konumAnaliziService;
+    private readonly IErisilebilirlikService _erisilebilirlikService;
     private readonly ILogger<AnalysisController> _logger;
 
     public AnalysisController(
         IAnalysisService analysisService,
         IKonumAnaliziService konumAnaliziService,
+        IErisilebilirlikService erisilebilirlikService,
         ILogger<AnalysisController> logger)
     {
         _analysisService = analysisService;
         _konumAnaliziService = konumAnaliziService;
+        _erisilebilirlikService = erisilebilirlikService;
         _logger = logger;
     }
 
@@ -107,6 +110,45 @@ public class AnalysisController : ControllerBase
             _logger.LogError(ex, "Konum analizi sırasında beklenmeyen hata");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { message = "Konum analizi yapılamadı. Lütfen tekrar deneyin." });
+        }
+    }
+
+    /// <summary>
+    /// TOPLU TAŞIMA ERİŞİLEBİLİRLİK ANALİZİ.
+    ///
+    /// Hedef bölgenin her noktası için "en yakın durağa kaç metre var?"
+    /// sorusunu cevaplayan bir ızgara üretir — Konum Analizi'yle AYNI görsel
+    /// dilde (aynı ısı haritası çizim kodu) ama farklı bir soruya cevap
+    /// veriyor. Gerekçe TopluTasimaErisilebilirligi başlığında.
+    ///
+    /// Aynı yetkiyi istiyor: bu da bir analiz aracı, ayrı bir yetki açmak
+    /// "analiz" adında ikinci bir yetki bırakırdı (Konum uçundaki gerekçenin
+    /// aynısı).
+    /// </summary>
+    [HttpPost("erisilebilirlik")]
+    [YetkiGerekli(Yetkiler.AnalizCalistirma)]
+    public async Task<ActionResult<ErisilebilirlikSonucuDto>> Erisilebilirlik(
+        [FromBody] ErisilebilirlikRequestDto request)
+    {
+        try
+        {
+            return Ok(await _erisilebilirlikService.CalistirAsync(request));
+        }
+        catch (WktFormatException ex)
+        {
+            _logger.LogWarning(ex, "Geçersiz analiz alanı");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (IsKuraliException ex)
+        {
+            _logger.LogWarning(ex, "Erişilebilirlik analizi kural ihlali");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erişilebilirlik analizi sırasında beklenmeyen hata");
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { message = "Analiz yapılamadı. Lütfen tekrar deneyin." });
         }
     }
 }

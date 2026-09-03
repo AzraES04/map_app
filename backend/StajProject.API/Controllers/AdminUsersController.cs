@@ -112,6 +112,21 @@ public class AdminUsersController : YonetimControllerBase
             return guncel is null ? Bulunamadi(id) : Ok(guncel);
         });
 
+    // ---------- Admin-bağlı kullanıcılar (davet kodu) ----------
+
+    /// <summary>
+    /// Giriş yapan kullanıcının davet kodu — yoksa üretir (idempotent).
+    /// Kayıt ekranındaki isteğe bağlı "Davet kodu" alanına yazılan kod bu.
+    /// </summary>
+    [HttpGet("davet-kodu")]
+    public Task<ActionResult<DavetKoduDto>> DavetKodum()
+        => Calistir<DavetKoduDto>(async () => Ok(await _service.DavetKodumAsync()));
+
+    /// <summary>Kodu yeniler; eski kod artık kimseyi bu admine bağlamaz.</summary>
+    [HttpPost("davet-kodu/yenile")]
+    public Task<ActionResult<DavetKoduDto>> DavetKoduYenile()
+        => Calistir<DavetKoduDto>(async () => Ok(await _service.DavetKoduYenileAsync()));
+
     /// <summary>
     /// Kullanıcının YETKİ MATRİSİ: sistemdeki tüm yetkiler ve her birinin kaynağı
     /// (rolden mi geliyor, doğrudan mı verilmiş). Arayüz rolden gelenleri

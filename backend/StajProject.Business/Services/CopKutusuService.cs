@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using StajProject.Business.Auth;
 using StajProject.Business.DTOs;
 using StajProject.Business.Validation;
@@ -24,6 +25,16 @@ public interface ICopKutusuService
     /// kayıt yoksa false.
     /// </summary>
     Task<bool> GeriAlAsync(string tur, int id);
+
+    /// <summary>
+    /// Bir kaydı KALICI OLARAK siler — geri alma yok. Aynı yetki kuralı
+    /// geçerli (silen yetki neyse, kalıcı silmek de onu ister).
+    ///
+    /// Kayıt başka bir tabloya referans veriliyorsa (örn. duraklı bir
+    /// güzergah) <see cref="Validation.IsKuraliException"/> fırlatır —
+    /// önce bağımlı kayıtların çözülmesi gerektiğini söyler.
+    /// </summary>
+    Task<bool> KaliciSilAsync(string tur, int id);
 }
 
 /// <summary>
@@ -161,5 +172,42 @@ public class CopKutusuService : ICopKutusuService
         }
 
         return await _repository.GeriAlAsync(tur, id);
+    }
+
+    public async Task<bool> KaliciSilAsync(string tur, int id)
+    {
+        if (!TurYetkileri.TryGetValue(tur, out var gerekenYetki))
+        {
+            throw new IsKuraliException($"Bilinmeyen kayıt türü: \"{tur}\".");
+        }
+
+        var kullaniciId = _currentUser.RequireUserId();
+
+        if (!await _permissionService.HasPermissionAsync(kullaniciId, gerekenYetki))
+        {
+            throw new IsKuraliException(
+                $"Bu kaydı kalıcı silmek için \"{gerekenYetki}\" yetkisi gerekiyor.");
+        }
+
+        try
+        {
+            return await _repository.KaliciSilAsync(tur, id);
+        }
+        // İKİ İSTİSNA TİPİ: gerçek veritabanında (PostgreSQL) yabancı anahtar
+        // ihlali DbUpdateException olarak geliyor; EF'in InMemory sağlayıcısı
+        // (testlerde) aynı durumu InvalidOperationException ile bildiriyor.
+        // İkisi de aynı anlama geliyor: "bu kayda hâlâ referans veren başka
+        // kayıtlar var."
+        catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
+        {
+            // Yabancı anahtar ihlali: bu kayda hâlâ referans veren başka
+            // kayıtlar var (örn. duraklı bir güzergah, POI'li bir kategori).
+            // Ham veritabanı hatasını göstermek yerine ne yapılması
+            // gerektiğini söylüyoruz.
+            throw new IsKuraliException(
+                $"{TurAdlari.GetValueOrDefault(tur, tur)} kalıcı silinemedi: " +
+                "başka kayıtlar hâlâ ona bağlı. Önce onları silin ya da " +
+                "farklı bir kayda taşıyın.");
+        }
     }
 }

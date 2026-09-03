@@ -5,6 +5,7 @@ import {
   kategorileriListele, kategoriEkle, kategoriGuncelle, kategoriSil,
   poiStilleriniYenile, agaciDuzlestir, poiIkonlariniGetir,
 } from '../poiApi'
+import { turistikPoiAktar } from '../turApi'
 import { ikonSvg } from '../poiIkon'
 import { EkleIkonu, SilIkonu, PoiIkonu, KategoriIkonu, KullaniciIkonu } from '../icons'
 
@@ -39,10 +40,34 @@ const IKON_ONIZLEME_RENGI = '#2d7dd2'
  */
 const LISTE_SINIRI = 200
 
+/**
+ * OpenStreetMap aktarimi icin onerilen sehirler.
+ *
+ * NEDEN 81 ILIN TAMAMI DEGIL? Aktarim sehir basina bir Overpass sorgusu
+ * demek ve o sunucu gonullu bir altyapi. Turistik durak yogunlugu yuksek
+ * sehirleri onermek, "hepsini aktar" dugmesinden hem daha hizli hem de
+ * kaynaga daha saygili. Baska bir sehir gerekirse listeye bir satir
+ * eklemek yetiyor.
+ */
+const AKTARIM_SEHIRLERI = [
+  { plaka: 6, ad: 'Ankara' },
+  { plaka: 34, ad: 'İstanbul' },
+  { plaka: 35, ad: 'İzmir' },
+  { plaka: 7, ad: 'Antalya' },
+  { plaka: 50, ad: 'Nevşehir' },
+  { plaka: 61, ad: 'Trabzon' },
+]
+
 export default function AdminPoi() {
   const navigate = useNavigate()
 
   const [sekme, setSekme] = useState('poi')      // 'poi' | 'kategori'
+
+  // ---- OpenStreetMap turistik POI aktarimi ----
+  // Varsayilan secim Ankara + Istanbul: tur modulunun demo sehirleri.
+  const [aktarimSehirleri, setAktarimSehirleri] = useState([6, 34])
+  const [aktariliyor, setAktariliyor] = useState(false)
+  const [aktarimSonucu, setAktarimSonucu] = useState(null)
 
   // Stil yenileme sürüyor mu? (Ödev 13 iyileştirmesi)
   const [stilYenileniyor, setStilYenileniyor] = useState(false)
@@ -321,6 +346,33 @@ export default function AdminPoi() {
 
   // ------------------------------------------------------------------
 
+  /**
+   * Turistik POI'leri OpenStreetMap'ten ice aktarir.
+   *
+   * Aktarim SUNUCUDA calisiyor; burada yalnizca dugmenin kilitlenmesi ve
+   * sonucun ozetlenmesi var. Bittiginde POI ve kategori listeleri yeniden
+   * yukleniyor — yoksa ekran, veritabaninda duran yeni kayitlari
+   * gostermeden eski haliyle kalirdi.
+   */
+  const turistikAktar = async () => {
+    if (aktariliyor || aktarimSehirleri.length === 0) return
+
+    setAktariliyor(true)
+    setAktarimSonucu(null)
+
+    try {
+      const sonuc = await turistikPoiAktar(aktarimSehirleri, oturumBitti)
+      setAktarimSonucu(sonuc)
+      await yukle()
+    } catch (err) {
+      if (err.message !== 'Oturum süresi doldu') {
+        setAktarimSonucu({ hata: err.message })
+      }
+    } finally {
+      setAktariliyor(false)
+    }
+  }
+
   return (
     <div className="admin-sayfa">
       <header className="admin-baslik">
@@ -377,6 +429,93 @@ export default function AdminPoi() {
             <button type="button" className="banner-eylem" onClick={geriAl}>Geri al</button>
           )}
         </p>
+      )}
+
+      {/* ============ OPENSTREETMAP AKTARIMI ============
+          POI listesi sekmesinde duruyor cunku urettigi sey POI: yonetici
+          once listeyi gorup "burada muze yok" diyor, cozumu de ayni ekranda
+          buluyor. */}
+      {sekme === 'poi' && (
+        <div className="admin-kart poi-aktarim">
+          <h2>OpenStreetMap'ten turistik POI aktar</h2>
+          <p className="muted">
+            Secilen sehirlerin <strong>muze, anit, tarihi yer, park</strong> ve
+            ibadet yerleri POI tablosuna eklenir. Kategoriler yoksa olusturulur.
+            Ayni adla yakinda duran kayit atlanir, yani tekrar calistirmak
+            guvenlidir.
+          </p>
+
+          <div className="poi-aktarim-sehirler">
+            {AKTARIM_SEHIRLERI.map((sehir) => {
+              const secili = aktarimSehirleri.includes(sehir.plaka)
+              return (
+                <button
+                  key={sehir.plaka}
+                  type="button"
+                  className={`admin-rozet secilebilir${secili ? ' aktif' : ''}`}
+                  aria-pressed={secili}
+                  onClick={() => setAktarimSehirleri((onceki) => (
+                    secili
+                      ? onceki.filter((p) => p !== sehir.plaka)
+                      : [...onceki, sehir.plaka]
+                  ))}
+                >
+                  {sehir.ad}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="admin-eylemler">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={turistikAktar}
+              disabled={aktariliyor || aktarimSehirleri.length === 0}
+              title={aktarimSehirleri.length === 0 ? 'En az bir sehir secin' : 'Aktarimi baslat'}
+            >
+              {aktariliyor ? 'Aktarılıyor…' : 'Aktarımı başlat'}
+            </button>
+            {aktariliyor && (
+              <span className="muted">
+                Her sehir icin bir OpenStreetMap sorgusu atiliyor; birkac saniye surebilir.
+              </span>
+            )}
+          </div>
+
+          {aktarimSonucu?.hata && <p className="error-banner">{aktarimSonucu.hata}</p>}
+
+          {aktarimSonucu && !aktarimSonucu.hata && (
+            <div className="poi-aktarim-sonuc">
+              <p>
+                <strong>{aktarimSonucu.eklenen}</strong> yeni POI eklendi
+                {aktarimSonucu.atlanan > 0 && (
+                  <span className="muted"> · {aktarimSonucu.atlanan} kayit atlandi (mukerrer)</span>
+                )}
+              </p>
+
+              {Object.entries(aktarimSonucu.sehirler ?? {}).length > 0 && (
+                <ul>
+                  {Object.entries(aktarimSonucu.sehirler).map(([sehir, adet]) => (
+                    <li key={sehir}>{sehir}: <strong>{adet}</strong></li>
+                  ))}
+                </ul>
+              )}
+
+              {Object.entries(aktarimSonucu.kategoriBazinda ?? {}).length > 0 && (
+                <p className="muted">
+                  {Object.entries(aktarimSonucu.kategoriBazinda)
+                    .map(([kategori, adet]) => `${kategori}: ${adet}`)
+                    .join(' · ')}
+                </p>
+              )}
+
+              {(aktarimSonucu.uyarilar ?? []).map((uyari) => (
+                <p key={uyari} className="admin-alt-metin">{uyari}</p>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ================= POI LİSTESİ ================= */}
