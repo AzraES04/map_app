@@ -7459,6 +7459,16 @@ kbd {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  /* GENİŞLİK AÇIKÇA %100 — bilerek.
+     `display: -webkit-box` bir flex column'un (.tur-program-durak
+     .tur-oneri-ad) içindeyken, flex'in normalde otomatik verdiği
+     "stretch" genişliğini almıyor; bazı tarayıcılar bu eski kutu tipini
+     İÇERİĞE GÖRE (shrink-to-fit) ölçüyor. Sonucu canlıda görüldü: ad tek
+     harfe kırpılmış gibi görünüyordu ("A" / "n..") çünkü kutunun kendisi
+     birkaç piksele daralmıştı — kırpma çalışıyordu, kutu çalışmıyordu.
+     width:100% bu otomatik ölçümü devre dışı bırakıp genişliği ebeveynin
+     verdiği alana zorluyor. */
+  width: 100%;
   min-width: 0;
   font-weight: 550;
   line-height: 1.3;
