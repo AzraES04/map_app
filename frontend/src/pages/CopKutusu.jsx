@@ -25,6 +25,16 @@ import { copKutusu, copGeriAl, copKaliciSil } from '../adminApi'
 //  değil.
 // ============================================================================
 
+/**
+ * Kayıtların çöp kutusunda kalma süresi (gün).
+ *
+ * Sunucudaki CopKutusuService.SaklamaSuresi ile AYNI olmalı. Buradaki kopya
+ * yalnızca METNİ yazmak için ("30 gün burada tutulur"); kararı veren ve
+ * kaydı gerçekten silen taraf sunucu. Kalan gün sayısı da sunucudan
+ * geliyor — bu sabitten HESAPLANMIYOR.
+ */
+const SAKLAMA_GUN = 30
+
 export default function CopKutusu() {
   const navigate = useNavigate()
 
@@ -180,6 +190,16 @@ export default function CopKutusu() {
               ))}
             </div>
 
+            {/* KURALI BİR KEZ, LİSTENİN ÜSTÜNDE SÖYLE.
+                Her satırdaki "12 gün kaldı" rozeti neyin sayacı olduğunu
+                tek başına anlatmıyor; kullanıcı "ne oluyor bu süre
+                dolunca?" sorusunu burada cevaplanmış görüyor. */}
+            <p className="cop-kural muted">
+              Silinen kayıtlar {SAKLAMA_GUN} gün burada tutulur, sonra kalıcı
+              olarak silinir. Daha erken kaldırmak için “Kalıcı sil”i
+              kullanabilirsiniz.
+            </p>
+
             <ul className="cop-listesi">
               {gosterilen.map((oge) => (
                 <li key={`${oge.tur}-${oge.id}`}>
@@ -195,6 +215,23 @@ export default function CopKutusu() {
                       {oge.ekleyen && <> · ekleyen: {oge.ekleyen}</>}
                     </small>
                   </span>
+
+                  {/* KALAN SÜRE — kayıt kendiliğinden silinmeden önce
+                      kullanıcının bunu görmesi gerekiyor. Sayı sunucudan
+                      geliyor (tarayıcı saatine güvenilmiyor).
+
+                      Son üç günde vurgulu: "27 gün kaldı" bir bilgi,
+                      "2 gün kaldı" bir uyarı. */}
+                  {oge.kalanGun !== null && oge.kalanGun !== undefined && (
+                    <span
+                      className={`cop-kalan${oge.kalanGun <= 3 ? ' acil' : ''}`}
+                      title={`Saklama süresi dolunca kayıt kalıcı olarak silinir (${SAKLAMA_GUN} gün).`}
+                    >
+                      {oge.kalanGun === 0
+                        ? 'bugün silinecek'
+                        : `${oge.kalanGun} gün kaldı`}
+                    </span>
+                  )}
 
                   {/* Düğme yetkiye göre açık/kapalı ve bu bilgi SUNUCUDAN
                       geliyor. İstemcide hesaplasaydık yetki kurallarını

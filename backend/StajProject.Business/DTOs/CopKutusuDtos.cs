@@ -78,6 +78,16 @@ public class CopOgesiDto
     /// kurallarını ikinci kez (ve yanlış) uygulamasını engelliyor.
     /// </summary>
     public bool GeriAlinabilir { get; set; }
+
+    /// <summary>
+    /// Kalıcı silinmesine kaç gün kaldı (0 = bugün silinecek).
+    /// Silinme zamanı bilinmiyorsa null — o kayıt otomatik silinmiyor.
+    ///
+    /// Sunucuda hesaplanıyor: kalan süreyi tarayıcının saatinden
+    /// hesaplasaydık, saati kaymış bir makinede ekrandaki gün sayısı
+    /// kaydı silen görevle ayrışırdı.
+    /// </summary>
+    public int? KalanGun { get; set; }
 }
 
 /// <summary>

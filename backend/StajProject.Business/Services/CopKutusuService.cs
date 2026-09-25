@@ -35,6 +35,22 @@ public interface ICopKutusuService
     /// önce bağımlı kayıtların çözülmesi gerektiğini söyler.
     /// </summary>
     Task<bool> KaliciSilAsync(string tur, int id);
+
+    /// <summary>
+    /// SAKLAMA SÜRESİ DOLAN kayıtları kalıcı siler — otomatik temizlik.
+    ///
+    /// Kullanıcı adına değil, SİSTEM adına çalışıyor: bu yüzden yetki
+    /// kontrolü YOK. Kontrol koysaydık, arka plan görevinin oturumu
+    /// olmadığı için hiçbir kaydı silemezdi — ya da uydurma bir "sistem
+    /// kullanıcısı" yaratmak gerekirdi ki o da yetki modelinde karşılığı
+    /// olmayan bir kimlik olurdu.
+    ///
+    /// Bağlı kaydı olan (yabancı anahtar) kayıtlar ATLANIYOR, hata
+    /// vermiyor: tek bir bağımlı kayıt yüzünden temizliğin tamamının
+    /// durması, çöp kutusunun sonsuza kadar dolu kalması demekti.
+    /// </summary>
+    /// <returns>(silinen, atlanan) sayıları.</returns>
+    Task<(int Silinen, int Atlanan)> SuresiDolanlariTemizleAsync();
 }
 
 /// <summary>
@@ -64,6 +80,21 @@ public class CopKutusuService : ICopKutusuService
     ///   kullanıcı → Kullanıcı Yönetimi
     ///   rol       → Rol Yönetimi
     /// </summary>
+    /// <summary>
+    /// Çöp kutusunda bir kaydın KALMA SÜRESİ.
+    ///
+    /// Otuz gün: bir kaydın yanlışlıkla silindiğinin fark edilmesi için
+    /// fazlasıyla yeterli (yıllık izin, uzun bir tatil bile bu aralığa
+    /// giriyor), ama silinen verinin sonsuza kadar taşınmasını da
+    /// engelliyor. Süre dolduğunda kayıt arka plan görevi tarafından
+    /// kalıcı siliniyor (bkz. CopKutusuTemizleyici).
+    ///
+    /// Ayardan değil KODDAN geliyor: bu bir dağıtım tercihi değil, veri
+    /// saklama kuralı. Ayara açsaydık her kurulumda farklı davranan ve
+    /// kullanıcıya "30 gün" diye söz veremeyeceğimiz bir sistem olurdu.
+    /// </summary>
+    public static readonly TimeSpan SaklamaSuresi = TimeSpan.FromDays(30);
+
     private static readonly Dictionary<string, string> TurYetkileri = new()
     {
         [CopKutusuRepository.Nokta] = Yetkiler.KayitSilme,
@@ -132,6 +163,10 @@ public class CopKutusuService : ICopKutusuService
             SilinmeZamani = k.SilinmeZamani,
             Ekleyen = k.Ekleyen,
             GeriAlinabilir = yetkiler.GetValueOrDefault(k.Tur),
+            // Kalan gün SUNUCUDA hesaplanıyor: istemcide hesaplasaydık
+            // tarayıcının saati (ve saat dilimi) sonucu değiştirirdi —
+            // "3 gün kaldı" diyen ekranla kaydı silen görev ayrışırdı.
+            KalanGun = KalanGunHesapla(k.SilinmeZamani),
         }).ToList();
 
         return new CopKutusuDto
@@ -209,5 +244,66 @@ public class CopKutusuService : ICopKutusuService
                 "başka kayıtlar hâlâ ona bağlı. Önce onları silin ya da " +
                 "farklı bir kayda taşıyın.");
         }
+    }
+
+    public async Task<(int Silinen, int Atlanan)> SuresiDolanlariTemizleAsync()
+    {
+        var sinir = DateTime.UtcNow - SaklamaSuresi;
+
+        // Listeyi olduğu gibi alıp süzüyoruz: çöp kutusu doğası gereği
+        // küçük bir liste (silinmiş kayıtlar) ve depoya dokuz tür için
+        // ayrı bir toplu silme yolu yazmak, var olan ve YABANCI ANAHTAR
+        // davranışı zaten sınanmış tek kayıtlık yolu ikinci kez
+        // gerçeklemek olurdu.
+        var kayitlar = await _repository.ListeleAsync();
+
+        // SilinmeZamani NULL olanlar dokunulmadan bırakılıyor: zamanı
+        // bilinmeyen bir kaydın süresinin dolduğunu iddia edemeyiz
+        // (Ödev 3 öncesinden kalan kayıtlarda bu alan boş olabiliyor).
+        var suresiDolanlar = kayitlar
+            .Where(k => k.SilinmeZamani is not null && k.SilinmeZamani < sinir)
+            .ToList();
+
+        var silinen = 0;
+        var atlanan = 0;
+
+        foreach (var kayit in suresiDolanlar)
+        {
+            try
+            {
+                if (await _repository.KaliciSilAsync(kayit.Tur, kayit.Id))
+                {
+                    silinen++;
+                }
+            }
+            // Bağlı kayıt varsa (yabancı anahtar) bu kayıt bu turda
+            // silinemiyor. Sessizce atlanıyor: bağımlı kayıtların kendi
+            // süresi de dolduğunda sıra ona da gelecek.
+            catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
+            {
+                atlanan++;
+            }
+        }
+
+        return (silinen, atlanan);
+    }
+
+    /// <summary>
+    /// Kalıcı silinmesine kaç gün kaldı? Zamanı bilinmiyorsa null.
+    ///
+    /// Yukarı yuvarlanıyor (Ceiling): 0,2 gün kalmışsa kullanıcı "1 gün"
+    /// görsün, "0 gün" değil — sıfır, kaydın çoktan gitmiş olduğunu
+    /// düşündürürdü. Süresi geçmiş ama henüz temizlenmemiş kayıtlarda
+    /// (görev günde bir çalışıyor) 0 dönüyor: "bugün silinecek".
+    /// </summary>
+    private static int? KalanGunHesapla(DateTime? silinmeZamani)
+    {
+        if (silinmeZamani is null)
+        {
+            return null;
+        }
+
+        var kalan = silinmeZamani.Value + SaklamaSuresi - DateTime.UtcNow;
+        return kalan <= TimeSpan.Zero ? 0 : (int)Math.Ceiling(kalan.TotalDays);
     }
 }

@@ -410,19 +410,33 @@ export default function Login() {
             onayı bekleyen kayıt) aynen sürer. */}
         {kayitModu && (
           <>
-            <label htmlFor="davet-kodu">Davet kodu (varsa)</label>
+            {/* Etiket "(isteğe bağlı)" — uygulamanın geri kalanıyla aynı
+                söz ("Bölge (isteğe bağlı)", "Telefon (isteğe bağlı)").
+                Önce "(varsa)" yazıyordu; aynı şeyi iki türlü söylemek
+                kullanıcıya iki farklı kural varmış gibi geliyor. */}
+            <label htmlFor="davet-kodu">Davet kodu (isteğe bağlı)</label>
+            {/* PLACEHOLDER BİR CÜMLE DEĞİL, ÖRNEK KOD.
+                Alan girileni büyük harfe çevirip harf aralığını açıyor
+                (aşağıdaki style) — bu biçim bir KOD için doğru ama bir
+                cümleyi okunmaz hâle getiriyordu: "Yöneticinizden aldıysanız
+                girin" ekranda "YÖNETİCİNİZDEN ALDIYSANIZ G" diye ortadan
+                kesiliyordu. Örnek kod hem sığıyor hem de beklenen biçimi
+                (8 karakter) gösteriyor. Karakterler sunucunun alfabesinden:
+                karıştırılan harfler (O/0, I/1) o alfabede yok. */}
             <input
               id="davet-kodu"
               value={davetKodu}
               onChange={(e) => setDavetKodu(e.target.value.toUpperCase())}
-              placeholder="Yöneticinizden aldıysanız girin"
+              placeholder="K7QF2MDA"
               maxLength={24}
               autoComplete="off"
               style={{ letterSpacing: '2px', textTransform: 'uppercase' }}
             />
+            {/* "Nereden alınır" bilgisi placeholder'dan BURAYA taşındı:
+                burada metin sarabiliyor, kırpılmıyor. */}
             <p className="login-hint" style={{ marginTop: 0 }}>
-              Doğru kod, hesabınızı o yöneticiye bağlar ve onay beklemeden
-              aktif eder.
+              Yöneticiniz size bir kod verdiyse girin: hesabınız onun ekibine
+              bağlanır ve onay beklemeden hemen açılır.
             </p>
           </>
         )}
@@ -458,9 +472,16 @@ export default function Login() {
             göstermek, kimlik doğrulamanın kendisini anlamsızlaştırıyor.
             Kayıt modundaki cümle kalıyor: o bir uyarı, bir kimlik bilgisi
             değil. */}
+        {/* MESAJ GİRİLEN KODA GÖRE DEĞİŞİYOR.
+            Sabit "yönetici onayından sonra açılır" cümlesi, hemen üstteki
+            davet kodu ipucuyla ("onay beklemeden hemen açılır") açıkça
+            çelişiyordu: kod yazmış bir kullanıcı aynı ekranda birbirini
+            yalanlayan iki cümle okuyordu. */}
         {kayitModu && (
           <p className="login-hint">
-            Kaydınız yönetici onayından sonra kullanıma açılır.
+            {davetKodu.trim()
+              ? 'Kod geçerliyse hesabınız onay beklemeden açılır.'
+              : 'Kaydınız yönetici onayından sonra kullanıma açılır.'}
           </p>
         )}
 

@@ -7411,7 +7411,27 @@ kbd {
   font-size: var(--yazi-xs);
 }
 
-.tur-program-satiri {
+/*
+  PROGRAM SATIRI — bacak (yol tarifi) ÜSTTE, durak kartı ALTTA.
+
+  ---- SEÇİCİ NEDEN BU KADAR UZUN? ----
+  Yukarıdaki genel kural `.tur-oneri-listesi li` (özgüllük 0-1-1) bütün
+  satırları YATAY flex yapıyor. Burası önce sade `.tur-program-satiri`
+  (0-1-0) ile yazılmıştı ve o yarışı KAYBEDİYORDU — kural dosyada
+  duruyor ama hiç uygulanmıyordu.
+
+  Sonucu canlıda görüldü: bacak ile durak kartı yan yana diziliyor,
+  karta kalan genişlik ~28 piksele iniyordu ve durak adı "A n.." diye
+  kırpılıyordu. Günün İLK durağı sağlam görünüyordu, çünkü onun bacağı
+  yok — kart tüm satırı alıyordu. Hatanın "bazı duraklarda" olmasının
+  sebebi buydu.
+
+  `li.tur-program-satiri` (0-2-1) genel kuralı kesin olarak geçiyor.
+  Ayrıca genel kuralın kart görünümü (padding/arka plan/kenarlık) da
+  sıfırlanıyor: kart çizimi içerideki .tur-program-durak'ın işi, ikisi
+  birden çizilince iç içe iki kutu görünüyordu.
+*/
+.tur-oneri-listesi li.tur-program-satiri {
   display: block;
   padding: 0;
   background: none;
@@ -7527,4 +7547,36 @@ kbd {
   margin-left: auto;
   text-decoration: underline;
   color: var(--marka-300, var(--primary));
+}
+
+/* ---------- Çöp kutusu: saklama süresi ---------- */
+
+/* Kuralı listenin üstünde bir kez söyleyen satır. */
+.cop-kural {
+  margin: 0 0 8px;
+  font-size: var(--yazi-xs);
+}
+
+/*
+  KALAN SÜRE ROZETİ — satırın sağında, düğmelerden önce.
+
+  Nötr renk: bu bir hata değil, normal bir sayaç. Sürekli kırmızı duran
+  bir liste, kullanıcıya her kaydın sorunlu olduğunu düşündürürdü.
+*/
+.cop-kalan {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--yuzey-2);
+  border: 1px solid var(--kenar);
+  color: var(--metin-soluk);
+  font-size: var(--yazi-xs);
+  white-space: nowrap;
+}
+
+/* Son üç gün: "27 gün kaldı" bilgi, "2 gün kaldı" uyarıdır. */
+.cop-kalan.acil {
+  background: color-mix(in oklab, var(--uyari) 16%, var(--yuzey-2));
+  border-color: color-mix(in oklab, var(--uyari) 45%, transparent);
+  color: color-mix(in oklab, var(--uyari) 75%, var(--metin));
 }

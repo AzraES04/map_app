@@ -204,6 +204,10 @@ builder.Services.AddSingleton(
 
 builder.Services.AddHostedService<TurOnbellekIsiticisi>();
 
+// Çöp kutusu otomatik temizliği: saklama süresi (30 gün) dolan kayıtları
+// kalıcı siler. Gerekçe CopKutusuTemizleyici başlığında.
+builder.Services.AddHostedService<CopKutusuTemizleyici>();
+
 // Swagger'a "Authorize" düğmesi ekle
 builder.Services.AddSwaggerGen(options =>
 {

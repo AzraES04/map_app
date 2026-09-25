@@ -443,4 +443,154 @@ public class CopKutusuTests
         Assert.Empty(await o.Db.Points.ToListAsync());
         Assert.Single(await o.Db.Points.IgnoreQueryFilters().ToListAsync());
     }
+
+    // ==================================================================
+    //  4) Otomatik temizlik — saklama süresi (30 gün)
+    //
+    //  Buradaki asıl soru "silme çalışıyor mu" değil; o zaten kalıcı
+    //  silme testlerinde var. Asıl tehlike şu: OTOMATİK bir görev,
+    //  kullanıcının geri alabileceği bir kaydı ERKEN silerse veri sessizce
+    //  yok olur — kullanıcı silindiğini bile görmez. Bu testler sınırın
+    //  doğru yerde olduğunu koruyor.
+    // ==================================================================
+
+    /// <summary>Verilen gün kadar ÖNCE silinmiş bir nokta üretir.</summary>
+    private static async Task<PointEntity> EskiSilinmisNoktaAsync(
+        AppDbContext db, int gunOnce, string ad = "Eski kayıt")
+    {
+        var nokta = new PointEntity
+        {
+            Name = ad,
+            Geom = new Point(32.85, 39.92) { SRID = 4326 },
+            IsDeleted = true,
+            IsActive = false,
+            ModifiedDate = DateTime.UtcNow.AddDays(-gunOnce),
+        };
+        db.Points.Add(nokta);
+        await db.SaveChangesAsync();
+        return nokta;
+    }
+
+    [Fact]
+    public async Task Otomatik_temizlik_SURESIDOLANIsiliyor()
+    {
+        var o = OrtamKur();
+        var eski = await EskiSilinmisNoktaAsync(o.Db, gunOnce: 31);
+
+        var (silinen, _) = await o.Servis.SuresiDolanlariTemizleAsync();
+
+        Assert.Equal(1, silinen);
+        Assert.Null(await o.Db.Points.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.Id == eski.Id));
+    }
+
+    [Fact]
+    public async Task Otomatik_temizlik_SURESIDOLMAYANAdokunmuyor()
+    {
+        // Asıl korunan kural bu: 29 gün önce silinen bir kaydı geri almak
+        // hâlâ mümkün olmalı. Sınır bir gün kaysaydı kullanıcı, geri
+        // alabileceğini sandığı bir kaydı bulamazdı.
+        var o = OrtamKur();
+        var yeni = await EskiSilinmisNoktaAsync(o.Db, gunOnce: 29);
+
+        var (silinen, _) = await o.Servis.SuresiDolanlariTemizleAsync();
+
+        Assert.Equal(0, silinen);
+        Assert.NotNull(await o.Db.Points.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.Id == yeni.Id));
+    }
+
+    [Fact]
+    public async Task Otomatik_temizlik_SILINMEMISkayda_ASLAdokunmuyor()
+    {
+        // Aktif bir kaydın ModifiedDate'i de eski olabilir (aylardır
+        // güncellenmemiş bir nokta). Süzgeç yalnızca TARİHE baksaydı,
+        // çöp kutusuna hiç girmemiş bir kayıt silinirdi.
+        var o = OrtamKur();
+
+        var aktif = new PointEntity
+        {
+            Name = "Aylardır durup duran aktif nokta",
+            Geom = new Point(1, 1) { SRID = 4326 },
+            ModifiedDate = DateTime.UtcNow.AddDays(-400),
+        };
+        o.Db.Points.Add(aktif);
+        await o.Db.SaveChangesAsync();
+
+        var (silinen, _) = await o.Servis.SuresiDolanlariTemizleAsync();
+
+        Assert.Equal(0, silinen);
+        Assert.NotNull(await o.Db.Points.FirstOrDefaultAsync(p => p.Id == aktif.Id));
+    }
+
+    [Fact]
+    public async Task Otomatik_temizlik_YETKIISTEMIYOR()
+    {
+        // Görev SİSTEM adına çalışıyor; hiçbir yetkisi olmayan bir oturumda
+        // bile temizlik yapabilmeli. Yetki kontrolü koysaydık arka plan
+        // görevi hiçbir kaydı silemezdi.
+        var o = OrtamKur();   // parametresiz = hiç yetki yok
+        await EskiSilinmisNoktaAsync(o.Db, gunOnce: 45);
+
+        var (silinen, _) = await o.Servis.SuresiDolanlariTemizleAsync();
+
+        Assert.Equal(1, silinen);
+    }
+
+    [Fact]
+    public async Task Otomatik_temizlik_BAGLIKAYDIatliyor_digerlerinISILIYOR()
+    {
+        // Duraklı bir güzergah yabancı anahtar yüzünden silinemiyor. Tek
+        // bir bağımlı kayıt yüzünden temizliğin tamamı durursa çöp kutusu
+        // sonsuza kadar dolu kalırdı — bu testin koruduğu şey o.
+        var o = OrtamKur();
+
+        // TARİH KAYIT OLUŞTURULURKEN veriliyor, sonradan DEĞİŞTİRİLEREK
+        // değil: ApplyAuditRules yalnızca GÜNCELLENEN kayıtlara dokunuyor
+        // ve sonradan yazsaydık silinme tarihini bugüne çekip testi
+        // sessizce anlamsızlaştırırdı (ilk yazışta tam olarak bu oldu).
+        var hat = new Guzergah
+        {
+            Ad = "Silinen hat",
+            Renk = "#d64550",
+            IsDeleted = true,
+            IsActive = false,
+            ModifiedDate = DateTime.UtcNow.AddDays(-40),
+        };
+        o.Db.Guzergahlar.Add(hat);
+        await o.Db.SaveChangesAsync();
+
+        o.Db.Duraklar.Add(new Durak
+        {
+            Ad = "Bağlı durak",
+            GuzergahId = hat.Id,
+            Sira = 1,
+            Geom = new Point(32.85, 39.92) { SRID = 4326 },
+        });
+        await o.Db.SaveChangesAsync();
+
+        var silinebilir = await EskiSilinmisNoktaAsync(o.Db, gunOnce: 40, ad: "Temiz kayıt");
+
+        var (silinen, atlanan) = await o.Servis.SuresiDolanlariTemizleAsync();
+
+        Assert.Equal(1, silinen);    // nokta gitti
+        Assert.Equal(1, atlanan);    // güzergah atlandı
+        Assert.Null(await o.Db.Points.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(p => p.Id == silinebilir.Id));
+        Assert.NotNull(await o.Db.Guzergahlar.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(g => g.Id == hat.Id));
+    }
+
+    [Fact]
+    public async Task Listede_KALANGUN_gosteriliyor()
+    {
+        var o = OrtamKur(Yetkiler.KayitSilme);
+        await EskiSilinmisNoktaAsync(o.Db, gunOnce: 10);
+
+        var liste = await o.Servis.GetirAsync();
+        var oge = Assert.Single(liste.Ogeler);
+
+        // 30 - 10 = 20 gün kaldı. Yukarı yuvarlama payıyla 20 ya da 21.
+        Assert.InRange(oge.KalanGun!.Value, 20, 21);
+    }
 }
