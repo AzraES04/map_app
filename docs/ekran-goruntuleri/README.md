@@ -1,21 +1,19 @@
 # Ekran görüntüleri
 
 Ana README'nin "Ekranlar" bölümü bu klasördeki dosyaları gösteriyor.
-Dosya adları birebir şöyle olmalı (aksi hâlde README'de kırık resim çıkar):
 
-| Dosya | Ne gösterilecek |
+| Dosya | Ne gösteriyor |
 |---|---|
-| `tur-planlama.png` | Tur önerisi oluşturulduktan sonraki ekran: solda gün gün saatli program, haritada mor rota ve numaralı duraklar |
-| `erisilebilirlik.png` | Erişilebilirlik analizi çalıştırıldıktan sonra Ankara'ya yakınlaşmış harita: metro hatları boyunca sarı adacıklar + sağdaki lejant |
-| `cografi-yetki.png` | Operatör (`ayse`) ile girilmiş hâli: izinli il dışının maskeyle kapatıldığı görünüm |
-| `konum-analizi.png` | Konum analizi sonucu: kriterler paneli + haritadaki uygunluk yüzeyi |
+| `tur-planlama.png` | Tur önerisi: gün başlığı, saatli duraklar, yemek molası ve serbest zaman rozetleri |
+| `erisilebilirlik.png` | Ankara merkeze yakınlaşmış erişilebilirlik yüzeyi — sarı bantlar raylı sistem koridorlarını izliyor |
+| `erisilebilirlik-il-geneli.webp` | Aynı analizin il ölçeğindeki hâli; oranın neden düşük çıktığını açıklıyor |
+| `cografi-yetki.webp` | İzinli alanlar açık, dışarısı maskeli |
+| `konum-analizi.webp` | Ağırlıklı uygunluk yüzeyi ve aday noktalar |
 
-## Nasıl alınır
+## Yeniden çekmek gerekirse
 
-1. `baslat.bat` ile uygulamayı aç, `admin` / `staj123` ile gir
+1. `baslat.bat` ile uygulamayı aç
 2. Tarayıcıyı tam ekran yap (F11), yakınlaştırma %100 olsun
-3. Windows'ta **Win + Shift + S** ile pencere alanını seç
-4. PNG olarak bu klasöre yukarıdaki adlarla kaydet
+3. **Win + Shift + S** ile alanı seç, bu klasöre aynı adla kaydet
 
-İpucu: ekranda "Activate Windows" filigranı görünmesin; sağ paneldeki
-gereksiz bölümleri katlayıp sade bir görüntü almak daha iyi duruyor.
+Sağ alt köşeyi kadraja alma — Windows filigranı oraya düşüyor.

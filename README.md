@@ -40,13 +40,19 @@ birlikte).
 
 | Tur planlama — gün gün saatli program | Toplu taşıma erişilebilirliği |
 |---|---|
-| ![Tur planlama](docs/ekran-goruntuleri/tur-planlama.png) | ![Erişilebilirlik analizi](docs/ekran-goruntuleri/erisilebilirlik.png) |
-| Şehir, süre ve tema seçilir; öneri haritaya çizilir, altında molası ve konaklamasıyla saatli program çıkar. | Seçilen ilin her noktası için en yakın durağa uzaklık: sarı yakın, mor uzak. |
+| <img src="docs/ekran-goruntuleri/tur-planlama.png" width="420"> | <img src="docs/ekran-goruntuleri/erisilebilirlik.png" width="420"> |
+| Şehir, süre ve tema seçilir; öneri haritaya çizilir ve altında molası, serbest zamanı ve konaklamasıyla saatli program çıkar. | Her noktanın en yakın durağa uzaklığı: sarı yakın, mor uzak. Sarı bantlar metro ve Ankaray koridorlarını izliyor. |
 
 | Coğrafi yetki — izinli alan dışı maskeli | Konum analizi — ağırlıklı uygunluk |
 |---|---|
-| ![Coğrafi yetki](docs/ekran-goruntuleri/cografi-yetki.png) | ![Konum analizi](docs/ekran-goruntuleri/konum-analizi.png) |
-| Kullanıcı yalnızca tanımlı ilin içine çizebilir; dışarısı görsel olarak da kapatılır. | Kriterlere 100 üzerinden ağırlık verilir, sonuç bir uygunluk yüzeyi olarak döner. |
+| <img src="docs/ekran-goruntuleri/cografi-yetki.webp" width="420"> | <img src="docs/ekran-goruntuleri/konum-analizi.webp" width="420"> |
+| Kullanıcı yalnızca kendisine tanımlanan illerin içine çizebilir; dışarısı haritada da karartılır. Kural hem sunucuda hem arayüzde uygulanır. | Seçilen alanda POI kategorilerine 100 üzerinden ağırlık verilir; sonuç bir uygunluk yüzeyi ve en iyi aday noktalar olarak döner. |
+
+**Oran neden düşük çıkıyor?** Erişilebilirlik analizinde oran **ilin tamamı**
+üzerinden hesaplanıyor. Ankara ~25.000 km² ve raylı sistem bunun yalnızca bir
+koridorunu kaplıyor — yani "%0,24" bir hata değil, ölçeğin kendisi:
+
+<img src="docs/ekran-goruntuleri/erisilebilirlik-il-geneli.webp" width="600">
 
 ---
 
