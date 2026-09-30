@@ -1,5 +1,7 @@
 # Staj Projesi — Harita Uygulaması
 
+[![CI](https://github.com/AzraES04/map_app/actions/workflows/ci.yml/badge.svg)](https://github.com/AzraES04/map_app/actions/workflows/ci.yml)
+
 .NET 8 Web API · PostgreSQL + PostGIS · React (Vite) + OpenLayers · JWT
 
 Katmanlı mimariye sahip bir Web API, PostGIS destekli mekânsal veritabanı ve OpenLayers
