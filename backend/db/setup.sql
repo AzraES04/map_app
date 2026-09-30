@@ -10,8 +10,17 @@
 -- ============================================================
 
 -- 1) Uygulamanın bağlanacağı kullanıcı.
---    appsettings.json'daki ConnectionString ile birebir aynı olmalı:
---    Username=stajyer / Password=stajyer123
+--    appsettings.Development.json'daki ConnectionString ile birebir aynı
+--    olmalı: Username=stajyer / Password=<aşağıda seçtiğiniz şifre>
+--
+--    ⚠ AŞAĞIDAKİ ŞİFRE YALNIZCA YEREL GELİŞTİRME İÇİNDİR.
+--    Veritabanı yalnızca localhost'tan erişilebiliyor ve bu proje bir
+--    ödev/portföy çalışması; şifre bilerek betiğin içinde duruyor ki
+--    kurulum tek komutla çalışsın. Projeyi kendi makinenizde kurarken
+--    kendi şifrenizi yazın ve appsettings.Development.json'a da onu
+--    girin. GERÇEK bir sunucuya kurulacaksa bu şifre MUTLAKA
+--    değiştirilmeli ve SUPERUSER yetkisi kaldırılmalıdır.
+--
 --    SUPERUSER yetkisi geliştirme kolaylığı içindir; PostGIS eklentisini
 --    kurabilmesi ve migration'ları uygulayabilmesi gerekiyor.
 CREATE ROLE stajyer WITH LOGIN PASSWORD 'stajyer123' SUPERUSER;

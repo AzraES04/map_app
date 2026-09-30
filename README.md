@@ -7,9 +7,24 @@ tabanlı harita arayüzü. Kullanıcı haritada nokta/çizgi/poligon çizer, öz
 kayıtlar WKT formatında veritabanına yazılır ve alanlar üzerinde kesişim analizi yapılır.
 Operatörler haritaya kategorili **POI** (ilgi noktası) girer; ayrı bir yönetim paneli
 kullanıcıları, rolleri, yetkileri ve POI/kategori sözlüğünü yönetir. Kayıtların
-**okunması** artık doğrudan veritabanından değil, **GeoServer'ın WFS servisi**
-üzerinden yapılır; POI'ler haritada **kategori başına ayrı SLD** ile boyanır ve
-haritanın üstündeki **arama barından** aranır.
+**okunması** doğrudan veritabanından değil, **GeoServer'ın WFS servisi** üzerinden
+yapılır; POI'ler haritada **kategori başına ayrı SLD** ile boyanır ve haritanın
+üstündeki **arama barından** aranır.
+
+Üzerine üç modül daha bindi: **ulaşım** (güzergah/durak yönetimi, OSRM ile yollara
+oturan rota, SignalR ile canlı araç takibi), **analiz** (ağırlıklı konum uygunluk
+haritası ve toplu taşıma erişilebilirliği) ve **tur planlama** (OpenStreetMap'ten
+mekan çekip gün gün saatli program üreten, molası ve konaklamasıyla birlikte
+paylaşılabilir bir gezi rotası).
+
+**Yetkilendirme üç katmanlı:** rolden gelen yetki, kullanıcıya doğrudan verilen yetki
+ve *coğrafi* yetki (kullanıcı yalnızca tanımlı ilin içine çizebiliyor). Üçü de hem
+sunucuda hem arayüzde uygulanıyor.
+
+**Dış servisler düştüğünde uygulama düşmüyor:** GeoServer kapatılırsa okuma doğrudan
+EF Core + PostGIS'e döner, OSRM yoksa sıralama sezgisele düşer, OpenStreetMap cevap
+vermezse tur önerisi veritabanındaki kayıtlı mekanlardan üretilir (devre kesiciyle
+birlikte).
 
 | | |
 |---|---|
@@ -17,7 +32,21 @@ haritanın üstündeki **arama barından** aranır.
 | **API** | `http://localhost:5000` · Swagger: `/swagger` (yalnızca geliştirmede) |
 | **Arayüz** | `http://localhost:5173` · Yönetim paneli: `/admin` |
 | **GeoServer** | `http://localhost:8080/geoserver` · `admin` / `geoserver` · workspace `staj` |
-| **Test** | 238 birim testi |
+| **Test** | 1.063 otomatik test — 657 backend (xUnit) · 406 arayüz (Vitest) |
+
+---
+
+## Ekranlar
+
+| Tur planlama — gün gün saatli program | Toplu taşıma erişilebilirliği |
+|---|---|
+| ![Tur planlama](docs/ekran-goruntuleri/tur-planlama.png) | ![Erişilebilirlik analizi](docs/ekran-goruntuleri/erisilebilirlik.png) |
+| Şehir, süre ve tema seçilir; öneri haritaya çizilir, altında molası ve konaklamasıyla saatli program çıkar. | Seçilen ilin her noktası için en yakın durağa uzaklık: sarı yakın, mor uzak. |
+
+| Coğrafi yetki — izinli alan dışı maskeli | Konum analizi — ağırlıklı uygunluk |
+|---|---|
+| ![Coğrafi yetki](docs/ekran-goruntuleri/cografi-yetki.png) | ![Konum analizi](docs/ekran-goruntuleri/konum-analizi.png) |
+| Kullanıcı yalnızca tanımlı ilin içine çizebilir; dışarısı görsel olarak da kapatılır. | Kriterlere 100 üzerinden ağırlık verilir, sonuç bir uygunluk yüzeyi olarak döner. |
 
 ---
 
