@@ -66,7 +66,23 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # NEDEN 24, NEDEN 20 DEĞİL?
+          #
+          # Bağımlılık ağacı Node 20'yi artık DESTEKLEMİYOR ve bu sessizce
+          # değil, doğrudan çökerek ortaya çıkıyor:
+          #
+          #   jsdom 30.0.1                 node: ^22.22.2 || ^24.15.0 || >=26
+          #   @testing-library/jest-dom 7  node: >=22
+          #   undici 8.10.1                node: >=22.19.0
+          #
+          # jsdom, Vitest'in React bileşen testlerini koşturduğu DOM ortamı;
+          # Node 20'de testler daha başlamadan düşüyordu. Geliştirme makinesi
+          # Node 24 olduğu için yerelde hiç görünmüyordu — CI'nin yakaladığı
+          # tam olarak bu fark.
+          #
+          # Alternatif jsdom'u eski sürüme çekmekti; çalışan bir bağımlılığı
+          # CI'yi memnun etmek için geriye almak yanlış yön.
+          node-version: '24'
           # package-lock.json'a göre npm önbelleği.
           cache: npm
           cache-dependency-path: frontend/package-lock.json
